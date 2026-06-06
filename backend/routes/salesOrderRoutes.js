@@ -1694,70 +1694,20 @@ router.patch("/:id/generate-invoice", auth, clearCachePrefix("/api/sales-orders"
       });
     }
 
-    // ─── BRANCH B: FIRST-TIME INVOICE ─────────────────────────────────────
+    // ─── BRANCH B: FIRST-TIME DRAFT INVOICE ─────────────────────────────────
     let siNumber;
-    if (salesOrder.invoiceId && salesOrder.invoiceId.startsWith("O/")) {
-      const orderYear = new Date(salesOrder.orderDate || salesOrder.createdAt).getFullYear();
-      const InvoiceModel = mongoose.model("Invoice");
-      const existingOnlineInvoices = await InvoiceModel.find({
-        branchId: salesOrder.branchId,
-        invoiceNumber: new RegExp(`^OI\\/\\d{3,}\\/${orderYear}$`)
-      }).select('invoiceNumber').lean();
+    const rawSoId = salesOrder.invoiceId || "";
+    const cleanSoId = rawSoId.replace(/^(SO|SO REF|SO\sREF)[:\s\-]*/i, "");
+    const parts = cleanSoId.split('/');
+    const soPrefixPrefix = parts[0];
 
-      let highestCounter = 0;
-      existingOnlineInvoices.forEach(inv => {
-        const parts = inv.invoiceNumber.split('/');
-        if (parts.length >= 2) {
-          const num = parseInt(parts[1]);
-          if (!isNaN(num) && num > highestCounter) highestCounter = num;
-        }
-      });
+    let siPrefix = soPrefixPrefix.endsWith("SO")
+      ? soPrefixPrefix.replace(/SO$/i, "SI")
+      : (soPrefixPrefix.endsWith("-SO") ? soPrefixPrefix.replace(/-SO$/i, "-SI") : (soPrefixPrefix.endsWith("O") ? soPrefixPrefix.replace(/O$/i, "I") : `${soPrefixPrefix}SI`));
 
-      const nextSiNum = highestCounter + 1;
-      siNumber = `OI/${String(nextSiNum).padStart(3, "0")}/${orderYear}`;
-    } else {
-      const rawSoId = salesOrder.invoiceId || "";
-      const cleanSoId = rawSoId.replace(/^(SO|SO REF|SO\sREF)[:\s\-]*/i, "");
-      const soPrefixPrefix = cleanSoId.split('/')[0];
+    siNumber = `${siPrefix}/${parts.slice(1).join('/')}`;
 
-      let siPrefix = soPrefixPrefix.endsWith("SO")
-        ? soPrefixPrefix.replace(/SO$/i, "SI")
-        : `${soPrefixPrefix}SI`;
-
-      console.log(`🔍 Absolute Sync (Convert): SO [${soPrefixPrefix}] -> Target SI [${siPrefix}]`);
-
-      // 🔬 SEARCH ONLY BY EXACT PREFIX. DO NOT USE NAME FALLBACK.
-      let siVoucher = await VoucherType.findOne({
-        branchId: salesOrder.branchId,
-        prefix: siPrefix,
-        orderType: "SI",
-        financialYear: currentFY
-      });
-
-      // 🆕 AUTO-CREATE SI VOUCHER IF MISSING (EXACT PREFIX MATCH)
-      if (!siVoucher) {
-        console.log(`⚠️ No SI voucher found for prefix '${siPrefix}'. Auto-creating now...`);
-
-        siVoucher = new VoucherType({
-          branchId: salesOrder.branchId,
-          name: soPrefixPrefix.toLowerCase().replace(/so$/i, ""), // Normalize name from its prefix
-          orderType: "SI",
-          prefix: siPrefix,
-          counter: 1,
-          financialYear: currentFY
-        });
-        await siVoucher.save();
-        console.log(`✅ Automated SI Voucher created with absolute prefix: ${siPrefix} (Counter: 1)`);
-      }
-
-      siNumber = `${siVoucher.prefix}/${String(siVoucher.counter).padStart(3, "0")}/${currentFY}`;
-
-      // Increment SI Counter
-      siVoucher.counter += 1;
-      await siVoucher.save();
-    }
-
-    // Create separate Invoice document
+    // Create separate Invoice document as DRAFT
     const itemsToInvoice = invoiceItems || salesOrder.items;
     const samplesToInvoice = invoiceSampleItems || salesOrder.sampleItems;
     const grandTotalToUse = Math.round(Number(invoiceGrandTotal) || salesOrder.grandTotal || 0);
@@ -1778,65 +1728,32 @@ router.patch("/:id/generate-invoice", auth, clearCachePrefix("/api/sales-orders"
       transportCharge: Math.round(Number(invoiceTransportCharge) || 0),
       grandTotal: grandTotalToUse,
       openingBalance: Math.round(Number(invoiceOpeningBalance) || 0),
-      closingBalance: Math.round(Number(invoiceClosingBalance) || 0),
+      closingBalance: Math.round(Number(invoiceOpeningBalance) + grandTotalToUse), // Draft closing balance
       financialYear: currentFY,
       invoiceDate: salesOrder.orderDate || salesOrder.createdAt,
-      status: "FINALIZED"
+      status: "DRAFT" // Create as DRAFT first
     });
     await invoiceDoc.save();
 
-    // 2. Reduce Stock
-    const allItems = [...itemsToInvoice, ...samplesToInvoice];
-    for (const item of allItems) {
-      if (item.productId && item.qty > 0) {
-        await Product.findByIdAndUpdate(item.productId, { $inc: { totalQty: -item.qty } });
-      }
-    }
-
-    // 3. Increase Customer Balance (Netted)
-    if (salesOrder.customer?.customerId && grandTotalToUse > 0) {
-      const customer = await Customer.findById(salesOrder.customer.customerId);
-      if (customer) {
-        let remainingCharge = grandTotalToUse;
-        let currentDebit = customer.debit || 0;
-        let currentCredit = customer.credit || 0;
-
-        // Consume existing credit (advance) first
-        if (currentCredit >= remainingCharge) {
-          currentCredit -= remainingCharge;
-          remainingCharge = 0;
-        } else {
-          remainingCharge -= currentCredit;
-          currentCredit = 0;
-          currentDebit += remainingCharge;
-        }
-
-        await Customer.findByIdAndUpdate(salesOrder.customer.customerId, {
-          debit: currentDebit,
-          credit: currentCredit,
-          $inc: { closingBalance: grandTotalToUse, totalBalance: grandTotalToUse }
-        });
-      }
-    }
+    // 2. Reduce Stock (Deferred: Do nothing for draft)
+    // 3. Increase Customer Balance (Deferred: Do nothing for draft)
 
     // 4. Record on SalesOrder
+    const allItems = [...itemsToInvoice, ...samplesToInvoice];
     const invoiceSnapshot = {
       version: (salesOrder.editHistory.length || 0) + 1,
-      editType: 'INVOICED',
+      editType: 'DRAFT_SAVED',
       items: allItems,
       grandTotal: grandTotalToUse,
       invoicedAt: new Date(),
-      editedBy: req.user.username, // ✨ NEW
+      editedBy: req.user.username,
       invoiceNumber: siNumber
     };
 
     salesOrder.editHistory.push(invoiceSnapshot);
-    salesOrder.lastInvoicedItems = allItems;
+    // Do NOT set lastInvoicedItems, lastInvoicedGrandTotal, lastInvoicedCustomerId, status = "INVOICED" yet
     salesOrder.invoiceItems = allItems;
     salesOrder.items = allItems;
-    salesOrder.lastInvoicedGrandTotal = grandTotalToUse;
-    salesOrder.lastInvoicedCustomerId = salesOrder.customer?.customerId;
-    salesOrder.status = "INVOICED";
     salesOrder.salesInvoiceId = siNumber;
     salesOrder.recordType = "SALES INVOICE";
     salesOrder.invoiceGenerated = true;
