@@ -7,6 +7,7 @@ import {
   FaChevronRight,
   FaDollarSign,
   FaEdit,
+  FaEye,
   FaFileInvoice, FaFilePdf,
   FaLink,
   FaLock,
@@ -36,6 +37,7 @@ export default function SuperAdminControlSystem() {
   const [branchUsers, setBranchUsers] = useState([]);
   const [selectedUserIds, setSelectedUserIds] = useState([]);
   const [personnelSearchQuery, setPersonnelSearchQuery] = useState("");
+  const [selectedRoleFilter, setSelectedRoleFilter] = useState("ALL");
   const [expandedFieldsPageId, setExpandedFieldsPageId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -135,10 +137,27 @@ export default function SuperAdminControlSystem() {
   };
 
   const togglePermission = (pageId) => {
+    // Check if pageId is a parent dropdown
+    let subItemIds = [];
+    let isParent = false;
+    for (const category of PAGE_CONFIG) {
+      for (const item of category.items) {
+        if (item.id === pageId && item.isDropdown) {
+          isParent = true;
+          subItemIds = item.subItems.map(sub => sub.id);
+          break;
+        }
+      }
+    }
+
     if (userPermissions.includes(pageId)) {
-      setUserPermissions(userPermissions.filter(id => id !== pageId));
+      // Uncheck parent and its subItems, or just the item itself
+      const idsToRemove = isParent ? [pageId, ...subItemIds] : [pageId];
+      setUserPermissions(userPermissions.filter(id => !idsToRemove.includes(id)));
     } else {
-      setUserPermissions([...userPermissions, pageId]);
+      // Check parent and its subItems, or just the item itself
+      const idsToAdd = isParent ? [pageId, ...subItemIds] : [pageId];
+      setUserPermissions([...new Set([...userPermissions, ...idsToAdd])]);
     }
   };
 
@@ -230,10 +249,13 @@ export default function SuperAdminControlSystem() {
   };
 
   const handleUserClick = (user) => {
-    // Select this user if not selected
-    if (!selectedUserIds.includes(user._id)) {
-      setSelectedUserIds([...selectedUserIds, user._id]);
-    }
+    // Just toggle selection when clicking the row
+    toggleSelectUser(user._id);
+  };
+
+  const loadUserPermissions = (user) => {
+    // Single select when loading permissions
+    setSelectedUserIds([user._id]);
 
     // Load their permissions into the active configuration
     const pages = user.allowedPages || [];
@@ -263,10 +285,12 @@ export default function SuperAdminControlSystem() {
   };
 
   // Compute filtered users list
-  const filteredUsers = branchUsers.filter(user =>
-    user.username.toLowerCase().includes(personnelSearchQuery.toLowerCase()) ||
-    user.role.toLowerCase().includes(personnelSearchQuery.toLowerCase())
-  );
+  const filteredUsers = branchUsers.filter(user => {
+    const matchesSearch = user.username.toLowerCase().includes(personnelSearchQuery.toLowerCase()) ||
+                          user.role.toLowerCase().includes(personnelSearchQuery.toLowerCase());
+    const matchesRole = selectedRoleFilter === "ALL" || user.role === selectedRoleFilter;
+    return matchesSearch && matchesRole;
+  });
 
   const isAllFilteredUsersSelected =
     filteredUsers.length > 0 &&
@@ -281,63 +305,8 @@ export default function SuperAdminControlSystem() {
     try {
       const token = localStorage.getItem("token");
       
-      // Calculate Diffs
-      const addedPages = userPermissions.filter(p => !initialState.userPermissions.includes(p));
-      const removedPages = initialState.userPermissions.filter(p => !userPermissions.includes(p));
-
-      const addedVouchers = allowedVoucherTypes.filter(v => !initialState.allowedVoucherTypes.includes(v));
-      const removedVouchers = initialState.allowedVoucherTypes.filter(v => !allowedVoucherTypes.includes(v));
-
-      const addedQuickLinks = allowedQuickLinks.filter(q => !initialState.allowedQuickLinks.includes(q));
-      const removedQuickLinks = initialState.allowedQuickLinks.filter(q => !allowedQuickLinks.includes(q));
-
-      const addedBranches = allowedBranchesState.filter(b => !initialState.allowedBranchesState.includes(b));
-      const removedBranches = initialState.allowedBranchesState.filter(b => !allowedBranchesState.includes(b));
-
-      const allActionKeys = [...new Set([...Object.keys(actionPermissions), ...Object.keys(initialState.actionPermissions)])];
-      const actionChanges = {};
-      allActionKeys.forEach(k => {
-        if (actionPermissions[k] !== initialState.actionPermissions[k]) {
-          actionChanges[k] = actionPermissions[k];
-        }
-      });
-
-      const allFieldKeys = [...new Set([...Object.keys(fieldPermissions), ...Object.keys(initialState.fieldPermissions)])];
-      const fieldChanges = {};
-      allFieldKeys.forEach(k => {
-        if (fieldPermissions[k] !== initialState.fieldPermissions[k]) {
-          fieldChanges[k] = fieldPermissions[k];
-        }
-      });
-      
       // Parallel commits to all selected users
       const promises = selectedUserIds.map(async (userId) => {
-        // Fetch current state of this user
-        const userRes = await fetch(`${API_BASE}/branch-users/${userId}`);
-        const userData = await userRes.json();
-        if (!userData.success) throw new Error(`Failed to fetch user ${userId}`);
-        const currentUser = userData.data;
-
-        // Apply diffs to current state
-        const finalPages = [...new Set([...(currentUser.allowedPages || []), ...addedPages])].filter(p => !removedPages.includes(p));
-        
-        const finalFields = { ...(currentUser.fieldPermissions || {}) };
-        Object.keys(fieldChanges).forEach(k => finalFields[k] = fieldChanges[k]);
-
-        const finalActions = { ...(currentUser.actionPermissions || {}) };
-        Object.keys(actionChanges).forEach(k => finalActions[k] = actionChanges[k]);
-
-        const finalVouchers = [...new Set([...(currentUser.allowedVoucherTypes || []), ...addedVouchers])].filter(v => !removedVouchers.includes(v));
-        
-        const finalQuickLinks = [...new Set([...(currentUser.allowedQuickLinks || []), ...addedQuickLinks])].filter(q => !removedQuickLinks.includes(q));
-
-        const finalAllowedBranches = [...new Set([...(currentUser.allowedBranches || []).map(b => b._id || b), ...addedBranches])].filter(b => !removedBranches.includes(b));
-
-        let finalPrimaryBranch = currentUser.branch?._id || currentUser.branch;
-        if (!finalAllowedBranches.includes(finalPrimaryBranch)) {
-           finalPrimaryBranch = finalAllowedBranches[0] || selectedBranch._id;
-        }
-
         const res = await fetch(`${API_BASE}/branch-users/${userId}`, {
           method: "PUT",
           headers: {
@@ -345,13 +314,15 @@ export default function SuperAdminControlSystem() {
             "Authorization": `Bearer ${token}`
           },
           body: JSON.stringify({
-            allowedPages: finalPages,
-            fieldPermissions: finalFields,
-            actionPermissions: finalActions,
-            allowedVoucherTypes: finalVouchers,
-            allowedQuickLinks: finalQuickLinks,
-            allowedBranches: finalAllowedBranches,
-            branch: finalPrimaryBranch
+            allowedPages: userPermissions,
+            fieldPermissions: fieldPermissions,
+            actionPermissions: actionPermissions,
+            allowedVoucherTypes: allowedVoucherTypes,
+            allowedQuickLinks: allowedQuickLinks,
+            allowedBranches: allowedBranchesState,
+            branch: allowedBranchesState.includes(selectedBranch._id)
+              ? selectedBranch._id
+              : (allowedBranchesState[0] || selectedBranch._id)
           })
         });
         return res.json();
@@ -364,27 +335,15 @@ export default function SuperAdminControlSystem() {
         toast.success(`✅ Access committed for ${selectedUserIds.length} user(s) successfully!`);
         // Refresh users list to reflect saved states in background
         await fetchBranchUsers(selectedBranch._id);
-        // Refetch each selected user to update UI state
-        for (const userId of selectedUserIds) {
-          try {
-            const res = await fetch(`${API_BASE}/branch-users/${userId}`);
-            const data = await res.json();
-            if (data.success) {
-              // If this user is currently selected, load their permissions into UI
-              if (selectedUserIds.includes(data.data._id)) {
-                setUserPermissions(data.data.allowedPages || []);
-                setFieldPermissions(data.data.fieldPermissions || {});
-                setActionPermissions(data.data.actionPermissions || {});
-                setAllowedVoucherTypes(data.data.allowedVoucherTypes || []);
-                setAllowedQuickLinks(data.data.allowedQuickLinks || []);
-                const branchIds = (data.data.allowedBranches || []).map(b => b._id || b);
-                setAllowedBranchesState(branchIds);
-              }
-            }
-          } catch (e) {
-            console.error('Failed to refetch user after save', e);
-          }
-        }
+        // Sync initialState with the current UI state so new diffs start fresh
+        setInitialState({
+          userPermissions: userPermissions,
+          fieldPermissions: fieldPermissions,
+          actionPermissions: actionPermissions,
+          allowedVoucherTypes: allowedVoucherTypes,
+          allowedQuickLinks: allowedQuickLinks,
+          allowedBranchesState: allowedBranchesState,
+        });
       } else {
         toast.error(`Failed to commit for some users: ${failures.map(f => f.message).join(", ")}`);
       }
@@ -1063,7 +1022,7 @@ export default function SuperAdminControlSystem() {
 
                 {/* Interactive Search Console */}
                 {branchUsers.length > 0 && (
-                  <div className="p-3 border-b border-gray-100 bg-gray-50/50">
+                  <div className="p-3 border-b border-gray-100 bg-gray-50/50 space-y-2">
                     <div className="relative group">
                       <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-primary transition-colors pointer-events-none">
                         <FaSearch size={10} />
@@ -1075,6 +1034,22 @@ export default function SuperAdminControlSystem() {
                         placeholder="Search personnel..."
                         className="w-full pl-9 pr-3 py-2 bg-white border-2 border-gray-100 focus:border-primary focus:ring-2 focus:ring-primary/10 rounded-xl transition-all outline-none font-bold text-[10px] text-secondary shadow-inner"
                       />
+                    </div>
+                    
+                    <div className="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pb-1">
+                      {["ALL", "ADMIN", "MANAGER", "STAFF", "SALES_OWNER", "SALESMAN", "DELIVERY_MAN"].map(role => (
+                        <button
+                          key={role}
+                          onClick={() => setSelectedRoleFilter(role)}
+                          className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-[9px] font-black tracking-widest uppercase transition-all duration-300 ${
+                            selectedRoleFilter === role
+                              ? "bg-primary text-white shadow-md shadow-primary/20"
+                              : "bg-white text-gray-400 border border-gray-200 hover:border-primary/30 hover:text-primary/70"
+                          }`}
+                        >
+                          {role.replace("_", " ")}
+                        </button>
+                      ))}
                     </div>
                   </div>
                 )}
@@ -1122,6 +1097,21 @@ export default function SuperAdminControlSystem() {
                               </span>
                             </div>
                           </div>
+                          
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              loadUserPermissions(user);
+                            }}
+                            className={`p-2 rounded-lg transition-all duration-300 border shadow-sm ${
+                              selectedUserIds.length === 1 && selectedUserIds[0] === user._id
+                                ? "bg-primary/10 text-primary border-primary/20"
+                                : "bg-white text-gray-400 border-gray-200 hover:text-primary hover:border-primary/40 hover:bg-gray-50"
+                            }`}
+                            title="Load permissions to view or edit"
+                          >
+                            <FaEye size={12} />
+                          </button>
                         </div>
                       );
                     })
