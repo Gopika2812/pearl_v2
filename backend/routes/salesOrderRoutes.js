@@ -2107,36 +2107,20 @@ router.patch("/:id/approve-re-edit", auth, async (req, res) => {
       return res.status(404).json({ message: "Order not found" });
     }
 
-    if (salesOrder.salesInvoiceId) {
-      const Invoice = mongoose.model("Invoice");
-      const Product = mongoose.model("Product");
-      const Customer = mongoose.model("Customer");
-
-      const invoice = await Invoice.findOne({ invoiceNumber: salesOrder.salesInvoiceId }).session(session);
-
-      if (invoice) {
-        // REVERT STOCK
-        for (const item of invoice.items) {
-          await Product.findByIdAndUpdate(item.productId, { $inc: { totalQty: item.qty || 0 } }).session(session);
-        }
-
-        // REVERT CUSTOMER BALANCE
-        if (invoice.customer?.customerId && invoice.grandTotal > 0) {
-          await Customer.findByIdAndUpdate(invoice.customer.customerId, {
-            $inc: { debit: -invoice.grandTotal, closingBalance: -invoice.grandTotal }
-          }).session(session);
-        }
-
-        // DELETE INVOICE
-        await Invoice.findByIdAndDelete(invoice._id).session(session);
-      }
+    if (salesOrder.status === "INVOICED" || salesOrder.invoiceGenerated) {
+      salesOrder.editHistory.push({
+        version: (salesOrder.editHistory.length || 0) + 1,
+        editType: "RE_EDIT_STARTED",
+        items: salesOrder.items,
+        grandTotal: salesOrder.grandTotal,
+        editedAt: new Date(),
+        note: `Re-edit request approved. Items can now be modified. Deltas will apply on re-invoice.`
+      });
+      salesOrder.status = "PLACED";
+      salesOrder.isReEdited = true;
     }
 
-    salesOrder.status = "PENDING";
-    salesOrder.invoiceGenerated = false;
-    salesOrder.salesInvoiceId = null;
     salesOrder.reEditRequestStatus = "APPROVED";
-
     await salesOrder.save({ session });
 
     // Log approval
@@ -2146,13 +2130,13 @@ router.patch("/:id/approve-re-edit", auth, async (req, res) => {
       username: req.user.username,
       branchId: salesOrder.branchId,
       action: "APPROVE_REEDIT",
-      description: `Approved re-edit for Invoice: ${salesOrder.invoiceId}. Original invoice deleted and effects reverted.`,
+      description: `Approved re-edit for Invoice: ${salesOrder.invoiceId}. Original invoice kept, deltas will apply on finalize.`,
       targetId: salesOrder._id,
       targetModel: "SalesOrder",
     });
 
     await session.commitTransaction();
-    res.json({ success: true, message: "Re-edit request approved. Invoice deleted and status reset." });
+    res.json({ success: true, message: "Re-edit request approved. Invoice kept, status changed to PLACED." });
   } catch (err) {
     await session.abortTransaction();
     console.error("Re-edit Approval Error:", err);

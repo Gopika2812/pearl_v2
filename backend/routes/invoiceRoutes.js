@@ -948,7 +948,12 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
 
         if (invoiceType === "TAX_INVOICE") {
           if (invoice) {
-            if (invoice.status === "DRAFT" && req.body.useSoNumber !== true) {
+            const isDummyNumber = invoice.invoiceNumber && (
+              invoice.invoiceNumber.startsWith("SO") ||
+              invoice.invoiceNumber.includes("SO/") ||
+              invoice.invoiceNumber.includes("PSO/")
+            );
+            if (isDummyNumber && req.body.useSoNumber !== true) {
               // Upgrading from Dummy to Real: Generate a proper sequential number instead of reusing the SO number.
               generateNewSequence = true;
             } else {
