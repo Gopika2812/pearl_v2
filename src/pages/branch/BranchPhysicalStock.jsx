@@ -5,7 +5,6 @@ import { toast } from "react-toastify";
 import { API_BASE, fetchWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 
-// Floating Multi-Select Component (Fixed position to avoid clipping)
 const MultiUserSelect = ({ users, selected, onChange, disabled }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [coords, setCoords] = useState({ top: 0, left: 0, width: 0 });
@@ -71,10 +70,10 @@ const MultiUserSelect = ({ users, selected, onChange, disabled }) => {
       </div>
 
       {isOpen && (
-        <div 
+        <div
           id="floating-staff-menu"
-          style={{ 
-            position: "fixed", 
+          style={{
+            position: "fixed",
             top: coords.top + 32,
             left: coords.left,
             width: Math.max(coords.width, 220),
@@ -90,8 +89,8 @@ const MultiUserSelect = ({ users, selected, onChange, disabled }) => {
                 const uId = u._id || u.id;
                 const isChecked = selected.some(s => s.userId === uId);
                 return (
-                  <div 
-                    key={uId} 
+                  <div
+                    key={uId}
                     onClick={() => handleToggle(u)}
                     className={`flex items-center px-3 py-2.5 rounded mb-0.5 cursor-pointer transition-all ${isChecked ? "bg-blue-600 text-white shadow-inner" : "hover:bg-blue-50 text-gray-700"}`}
                   >
@@ -151,7 +150,7 @@ export default function BranchPhysicalStock() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const filteredProductGroups = productGroups.filter(g => 
+  const filteredProductGroups = productGroups.filter(g =>
     g.name && g.name.toLowerCase().includes(groupSearchTerm.toLowerCase())
   );
 
@@ -186,14 +185,14 @@ export default function BranchPhysicalStock() {
       fetchNextId();
     }
   }, [currentBranch?._id]);
-  
+
   const fetchSavedRecordsForDate = async (dateStr) => {
     if (!currentBranch?._id) return;
     try {
       const recUrl = `${API_BASE}/physical-stock?branchId=${currentBranch._id}&fromDate=${dateStr}&toDate=${dateStr}&limit=500`;
       const recRes = await fetchWithAuth(recUrl);
       const recData = await recRes.json();
-      
+
       if (recData.success && recData.data) {
         const savedRows = recData.data.map(record => {
           const product = record.productId || {};
@@ -247,7 +246,7 @@ export default function BranchPhysicalStock() {
     if (rows.length === 0) return;
     const seen = new Set();
     let hasDuplicates = false;
-    
+
     rows.forEach(r => {
       const pid = String(r.productId);
       if (seen.has(pid)) {
@@ -298,7 +297,7 @@ export default function BranchPhysicalStock() {
       const res = await fetchWithAuth(`${API_BASE}/physical-stock/next-id?branchId=${currentBranch._id}`);
       const data = await res.json();
       if (data.success) setNextId(data.nextId);
-    } catch {}
+    } catch { }
   };
 
   const fetchMeta = async () => {
@@ -309,13 +308,13 @@ export default function BranchPhysicalStock() {
       ]);
       const grData = await grRes.json();
       const uData = await userRes.json();
-      
+
       if (Array.isArray(grData)) setProductGroups(grData);
       else if (grData.success) setProductGroups(grData.data || []);
 
       if (uData.success) setBranchUsers(uData.data || []);
       else if (Array.isArray(uData)) setBranchUsers(uData);
-    } catch {}
+    } catch { }
   };
 
   const searchProducts = useCallback(async (query, groupId) => {
@@ -325,7 +324,7 @@ export default function BranchPhysicalStock() {
       const res = await fetchWithAuth(url);
       const data = await res.json();
       if (data.success) setProducts(data.data || []);
-    } catch {}
+    } catch { }
   }, [currentBranch?._id]);
 
   useEffect(() => {
@@ -351,14 +350,14 @@ export default function BranchPhysicalStock() {
 
   const addRow = async (product) => {
     if (rows.find(r => r.productId === product._id)) return;
-    
+
     // Check if a record exists for the selected entry date
     try {
       const dateStr = entryDate;
       const recUrl = `${API_BASE}/physical-stock?branchId=${currentBranch._id}&productId=${product._id}&fromDate=${dateStr}&toDate=${dateStr}&limit=1`;
       const recRes = await fetchWithAuth(recUrl);
       const recData = await recRes.json();
-      
+
       if (recData.success && recData.data?.length > 0) {
         const record = recData.data[0];
         const existingRow = {
@@ -394,7 +393,7 @@ export default function BranchPhysicalStock() {
             const item = journalData.data.find(it => String(it.productId) === String(product._id));
             if (item) calculatedSystemQty = item.closing.qty;
           }
-        } catch {}
+        } catch { }
 
         const newRow = {
           rowId: generateUniqueRowId(),
@@ -442,14 +441,14 @@ export default function BranchPhysicalStock() {
         return [...prev, newRow];
       });
     }
-    
+
     setShowProductDrop(false);
     setProductSearch("");
   };
 
   const addAllFromGroup = async (groupId) => {
     if (!groupId || groupId === "ALL") {
-      setRows([]); 
+      setRows([]);
       return;
     }
     setRows([]); // Atomic reset before loading new group
@@ -458,13 +457,13 @@ export default function BranchPhysicalStock() {
       const prodUrl = `${API_BASE}/products?branchId=${currentBranch._id}&productGroup=${groupId}&limit=500`;
       const prodRes = await fetchWithAuth(prodUrl);
       const prodData = await prodRes.json();
-      
+
       // 2. Fetch physical stock records for the selected entry date
       const dateStr = entryDate;
       const recUrl = `${API_BASE}/physical-stock?branchId=${currentBranch._id}&productGroupId=${groupId}&fromDate=${dateStr}&toDate=${dateStr}&limit=500`;
       const recRes = await fetchWithAuth(recUrl);
       const recData = await recRes.json();
-      
+
       const existingRecords = recData.success ? recData.data : [];
 
       // 3. Fetch Stock Journal for the selected date to get accurate "System Qty" for that day
@@ -481,7 +480,7 @@ export default function BranchPhysicalStock() {
       if (prodData.success && prodData.data) {
         const productsToAdd = prodData.data;
         const uniqueRowsMap = new Map();
-        
+
         productsToAdd.forEach(p => {
           const pid = String(p._id);
           if (uniqueRowsMap.has(pid)) return;
@@ -509,7 +508,7 @@ export default function BranchPhysicalStock() {
           } else {
             // Use calculated journal quantity if available, else fallback to current availableQty
             const calculatedSystemQty = journalMap.has(pid) ? journalMap.get(pid) : (p.availableQty || 0);
-            
+
             uniqueRowsMap.set(pid, {
               rowId: generateUniqueRowId(),
               productId: pid,
@@ -560,7 +559,7 @@ export default function BranchPhysicalStock() {
     const skipMandatory = isNoAction || systemIsZero || physicalIsZero || systemIsNegative;
 
     if (row.physicalQty === "" || row.physicalQty === null) return toast.warning("Physical Qty is mandatory");
-    
+
     setRows(prev => prev.map(r => r.rowId === row.rowId ? { ...r, saving: true } : r));
     try {
       const isNoAction = row.physicalQty === "NO_ACTION";
@@ -602,9 +601,9 @@ export default function BranchPhysicalStock() {
       data = await res.json();
       if (data.success) {
         setRows(prev => prev.map(r => r.rowId === row.rowId ? {
-          ...r, 
-          saving: false, 
-          savedId: data.data._id, 
+          ...r,
+          saving: false,
+          savedId: data.data._id,
           status: "PENDING",
           physicalQty: data.data.physicalQty
         } : r));
@@ -664,7 +663,7 @@ export default function BranchPhysicalStock() {
     if (rows.length === 0) return toast.warning("No data to export");
     const monthName = new Date(entryDate).toLocaleDateString('en-GB');
     const groupName = groupFilter && productGroups.find(g => g._id === groupFilter)?.name || "ALL GROUPS";
-    
+
     const worksheetData = [
       [`STOCK JOURNAL ENTRY - ${monthName}`],
       [`GROUP: ${groupName.toUpperCase()}`],
@@ -698,7 +697,7 @@ export default function BranchPhysicalStock() {
     if (rows.length === 0) return toast.warning("No data to print");
     const dateStr = new Date(entryDate).toLocaleDateString('en-GB');
     const groupName = groupFilter && productGroups.find(g => g._id === groupFilter)?.name || "ALL GROUPS";
-    
+
     const printWindow = window.open('', '_blank');
     const html = `
       <html>
@@ -766,7 +765,7 @@ export default function BranchPhysicalStock() {
   return (
     <div className="min-h-screen bg-gray-50 pt-16 md:pl-20">
       <div className="p-4">
-        
+
         <div className="bg-white border border-gray-300 p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4 rounded-xl shadow-sm">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-[#001f3f] flex items-center justify-center rounded-xl shadow-inner">
@@ -806,7 +805,7 @@ export default function BranchPhysicalStock() {
               className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-[11px] font-black text-gray-700 outline-none w-full flex items-center justify-between gap-2 uppercase tracking-wider shadow-sm hover:bg-gray-100 transition-colors">
               <span className="flex items-center gap-2">
                 <FaBoxes size={10} className="text-gray-400" />
-                {groupFilter === "ALL" 
+                {groupFilter === "ALL"
                   ? `ALL GROUPS ${products.length > 0 ? `(${products.length})` : ""}`
                   : (productGroups.find(g => g._id === groupFilter)?.name || "UNKNOWN GROUP").toUpperCase()
                 }
@@ -854,7 +853,7 @@ export default function BranchPhysicalStock() {
           <div className="flex-1 relative w-full">
             <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={12} />
             <input type="text" placeholder="TYPE PRODUCT NAME TO SEARCH..."
-              value={productSearch} 
+              value={productSearch}
               onChange={e => setProductSearch(e.target.value)}
               onFocus={() => setShowProductDrop(true)}
               className="w-full border border-gray-300 rounded-xl pl-9 pr-3 py-2.5 text-[11px] font-black uppercase outline-none focus:border-blue-400 bg-gray-50" />
@@ -900,7 +899,7 @@ export default function BranchPhysicalStock() {
               <FaPrint size={10} /> Print Report
             </button>
           </div>
-          
+
           <button onClick={() => setRows([])}
             className="px-4 py-2 bg-rose-50 text-rose-600 text-[10px] font-black uppercase rounded-lg hover:bg-rose-100 transition border border-rose-100 flex items-center justify-center gap-2">
             <FaTrash size={10} /> Clear List
@@ -957,34 +956,34 @@ export default function BranchPhysicalStock() {
                           {isFieldVisible("systemQty") && <td className="px-1.5 py-3 border-r border-gray-100 text-center font-black text-[10px] text-blue-500">{Math.round(Number(row.systemQty || 0) * 100) / 100}</td>}
                           {isFieldVisible("damagedQty") && (
                             <td className="px-1.5 py-3 border-r border-gray-100">
-                                <input type="number" 
-                                  value={row.damagedQty} 
-                                  onChange={e => updateRow(row.rowId, "damagedQty", e.target.value)}
-                                  disabled={row.status === "APPROVED"}
-                                  className="w-16 border border-gray-200 rounded-lg px-2 py-1.5 text-[11px] font-black outline-none focus:border-blue-400 disabled:bg-gray-50 shadow-sm text-rose-500" 
-                                  placeholder="0" />
+                              <input type="number"
+                                value={row.damagedQty}
+                                onChange={e => updateRow(row.rowId, "damagedQty", e.target.value)}
+                                disabled={row.status === "APPROVED"}
+                                className="w-16 border border-gray-200 rounded-lg px-2 py-1.5 text-[11px] font-black outline-none focus:border-blue-400 disabled:bg-gray-50 shadow-sm text-rose-500"
+                                placeholder="0" />
                             </td>
                           )}
                           {isFieldVisible("expiredQty") && (
                             <td className="px-1.5 py-3 border-r border-gray-100">
-                                <input type="number" 
-                                  value={row.expiredQty} 
-                                  onChange={e => updateRow(row.rowId, "expiredQty", e.target.value)}
-                                  disabled={row.status === "APPROVED"}
-                                  className="w-16 border border-gray-200 rounded-lg px-2 py-1.5 text-[11px] font-black outline-none focus:border-blue-400 disabled:bg-gray-50 shadow-sm text-orange-500" 
-                                  placeholder="0" />
+                              <input type="number"
+                                value={row.expiredQty}
+                                onChange={e => updateRow(row.rowId, "expiredQty", e.target.value)}
+                                disabled={row.status === "APPROVED"}
+                                className="w-16 border border-gray-200 rounded-lg px-2 py-1.5 text-[11px] font-black outline-none focus:border-blue-400 disabled:bg-gray-50 shadow-sm text-orange-500"
+                                placeholder="0" />
                             </td>
                           )}
                           {isFieldVisible("physicalQty") && (
                             <td className="px-1.5 py-3 border-r border-gray-100">
                               <div className="relative group/edit">
-                                <input type={row.physicalQty === "NO_ACTION" ? "text" : "number"} 
-                                  value={row.physicalQty === "NO_ACTION" ? "NO ACTION" : row.physicalQty} 
+                                <input type={row.physicalQty === "NO_ACTION" ? "text" : "number"}
+                                  value={row.physicalQty === "NO_ACTION" ? "NO ACTION" : row.physicalQty}
                                   onChange={e => updateRow(row.rowId, "physicalQty", e.target.value)}
                                   disabled={row.status === "APPROVED"}
-                                  className={`w-20 border border-gray-200 rounded-lg px-2 py-1.5 text-[11px] font-black outline-none focus:border-blue-400 disabled:bg-gray-50 shadow-sm ${row.physicalQty === "NO_ACTION" ? "bg-gray-100 text-gray-400" : ""}`} 
+                                  className={`w-20 border border-gray-200 rounded-lg px-2 py-1.5 text-[11px] font-black outline-none focus:border-blue-400 disabled:bg-gray-50 shadow-sm ${row.physicalQty === "NO_ACTION" ? "bg-gray-100 text-gray-400" : ""}`}
                                   placeholder="Qty" />
-                                <select 
+                                <select
                                   className="absolute right-0 top-0 opacity-0 w-6 h-full cursor-pointer"
                                   onChange={e => {
                                     if (e.target.value === "NO_ACTION") updateRow(row.rowId, "physicalQty", "NO_ACTION");
@@ -1049,7 +1048,7 @@ export default function BranchPhysicalStock() {
                             <td className="px-1.5 py-3 border-r border-gray-100 text-center">
                               {row.status === "APPROVED"
                                 ? <span className="text-green-600 font-black text-[9px] uppercase bg-green-50 px-2 py-1 rounded-full whitespace-nowrap">Approved</span>
-                                : row.savedId 
+                                : row.savedId
                                   ? <span className="text-blue-500 font-black text-[9px] uppercase bg-blue-50 px-2 py-1 rounded-full whitespace-nowrap">Pending</span>
                                   : <span className="text-orange-500 font-black text-[9px] uppercase bg-orange-50 px-2 py-1 rounded-full whitespace-nowrap">Draft</span>}
                             </td>
@@ -1085,13 +1084,13 @@ export default function BranchPhysicalStock() {
           {/* MOBILE VIEW TOGGLE & CONTENT */}
           <div className="md:hidden space-y-4">
             <div className="flex bg-white p-1 rounded-xl border border-gray-200 shadow-sm">
-              <button 
+              <button
                 type="button"
                 onClick={() => setMobileViewMode("CARD")}
                 className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${mobileViewMode === "CARD" ? "bg-[#001f3f] text-white shadow-lg" : "text-gray-400 hover:bg-gray-50"}`}>
                 Cards
               </button>
-              <button 
+              <button
                 type="button"
                 onClick={() => setMobileViewMode("TABLE")}
                 className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${mobileViewMode === "TABLE" ? "bg-[#001f3f] text-white shadow-lg" : "text-gray-400 hover:bg-gray-50"}`}>
@@ -1135,8 +1134,8 @@ export default function BranchPhysicalStock() {
                                   {isFieldVisible("physicalQty") && (
                                     <td className="px-3 py-3 border-r border-gray-100">
                                       <div className="relative flex items-center">
-                                        <input type={row.physicalQty === "NO_ACTION" ? "text" : "number"} 
-                                          value={row.physicalQty === "NO_ACTION" ? "NO ACTION" : row.physicalQty} 
+                                        <input type={row.physicalQty === "NO_ACTION" ? "text" : "number"}
+                                          value={row.physicalQty === "NO_ACTION" ? "NO ACTION" : row.physicalQty}
                                           onChange={e => updateRow(row.rowId, "physicalQty", e.target.value)}
                                           disabled={row.status === "APPROVED"}
                                           className={`w-16 border border-gray-200 rounded px-2 py-1 text-[10px] font-black outline-none focus:border-blue-400 ${row.physicalQty === "NO_ACTION" ? "bg-gray-50 text-gray-400" : ""}`} />
@@ -1166,7 +1165,7 @@ export default function BranchPhysicalStock() {
                                     </td>
                                   )}
                                   <td className="px-3 py-3">
-                                    <button 
+                                    <button
                                       type="button"
                                       onClick={() => setExpandedMobileRows(prev => ({ ...prev, [row.rowId]: !prev[row.rowId] }))}
                                       className="w-8 h-8 flex items-center justify-center bg-gray-50 rounded-lg text-gray-400"
@@ -1179,7 +1178,7 @@ export default function BranchPhysicalStock() {
                                   <tr className="bg-gray-50">
                                     <td colSpan="6" className="px-3 py-4 border-b border-gray-200">
                                       <div className="space-y-4">
-                                      <div className="grid grid-cols-2 gap-3 bg-white p-2 rounded-xl border border-gray-100">
+                                        <div className="grid grid-cols-2 gap-3 bg-white p-2 rounded-xl border border-gray-100">
                                           {isFieldVisible("inward") && (
                                             <div className="flex justify-between items-center px-2">
                                               <p className="text-[8px] font-black text-emerald-600 uppercase">Inward Adjust</p>
@@ -1293,8 +1292,8 @@ export default function BranchPhysicalStock() {
                               <div className="bg-white border border-gray-200 p-2 rounded-xl relative shadow-sm focus-within:border-blue-400 focus-within:ring-1 focus-within:ring-blue-100 transition-all">
                                 <p className="text-[8px] font-black text-gray-400 uppercase mb-1">Physical Qty</p>
                                 <div className="flex items-center">
-                                  <input type={row.physicalQty === "NO_ACTION" ? "text" : "number"} 
-                                    value={row.physicalQty === "NO_ACTION" ? "NO ACTION" : row.physicalQty} 
+                                  <input type={row.physicalQty === "NO_ACTION" ? "text" : "number"}
+                                    value={row.physicalQty === "NO_ACTION" ? "NO ACTION" : row.physicalQty}
                                     onChange={e => updateRow(row.rowId, "physicalQty", e.target.value)}
                                     onFocus={() => setShowProductDrop(false)}
                                     disabled={row.status === "APPROVED"}
@@ -1365,7 +1364,7 @@ export default function BranchPhysicalStock() {
                               )}
                             </div>
                             {row.status !== "APPROVED" && isFieldVisible("action_save") && (
-                              <button type="button" onClick={() => saveRow(row)} disabled={row.saving} 
+                              <button type="button" onClick={() => saveRow(row)} disabled={row.saving}
                                 className="px-6 py-2.5 bg-blue-600 text-white text-[10px] font-black rounded-xl uppercase shadow-lg active:scale-95 transition-all whitespace-nowrap">
                                 {row.saving ? "..." : "Save Record"}
                               </button>
