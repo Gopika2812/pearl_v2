@@ -14,6 +14,10 @@ export const updateProductCostsFromInvoice = async (items, sourceVoucher, isReIn
 
   for (const item of items) {
     if (!item.productId) continue;
+    if (item.isSample) {
+      console.log(`[PRICE_SYNC] Skipping sample product: ${item.name}`);
+      continue;
+    }
 
     try {
       const product = await Product.findById(item.productId);

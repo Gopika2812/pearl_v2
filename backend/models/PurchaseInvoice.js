@@ -37,6 +37,7 @@ const purchaseInvoiceSchema = new mongoose.Schema(
         },
         name: String,
         productGroup: String,
+        isSample: { type: Boolean, default: false },
         hsn: String,
         qty: Number,
         purchasePrice: Number,

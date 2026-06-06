@@ -8,6 +8,7 @@ const PurchaseItemSchema = new mongoose.Schema({
   },
   name: String,
   productGroup: String,
+  isSample: { type: Boolean, default: false },
 
   qty: Number,
   purchasePrice: Number,

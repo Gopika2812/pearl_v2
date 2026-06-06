@@ -118,6 +118,7 @@ const InventoryPurchaseOrderEntry = ({
   const [customDiscount, setCustomDiscount] = useState("");
   const [customDiscountType, setCustomDiscountType] = useState("amount"); // "amount" or "percentage"
   const [enableRoundOff, setEnableRoundOff] = useState(true);
+  const [isSample, setIsSample] = useState(false);
 
   // VENDOR SEARCH STATES
   const [vendorSearch, setVendorSearch] = useState("");
@@ -463,6 +464,7 @@ const InventoryPurchaseOrderEntry = ({
       {
         productId: product._id,
         name: product.name,
+        isSample: isSample,
         productGroup: product.productGroup || product.groupId,
         qty: Number(qty),
         altQty: altQty,
@@ -494,6 +496,7 @@ const InventoryPurchaseOrderEntry = ({
     setItemSearch("");
     setSelectedProductData(null);
     setProductGroup("");
+    setIsSample(false);
     setQty("");
     setPurchasePrice(0);
     setMarketCapPrice(0);
@@ -643,6 +646,7 @@ const InventoryPurchaseOrderEntry = ({
     setItems([]);
     setSelectedItem("");
     setItemSearch("");
+    setIsSample(false);
     setQty("");
     setPurchasePrice(0);
     setMarketCapPrice(0);
@@ -982,6 +986,19 @@ const InventoryPurchaseOrderEntry = ({
                     Live Balance: {availableQtyCache[selectedProductData._id] ?? selectedProductData.availableQty ?? selectedProductData.totalQty ?? 0} {selectedProductData.units || ""}
                   </div>
                 )}
+              </div>
+              
+              <div className="flex items-center gap-2 lg:mt-6">
+                 <input 
+                   type="checkbox" 
+                   id="isSample" 
+                   checked={isSample} 
+                   onChange={(e) => setIsSample(e.target.checked)} 
+                   className="w-3.5 h-3.5 text-[#319bab] rounded border-gray-300 focus:ring-[#319bab] cursor-pointer" 
+                 />
+                 <label htmlFor="isSample" className="text-[11px] font-bold text-gray-600 uppercase tracking-tight cursor-pointer">
+                   Sample Product (No Price Sync)
+                 </label>
               </div>
             </div>
 
