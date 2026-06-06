@@ -621,8 +621,8 @@ router.post("/preview/:salesOrderId", async (req, res) => {
         ? soMainPrefix.replace(/SO$/i, "SI")
         : (soMainPrefix.endsWith("-SO") ? soMainPrefix.replace(/-SO$/i, "-SI") : (soMainPrefix.endsWith("O") ? soMainPrefix.replace(/O$/i, "I") : `${soMainPrefix}SI`));
 
-      if (useSoNumber) {
-        // Option A: Use SO Number but with SI Prefix
+      if (useSoNumber || invoiceType === "ORDER_DETAILS") {
+        // Option A: Match SO sequential ID but swap prefix to SI
         predictedSI = `${siPrefix}/${parts.slice(1).join('/')}`;
       } else {
         // Option B: Sequential Generation
@@ -636,7 +636,8 @@ router.post("/preview/:salesOrderId", async (req, res) => {
         const existingInvoices = await Invoice.find({
           branchId: salesOrder.branchId,
           invoiceNumber: new RegExp(`^${siPrefix}/`),
-          financialYear
+          financialYear,
+          status: { $ne: "DRAFT" }
         }).select('invoiceNumber').lean();
 
         let highestNumInDB = 0;
@@ -941,10 +942,18 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
         // ==========================================
         let invoice = await Invoice.findOne({ salesOrderId: salesOrder._id }).session(session);
         let invoiceNumber;
+        let generateNewSequence = false;
 
         if (invoice) {
-          invoiceNumber = invoice.invoiceNumber;
-        } else {
+          if (invoice.status === "DRAFT" && invoiceType === "TAX_INVOICE" && req.body.useSoNumber !== true) {
+            // Upgrading from Dummy to Real: Generate a proper sequential number instead of reusing the SO number.
+            generateNewSequence = true;
+          } else {
+            invoiceNumber = invoice.invoiceNumber;
+          }
+        }
+
+        if (!invoice || generateNewSequence) {
           const useSoNumber = req.body.useSoNumber === true;
           const rawSoId = salesOrder.invoiceId || "";
           const cleanSoId = rawSoId.replace(/^(SO|SO REF|SO\sREF)[:\s\-]*/i, "");
@@ -955,7 +964,7 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
             ? soMainPrefix.replace(/SO$/i, "SI")
             : (soMainPrefix.endsWith("-SO") ? soMainPrefix.replace(/-SO$/i, "-SI") : (soMainPrefix.endsWith("O") ? soMainPrefix.replace(/O$/i, "I") : `${soMainPrefix}SI`));
 
-          if (useSoNumber) {
+          if (useSoNumber || invoiceType === "ORDER_DETAILS") {
             // Option A: Match SO sequential ID but swap prefix to SI
             invoiceNumber = `${siPrefix}/${parts.slice(1).join('/')}`;
           } else {
@@ -982,7 +991,8 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
             const existingInvoices = await Invoice.find({
               branchId: salesOrder.branchId,
               invoiceNumber: new RegExp(`^${siPrefix}/`),
-              financialYear
+              financialYear,
+              status: { $ne: "DRAFT" }
             }).select('invoiceNumber').session(session).lean();
 
             let highestNumInDB = 0;

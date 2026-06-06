@@ -280,7 +280,9 @@ const BranchSalesInvoices = () => {
       const data = await res.json();
       if (data.success) {
         // Filter only Sales Invoice (SI) types
-        const siTypes = (data.data || []).filter(v => v.orderType === "SI");
+        const siTypes = (data.data || [])
+          .filter(v => v.orderType === "SI")
+          .sort((a, b) => a.name.localeCompare(b.name));
         setVoucherTypes(siTypes);
       }
     } catch (err) {

@@ -70,7 +70,11 @@ export const InventoryProvider = ({ children }) => {
       
       const res = await fetchWithAuth(`${API_BASE}/voucher-types?branchId=${branchId}`);
       const data = await res.json();
-      setVoucherTypes(data.data || data);
+      const types = data.data || data;
+      if (Array.isArray(types)) {
+        types.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+      }
+      setVoucherTypes(types);
     } catch (err) {
       console.error("Voucher fetch failed", err);
     }

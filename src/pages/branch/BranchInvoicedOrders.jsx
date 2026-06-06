@@ -167,7 +167,9 @@ const BranchInvoicedOrders = () => {
       const data = await res.json();
       if (data.success) {
         // 🎯 FILTER: Only show types meant for Sales Orders (SO)
-        const relevantTypes = (data.data || []).filter(v => v.orderType === "SO");
+        const relevantTypes = (data.data || [])
+          .filter(v => v.orderType === "SO")
+          .sort((a, b) => a.name.localeCompare(b.name));
         setVoucherTypes(relevantTypes);
       }
     } catch (err) {
