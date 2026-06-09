@@ -249,7 +249,7 @@ const BranchGstReports = () => {
   };
 
   const downloadGstr1Excel = (customData = null, customName = null) => {
-    const dataToUse = customData || gstr1Data;
+    const dataToUse = (customData && (customData.b2b || customData.b2cRaw || customData.cdnr || customData.hsnSummary)) ? customData : gstr1Data;
     if (!dataToUse) return;
 
     const displayGstin = dataToUse.branchGstin || branch?.gstin || "NO_GSTIN";
@@ -300,7 +300,7 @@ const BranchGstReports = () => {
 
     // 1. B2B
     const b2bCols = ["GSTIN/UIN of Recipient", "Receiver Name", "Invoice Number", "Invoice date", "Invoice Value", "Place Of Supply", "Reverse Charge", "Applicable % of Tax Rate", "Invoice Type", "E-Commerce GSTIN", "Rate", "Taxable Value", "Cess Amount"];
-    const b2bData = dataToUse.b2b.map(row => ({
+    const b2bData = (dataToUse.b2b || []).map(row => ({
       "GSTIN/UIN of Recipient": row.gstin,
       "Receiver Name": row.customerName,
       "Invoice Number": row.invoiceNo,
@@ -388,7 +388,7 @@ const BranchGstReports = () => {
   };
   
   const downloadGstr1SummaryExcel = (customData = null, customName = null) => {
-    const dataToUse = customData || gstr1Data;
+    const dataToUse = (customData && (customData.b2b || customData.b2cRaw || customData.cdnr || customData.hsnSummary)) ? customData : gstr1Data;
     if (!dataToUse) return;
 
     const displayGstin = dataToUse.branchGstin || branch?.gstin || "NO_GSTIN";
@@ -424,8 +424,8 @@ const BranchGstReports = () => {
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F46E5' } };
     });
 
-    const b2bTaxable = dataToUse.b2b.reduce((s, r) => s + (r.taxableValue || 0), 0);
-    const b2bTax = dataToUse.b2b.reduce((s, r) => s + (r.igst || 0) + (r.cgst || 0) + (r.sgst || 0), 0);
+    const b2bTaxable = (dataToUse.b2b || []).reduce((s, r) => s + (r.taxableValue || 0), 0);
+    const b2bTax = (dataToUse.b2b || []).reduce((s, r) => s + (r.igst || 0) + (r.cgst || 0) + (r.sgst || 0), 0);
 
     const b2cTaxable = (dataToUse.b2cl || []).reduce((s, r) => s + (r.taxableValue || 0), 0) + (dataToUse.b2cs || []).reduce((s, r) => s + (r.taxableValue || 0), 0);
     const b2cTax = (dataToUse.b2cl || []).reduce((s, r) => s + (r.igst || 0) + (r.cgst || 0) + (r.sgst || 0), 0) + (dataToUse.b2cs || []).reduce((s, r) => s + (r.igst || 0) + (r.cgst || 0) + (r.sgst || 0), 0);
@@ -435,7 +435,7 @@ const BranchGstReports = () => {
 
     const nilTaxable = (dataToUse.nilRated || []).reduce((s, r) => s + (r.nilRated || 0) + (r.exempt || 0) + (r.nonGst || 0), 0);
 
-    sheet.addRow(["B2B", "Business to Business Supplies", dataToUse.b2b.length, b2bTaxable, b2bTax]);
+    sheet.addRow(["B2B", "Business to Business Supplies", (dataToUse.b2b || []).length, b2bTaxable, b2bTax]);
     sheet.addRow(["B2C", "Business to Consumer Supplies", dataToUse.b2cRaw?.length || 0, b2cTaxable, b2cTax]);
     sheet.addRow(["Credit Note", "Registered & Unregistered Returns", (dataToUse.cdnr?.length || 0) + (dataToUse.cdnur?.length || 0), cnTaxable, cnTax]);
     sheet.addRow(["Nil Rated", "Exempted / Non-GST Supplies", dataToUse.nilRated?.length || 0, nilTaxable, 0]);
@@ -452,7 +452,7 @@ const BranchGstReports = () => {
     
     // B2B Rates
     gstRates.forEach(rate => {
-      const filtered = dataToUse.b2b.filter(r => Math.round(r.rate) === rate);
+      const filtered = (dataToUse.b2b || []).filter(r => Math.round(r.rate) === rate);
       if (filtered.length > 0) {
         const taxable = filtered.reduce((s, r) => s + (r.taxableValue || 0), 0);
         const tax = filtered.reduce((s, r) => s + (r.igst || 0) + (r.cgst || 0) + (r.sgst || 0), 0);
@@ -530,7 +530,7 @@ const BranchGstReports = () => {
 
     // 1. B2B Details
     const b2bCols = ["GSTIN", "Customer Name", "Invoice No", "Date", "Value", "POS", "Rate", "Taxable Value", "IGST", "CGST", "SGST"];
-    const b2bData = dataToUse.b2b.map(row => ({
+    const b2bData = (dataToUse.b2b || []).map(row => ({
       "GSTIN": row.gstin, "Customer Name": row.customerName, "Invoice No": row.invoiceNo, "Date": row.date, "Value": row.value, "POS": row.placeOfSupply, "Rate": row.rate, "Taxable Value": row.taxableValue, "IGST": row.igst, "CGST": row.cgst, "SGST": row.sgst
     }));
     addStyledSheet("B2B_Details", b2bData, b2bCols);
@@ -595,7 +595,7 @@ const BranchGstReports = () => {
     };
 
     const b2bGroups = {};
-    gstr1Data.b2b.forEach(row => {
+    (gstr1Data.b2b || []).forEach(row => {
       const gstin = row.gstin.trim().toUpperCase();
       const invNo = row.invoiceNo;
       if (!b2bGroups[gstin]) b2bGroups[gstin] = { ctin: gstin, inv: [] };
@@ -614,7 +614,7 @@ const BranchGstReports = () => {
     });
 
     const cdnrGroups = {};
-    gstr1Data.cdnr.forEach(row => {
+    (gstr1Data.cdnr || []).forEach(row => {
       const gstin = row.gstin.trim().toUpperCase();
       const ntNo = row.noteNo;
       if (!cdnrGroups[gstin]) cdnrGroups[gstin] = { ctin: gstin, nt: [] };
@@ -654,7 +654,7 @@ const BranchGstReports = () => {
       cur_gt: 0,
       gt: 0,
       b2b: Object.values(b2bGroups),
-      b2cs: gstr1Data.b2cs.map(row => ({
+      b2cs: (gstr1Data.b2cs || []).map(row => ({
         typ: "OE", sply_ty: row.placeOfSupply.startsWith(branch?.stateCode || "33") ? "INTRA" : "INTER",
         rt: parseFloat(row.rate.toFixed(2)), pos: row.placeOfSupply.substring(0, 2),
         txval: parseFloat(row.taxableValue.toFixed(2)), iamt: parseFloat((row.igst || 0).toFixed(2)),
@@ -666,13 +666,13 @@ const BranchGstReports = () => {
       at: [],
       atadj: [],
       nil: {
-        inv: gstr1Data.nilRated.map(row => ({
+        inv: (gstr1Data.nilRated || []).map(row => ({
           sply_ty: (row.description.includes("Inter-State") ? "INTER" : "INTRA") + (row.description.includes("registered") ? "B2B" : "B2C"),
           nil_amt: parseFloat(row.nilRated.toFixed(2)), expt_amt: parseFloat(row.exempt.toFixed(2)), ngsup_amt: parseFloat(row.nonGst.toFixed(2))
         }))
       },
       doc_issue: {
-        doc_det: gstr1Data.docSummary.map((doc, idx) => ({
+        doc_det: (gstr1Data.docSummary || []).map((doc, idx) => ({
           doc_num: idx + 1,
           docs: [{ num: 1, from: doc.from, to: doc.to, totnum: doc.total, cancel: doc.cancelled, net_issue: doc.net }]
         }))
@@ -692,7 +692,7 @@ const BranchGstReports = () => {
 
 
   const downloadGstr1DirectPortalJson = (customData = null, customName = null) => {
-    const dataToUse = customData || gstr1Data;
+    const dataToUse = (customData && (customData.b2b || customData.b2cRaw || customData.cdnr || customData.hsnSummary)) ? customData : gstr1Data;
     if (!dataToUse) return;
 
     const formatPortalDate = (d) => {
@@ -706,7 +706,7 @@ const BranchGstReports = () => {
     };
 
     const b2bGroups = {};
-    dataToUse.b2b.forEach(row => {
+    (dataToUse.b2b || []).forEach(row => {
       const gstin = row.gstin.trim().toUpperCase();
       const invNo = row.invoiceNo;
       if (!b2bGroups[gstin]) b2bGroups[gstin] = { ctin: gstin, inv: [] };
@@ -725,7 +725,7 @@ const BranchGstReports = () => {
     });
 
     const cdnrGroups = {};
-    dataToUse.cdnr.forEach(row => {
+    (dataToUse.cdnr || []).forEach(row => {
       const gstin = row.gstin.trim().toUpperCase();
       const ntNo = row.noteNo;
       if (!cdnrGroups[gstin]) cdnrGroups[gstin] = { ctin: gstin, nt: [] };
@@ -779,7 +779,7 @@ const BranchGstReports = () => {
       cur_gt: 0,
       gt: 0,
       b2b: Object.values(b2bGroups),
-      b2cs: dataToUse.b2cs.map(row => ({
+      b2cs: (dataToUse.b2cs || []).map(row => ({
         typ: "OE", sply_ty: row.placeOfSupply.startsWith(branch?.stateCode || "33") ? "INTRA" : "INTER",
         rt: parseFloat(row.rate.toFixed(2)), pos: row.placeOfSupply.substring(0, 2),
         txval: parseFloat(row.taxableValue.toFixed(2)), iamt: parseFloat((row.igst || 0).toFixed(2)),
@@ -788,13 +788,13 @@ const BranchGstReports = () => {
       cdnr: Object.values(cdnrGroups),
       hsn: { data: hsnData },
       nil: {
-        inv: dataToUse.nilRated.map(row => ({
+        inv: (dataToUse.nilRated || []).map(row => ({
           sply_ty: (row.description.includes("Inter-State") ? "INTER" : "INTRA") + (row.description.includes("registered") ? "B2B" : "B2C"),
           nil_amt: parseFloat(row.nilRated.toFixed(2)), expt_amt: parseFloat(row.exempt.toFixed(2)), ngsup_amt: parseFloat(row.nonGst.toFixed(2))
         }))
       },
       doc_issue: {
-        doc_det: dataToUse.docSummary.map((doc) => {
+        doc_det: (dataToUse.docSummary || []).map((doc) => {
           let docNum = 1; // Default for Invoices
           if (doc.nature.includes("Credit Note")) docNum = 5;
           else if (doc.nature.includes("Debit Note")) docNum = 4;
@@ -836,7 +836,7 @@ const BranchGstReports = () => {
       }
 
       const reportData = data.data;
-      if (!reportData.b2b.length && !reportData.b2cRaw.length && !reportData.cdnr.length && !reportData.cdnur.length) {
+      if (!(reportData.b2b || []).length && !(reportData.b2cRaw || []).length && !(reportData.cdnr || []).length && !(reportData.cdnur || []).length) {
         toast.info("No matching records found for the specified invoice/credit note numbers.");
         return;
       }
@@ -898,7 +898,7 @@ const BranchGstReports = () => {
 
     if (sectionKey === 'b2b') {
       const b2bGroups = {};
-      gstr1Data.b2b.forEach(row => {
+      (gstr1Data.b2b || []).forEach(row => {
         const gstin = row.gstin.trim().toUpperCase();
         const invNo = row.invoiceNo;
         if (!b2bGroups[gstin]) b2bGroups[gstin] = { ctin: gstin, inv: [] };
@@ -918,7 +918,7 @@ const BranchGstReports = () => {
       sectionData = { b2b: Object.values(b2bGroups) };
     } else if (sectionKey === 'b2cs') {
       sectionData = {
-        b2cs: gstr1Data.b2cs.map(row => ({
+        b2cs: (gstr1Data.b2cs || []).map(row => ({
           typ: "OE", sply_ty: row.placeOfSupply.startsWith(branch?.stateCode || "33") ? "INTRA" : "INTER",
           rt: parseFloat(row.rate.toFixed(2)), pos: row.placeOfSupply.substring(0, 2),
           txval: parseFloat(row.taxableValue.toFixed(2)), iamt: parseFloat((row.igst || 0).toFixed(2)),
@@ -927,7 +927,7 @@ const BranchGstReports = () => {
       };
     } else if (sectionKey === 'cdnr') {
       const cdnrGroups = {};
-      gstr1Data.cdnr.forEach(row => {
+      (gstr1Data.cdnr || []).forEach(row => {
         const gstin = row.gstin.trim().toUpperCase();
         const ntNo = row.noteNo;
         if (!cdnrGroups[gstin]) cdnrGroups[gstin] = { ctin: gstin, nt: [] };
@@ -964,7 +964,7 @@ const BranchGstReports = () => {
     } else if (sectionKey === 'nil') {
       sectionData = {
         nil: {
-          inv: gstr1Data.nilRated.map(row => ({
+          inv: (gstr1Data.nilRated || []).map(row => ({
             sply_ty: (row.description.includes("Inter-State") ? "INTER" : "INTRA") + (row.description.includes("registered") ? "B2B" : "B2C"),
             nil_amt: parseFloat(row.nilRated.toFixed(2)), expt_amt: parseFloat(row.exempt.toFixed(2)), ngsup_amt: parseFloat(row.nonGst.toFixed(2))
           }))
@@ -973,7 +973,7 @@ const BranchGstReports = () => {
     } else if (sectionKey === 'doc_issue') {
       sectionData = {
         doc_issue: {
-          doc_det: gstr1Data.docSummary.map((doc) => {
+          doc_det: (gstr1Data.docSummary || []).map((doc) => {
             let docNum = 1;
             if (doc.nature.includes("Credit Note")) docNum = 5;
             else if (doc.nature.includes("Debit Note")) docNum = 4;
@@ -1060,8 +1060,8 @@ const BranchGstReports = () => {
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF334155' } };
     });
 
-    sheet.addRow(["Total Invoices Processed", gstr1Data.rawCounts.total || 0]);
-    sheet.addRow(["Active Invoices (Included)", gstr1Data.rawCounts.total - gstr1Data.rawCounts.cancelled]);
+    sheet.addRow(["Total Invoices Processed", gstr1Data?.rawCounts?.total || 0]);
+    sheet.addRow(["Active Invoices (Included)", (gstr1Data?.rawCounts?.total || 0) - (gstr1Data?.rawCounts?.cancelled || 0)]);
     sheet.addRow(["Anomalies / Uncertain Transactions", gstr1Data.hsnSummary?.filter(h => ![4, 6, 8].includes(h.hsn.toString().length)).length || 0]);
     sheet.getCell("B12").font = { color: { argb: "FFEF4444" }, bold: true };
 
