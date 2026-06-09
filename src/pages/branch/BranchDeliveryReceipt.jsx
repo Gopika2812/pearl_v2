@@ -11,9 +11,30 @@ import { useBranch } from "../../context/BranchContext";
 import FilterableSelect from "../../components/FilterableSelect";
 import ScrollToggleButton from "../../components/ScrollToggleButton";
 
+// Helper functions for cash-only flow and calculations
+const getCashCollected = (r) => {
+  return r.collections 
+    ? r.collections.filter(c => c.paymentMode === 'CASH').reduce((sum, c) => sum + (c.amount || 0), 0) 
+    : 0;
+};
+const getCashEntriesCount = (r) => {
+  return r.collections 
+    ? r.collections.filter(c => c.paymentMode === 'CASH').length 
+    : 0;
+};
+const getNetCash = (r) => {
+  return getCashCollected(r) - (r.totalExpense || 0);
+};
+const hasCashFlow = (r) => {
+  return getCashCollected(r) > 0 || (r.totalExpense || 0) > 0;
+};
+
 const BranchDeliveryReceipt = () => {
   const { currentBranch, user } = useBranch();
   const [receipts, setReceipts] = useState([]);
+  const visibleReceipts = React.useMemo(() => {
+    return receipts.filter(hasCashFlow);
+  }, [receipts]);
   const [loading, setLoading] = useState(false);
   const [customers, setCustomers] = useState([]);
   const getLocalDateString = (d = new Date()) => {
@@ -367,7 +388,6 @@ const BranchDeliveryReceipt = () => {
                             className="w-full bg-transparent outline-none font-bold text-xs text-slate-600 h-full text-center cursor-pointer appearance-none"
                           >
                              <option value="CASH">CASH</option>
-                             <option value="UPI">UPI</option>
                           </select>
                         ) : (
                           <div className="w-full text-center text-slate-300 text-[10px] font-black italic">-</div>
@@ -582,7 +602,7 @@ const BranchDeliveryReceipt = () => {
                          </div>
                        </td>
                      </tr>
-                   ) : receipts.length === 0 ? (
+                   ) : visibleReceipts.length === 0 ? (
                      <tr>
                        <td colSpan="7" className="px-8 py-20 text-center opacity-30">
                          <FaReceipt size={60} className="mx-auto text-slate-300 mb-4" />
@@ -590,7 +610,7 @@ const BranchDeliveryReceipt = () => {
                        </td>
                      </tr>
                    ) : (
-                     receipts.map((r) => (
+                     visibleReceipts.map((r) => (
                        <React.Fragment key={r._id}>
                          <tr className={`hover:bg-slate-50/50 transition-colors group ${r.isBankTransferred ? 'opacity-50' : ''}`}>
                            <td className="px-6 py-6 text-center">
@@ -623,8 +643,8 @@ const BranchDeliveryReceipt = () => {
                          </td>
                          <td className="px-8 py-6 text-right">
                             <div className="flex flex-col items-end">
-                               <span className="text-xs font-black text-emerald-600">₹{r.totalCollected.toLocaleString()}</span>
-                               <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">{r.collections?.length} Entries</span>
+                               <span className="text-xs font-black text-emerald-600">₹{getCashCollected(r).toLocaleString()}</span>
+                               <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">{getCashEntriesCount(r)} Entries</span>
                             </div>
                          </td>
                          <td className="px-8 py-6 text-right">
@@ -635,7 +655,7 @@ const BranchDeliveryReceipt = () => {
                          </td>
                          <td className="px-8 py-6 text-right">
                             <div className="inline-block px-4 py-2 bg-slate-900 text-white rounded-2xl text-xs font-black shadow-lg shadow-slate-200">
-                              ₹{r.netAmount.toLocaleString()}
+                              ₹{getNetCash(r).toLocaleString()}
                             </div>
                          </td>
                          <td className="px-8 py-6 text-center">
@@ -737,10 +757,10 @@ const BranchDeliveryReceipt = () => {
              <div className="lg:hidden divide-y divide-slate-100">
                {loading ? (
                   <div className="p-12 text-center text-slate-400 font-black uppercase tracking-widest text-[10px]">Loading...</div>
-               ) : receipts.length === 0 ? (
+               ) : visibleReceipts.length === 0 ? (
                   <div className="p-12 text-center text-slate-400 font-black uppercase tracking-widest text-[10px]">No records found</div>
                ) : (
-                 receipts.map((r) => (
+                 visibleReceipts.map((r) => (
                    <div key={r._id} className="p-6 bg-white">
                       <div className="flex items-start justify-between mb-4">
                          <div className="flex items-center gap-3">
@@ -790,7 +810,7 @@ const BranchDeliveryReceipt = () => {
                          <div className="grid grid-cols-3 gap-2">
                             <div>
                                <div className="text-[8px] font-black text-slate-300 uppercase mb-1">Collected</div>
-                               <div className="text-[11px] font-black text-emerald-600">₹{r.totalCollected.toLocaleString()}</div>
+                               <div className="text-[11px] font-black text-emerald-600">₹{getCashCollected(r).toLocaleString()}</div>
                             </div>
                             <div>
                                <div className="text-[8px] font-black text-slate-300 uppercase mb-1">Expenses</div>
@@ -798,7 +818,7 @@ const BranchDeliveryReceipt = () => {
                             </div>
                             <div>
                                <div className="text-[8px] font-black text-slate-300 uppercase mb-1">Net Cash</div>
-                               <div className="text-[11px] font-black text-slate-800">₹{r.netAmount.toLocaleString()}</div>
+                               <div className="text-[11px] font-black text-slate-800">₹{getNetCash(r).toLocaleString()}</div>
                             </div>
                          </div>
                       </div>
@@ -871,9 +891,9 @@ const BranchDeliveryReceipt = () => {
       {/* BANK TRANSFER MODAL */}
       {showBankModal && (() => {
         const selectedData = receipts.filter(r => selectedReceipts.includes(r._id));
-        const modalTotalCollected = selectedData.reduce((s, r) => s + (r.totalCollected || 0), 0);
+        const modalTotalCollected = selectedData.reduce((s, r) => s + getCashCollected(r), 0);
         const modalTotalExpense = selectedData.reduce((s, r) => s + (r.totalExpense || 0), 0);
-        const modalNetAmount = selectedData.reduce((s, r) => s + (r.netAmount || 0), 0);
+        const modalNetAmount = modalTotalCollected - modalTotalExpense;
         return (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => !transferring && setShowBankModal(false)}></div>
@@ -897,7 +917,7 @@ const BranchDeliveryReceipt = () => {
                   {selectedData.map(r => (
                     <div key={r._id} className="flex items-center justify-between bg-white px-3 py-2 rounded-xl border border-slate-100">
                       <span className="text-[11px] font-black text-slate-700">{r.receiptId}</span>
-                      <span className="text-[11px] font-black text-emerald-600">₹{r.netAmount?.toLocaleString()}</span>
+                      <span className="text-[11px] font-black text-emerald-600">₹{getNetCash(r).toLocaleString()}</span>
                     </div>
                   ))}
                 </div>
