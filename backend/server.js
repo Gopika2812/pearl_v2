@@ -14,6 +14,7 @@ import { fixSalesOrderIndex } from "./utils/fixSalesOrderIndex.js";
 import fixVendorIndex from "./utils/fixVendorIndex.js";
 import fixVoucherTypeIndex from "./utils/fixVoucherTypeIndex.js";
 import fixTokenIndex from "./utils/fixTokenIndex.js";
+import { fixProductBatches } from "./utils/fixProductBatches.js";
 
 import auditLogRoutes from "./routes/auditLogRoutes.js";
 import branchRoutes from "./routes/branchRoutes.js";
@@ -179,6 +180,7 @@ mongoose
     await fixSalesOrderIndex();
     await fixInvoiceIndex();
     await fixTokenIndex();
+    await fixProductBatches();
     // await fixVoucherTypes(); // Commented out to prevent auto-recreation
   })
   .catch((err) => console.error("Mongo Error:", err));

@@ -1421,6 +1421,243 @@ router.delete("/bulk-delete", auth, async (req, res) => {
   }
 });
 
+// GET: Fetch batch-wise inventory status with filters
+// GET: Fetch batch-wise inventory status with filters
+router.get("/batch-inventory", auth, async (req, res) => {
+  try {
+    const { branchId, productGroupId, productCategoryId, startDate, endDate, dateFilterType, search } = req.query;
+
+    if (!branchId) {
+      return res.status(400).json({ success: false, message: "branchId is required" });
+    }
+
+    const branchOid = new mongoose.Types.ObjectId(branchId);
+    const query = { branchId: branchOid };
+
+    if (productGroupId) {
+      query.productGroup = new mongoose.Types.ObjectId(productGroupId);
+    }
+    if (productCategoryId) {
+      query.productCategories = { $in: [new mongoose.Types.ObjectId(productCategoryId)] };
+    }
+    if (search) {
+      query.name = { $regex: search, $options: "i" };
+    }
+
+    // 1. Fetch products matching query
+    const products = await Product.find(query).populate("productGroup").lean();
+    const productIds = products.map(p => p._id);
+
+    // 2. Fetch all Purchase Orders for this branch to calculate purchased quantities per batch
+    const purchaseQuery = { branchId: branchOid, status: { $ne: "CANCELLED" } };
+    
+    // If filtering by purchase date range, apply to PO query
+    if (dateFilterType === "purchase" && startDate && endDate) {
+      purchaseQuery.date = { $gte: new Date(startDate), $lte: new Date(endDate) };
+    }
+
+    // 3. Fetch all-time transaction movements to calculate dynamic closing quantities (to match Stock Journal)
+    const [purchases, sales, debitNotes, creditNotes, psvTotals, POs] = await Promise.all([
+      PurchaseInvoice.aggregate([
+        { $match: { branchId: branchOid, "items.productId": { $in: productIds }, invoiceDate: { $gt: HARD_ANCHOR_DATE } } },
+        { $unwind: "$items" },
+        { $match: { "items.productId": { $in: productIds } } },
+        { $group: { _id: "$items.productId", totalQty: { $sum: "$items.qty" } } }
+      ]),
+      Invoice.aggregate([
+        { $match: { branchId: branchOid, status: { $ne: "CANCELLED" }, "items.productId": { $in: productIds }, invoiceDate: { $gt: HARD_ANCHOR_DATE } } },
+        { $unwind: "$items" },
+        { $match: { "items.productId": { $in: productIds }, "items.qty": { $gt: 0 } } },
+        { $group: { _id: "$items.productId", totalQty: { $sum: "$items.qty" } } }
+      ]),
+      DebitNote.aggregate([
+        { $match: { branchId: branchOid, status: { $ne: "Cancelled" }, "items.productId": { $in: productIds }, date: { $gt: HARD_ANCHOR_DATE } } },
+        { $unwind: "$items" },
+        { $match: { "items.productId": { $in: productIds } } },
+        { $group: { _id: "$items.productId", totalQty: { $sum: { $ifNull: ["$items.qty", "$items.returnedQty", 0] } } } }
+      ]),
+      CreditNote.aggregate([
+        { $match: { branchId: branchOid, status: { $ne: "Cancelled" }, "items.productId": { $in: productIds } } },
+        { $addFields: { effectiveDate: { $ifNull: ["$date", "$createdAt"] } } },
+        { $match: { effectiveDate: { $gt: HARD_ANCHOR_DATE } } },
+        { $unwind: "$items" },
+        { $match: { "items.productId": { $in: productIds } } },
+        { $group: { _id: "$items.productId", totalQty: { $sum: { $ifNull: ["$items.qty", "$items.returnedQty", 0] } } } }
+      ]),
+      PhysicalStockEntry.aggregate([
+        { $match: { branchId: branchOid, status: "APPROVED", productId: { $in: productIds } } },
+        {
+          $group: {
+            _id: "$productId",
+            inwardQty: { $sum: "$inwardQty" },
+            outwardQty: { $sum: "$outwardQty" }
+          }
+        }
+      ]),
+      PurchaseOrder.find(purchaseQuery).select("items date").lean()
+    ]);
+
+    // Create lookup maps for dynamic closing stock
+    const purchaseMapTotal = new Map(purchases.map(p => [p._id.toString(), p.totalQty]));
+    const salesMapTotal = new Map(sales.map(s => [s._id.toString(), s.totalQty]));
+    const dnMapTotal = new Map(debitNotes.map(dn => [dn._id.toString(), dn.totalQty]));
+    const cnMapTotal = new Map(creditNotes.map(cn => [cn._id.toString(), cn.totalQty]));
+    const psvMapTotal = new Map(psvTotals.map(psv => [psv._id.toString(), psv]));
+
+    // Create a map to lookup total purchased qty: productId_batch -> totalPurchased
+    const purchaseMap = {};
+    POs.forEach(po => {
+      (po.items || []).forEach(item => {
+        if (item.productId && item.batch) {
+          const key = `${item.productId.toString()}_${String(item.batch)}`;
+          purchaseMap[key] = (purchaseMap[key] || 0) + (item.qty || 0);
+        }
+      });
+    });
+
+    const rows = [];
+    const now = new Date();
+
+    products.forEach(p => {
+      const pid = p._id.toString();
+      const pQty = purchaseMapTotal.get(pid) || 0;
+      const sQty = salesMapTotal.get(pid) || 0;
+      const dnQty = dnMapTotal.get(pid) || 0;
+      const cnQty = cnMapTotal.get(pid) || 0;
+      const psv = psvMapTotal.get(pid) || { inwardQty: 0, outwardQty: 0 };
+
+      // Calculate dynamic current closing quantity (matches Stock Journal/Tally formula)
+      const totalClosingQty = (p.openingQty || 0) + pQty + cnQty + psv.inwardQty - sQty - dnQty - psv.outwardQty;
+
+      const batches = p.batches || [];
+      
+      // Fallback to legacy batch1 if batches array is empty
+      const activeBatches = batches.length > 0 ? batches : [
+        { batchNo: "0", qty: p.batch1?.qty || 0, expiryDate: p.batch1?.expiryDate || null, mrp: p.batch1?.mrp || 0, manufacturingDate: p.batch1?.manufacturingDate || null }
+      ];
+
+      // Sum stock qty of newer batches (non-Batch 0 batches)
+      const newerBatchesQty = activeBatches
+        .filter(b => b.batchNo !== "0")
+        .reduce((sum, b) => sum + (b.qty || 0), 0);
+
+      // Batch 0 closing quantity is calculated as overall stock minus newer batches stock
+      const batch0ClosingQty = Math.max(0, totalClosingQty - newerBatchesQty);
+
+      activeBatches.forEach(b => {
+        // Calculate age: days remaining to expiry
+        let ageDays = null;
+        if (b.expiryDate) {
+          const diffTime = new Date(b.expiryDate).getTime() - now.getTime();
+          ageDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        }
+
+        // Apply Expiry Date filtration if selected
+        if (dateFilterType === "expiry" && startDate && endDate) {
+          if (!b.expiryDate) return;
+          const expTime = new Date(b.expiryDate).getTime();
+          const startTime = new Date(startDate).getTime();
+          const endTime = new Date(endDate).getTime();
+          if (expTime < startTime || expTime > endTime) return;
+        }
+
+        const batchKey = `${p._id.toString()}_${String(b.batchNo)}`;
+        const poQty = purchaseMap[batchKey] || 0;
+        
+        // Purchased Qty is strictly the PO quantity for this batch (no fallbacks!)
+        const purchasingQty = poQty;
+
+        // Closing Qty for Batch 0 is calculated dynamically; other batches use b.qty
+        const closingQty = b.batchNo === "0" ? batch0ClosingQty : (b.qty || 0);
+
+        rows.push({
+          productId: p._id,
+          productName: p.name,
+          productGroup: p.productGroup?.name || "Uncategorized",
+          batchNo: b.batchNo,
+          expiryDate: b.expiryDate,
+          manufacturingDate: b.manufacturingDate,
+          mrp: b.mrp || 0,
+          purchasingPrice: p.purchasingPrice || 0,
+          sellingPrice: p.sellingPrice || 0,
+          purchasingQty: purchasingQty,
+          closingQty: closingQty,
+          valuationPrice: closingQty * (p.purchasingPrice || 0),
+          age: ageDays
+        });
+      });
+    });
+
+    res.json({
+      success: true,
+      data: rows
+    });
+  } catch (error) {
+    console.error("Error in batch-inventory:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch batch inventory data", error: error.message });
+  }
+});
+
+// GET: Fetch the next auto-incremented batch number for a product
+router.get("/next-batch/:productId", auth, async (req, res) => {
+  try {
+    const { productId } = req.params;
+    const { branchId } = req.query;
+
+    if (!branchId) {
+      return res.status(400).json({ success: false, message: "branchId is required" });
+    }
+
+    const product = await Product.findById(productId);
+    if (!product) {
+      return res.status(404).json({ success: false, message: "Product not found" });
+    }
+
+    // Query all Purchase Orders in this branch containing this product
+    const previousPOs = await PurchaseOrder.find({
+      branchId,
+      status: { $ne: "CANCELLED" },
+      "items.productId": productId
+    }).select("items.batch").lean();
+
+    let highestBatchNum = 0;
+    
+    // Also include any batches that are currently in product.batches
+    if (product.batches && Array.isArray(product.batches)) {
+      product.batches.forEach(b => {
+        const num = parseInt(b.batchNo, 10);
+        if (!isNaN(num) && num > highestBatchNum) {
+          highestBatchNum = num;
+        }
+      });
+    }
+
+    previousPOs.forEach(po => {
+      (po.items || []).forEach(item => {
+        if (item.productId && item.productId.toString() === productId) {
+          const batchStr = item.batch;
+          if (batchStr) {
+            const num = parseInt(batchStr, 10);
+            if (!isNaN(num) && num > highestBatchNum) {
+              highestBatchNum = num;
+            }
+          }
+        }
+      });
+    });
+
+    const nextBatch = highestBatchNum + 1;
+
+    res.json({
+      success: true,
+      nextBatch: String(nextBatch)
+    });
+  } catch (error) {
+    console.error("Error getting next batch number:", error);
+    res.status(500).json({ success: false, message: "Failed to get next batch number", error: error.message });
+  }
+});
+
 // GET: Fetch product batches expiring within 5 days
 router.get("/alerts/expiry", auth, async (req, res) => {
   try {
@@ -1432,7 +1669,7 @@ router.get("/alerts/expiry", auth, async (req, res) => {
     const fiveDaysFromNow = new Date();
     fiveDaysFromNow.setDate(fiveDaysFromNow.getDate() + 5);
 
-    // Find products where batch1 or batch2 has quantity > 0 and expiryDate is <= fiveDaysFromNow
+    // Find products where batch1 or batch2 or batches has quantity > 0 and expiryDate is <= fiveDaysFromNow
     const products = await Product.find({
       branchId,
       $or: [
@@ -1443,31 +1680,54 @@ router.get("/alerts/expiry", auth, async (req, res) => {
         {
           "batch2.qty": { $gt: 0 },
           "batch2.expiryDate": { $ne: null, $lte: fiveDaysFromNow }
+        },
+        {
+          batches: {
+            $elemMatch: {
+              qty: { $gt: 0 },
+              expiryDate: { $ne: null, $lte: fiveDaysFromNow }
+            }
+          }
         }
       ]
     }).lean();
 
     const alerts = [];
     products.forEach(p => {
-      if (p.batch1 && p.batch1.qty > 0 && p.batch1.expiryDate && new Date(p.batch1.expiryDate) <= fiveDaysFromNow) {
-        alerts.push({
-          productId: p._id,
-          name: p.name,
-          batch: "1",
-          qty: p.batch1.qty,
-          expiryDate: p.batch1.expiryDate,
-          mrp: p.batch1.mrp
+      if (p.batches && Array.isArray(p.batches) && p.batches.length > 0) {
+        p.batches.forEach(b => {
+          if (b.qty > 0 && b.expiryDate && new Date(b.expiryDate) <= fiveDaysFromNow) {
+            alerts.push({
+              productId: p._id,
+              name: p.name,
+              batch: b.batchNo,
+              qty: b.qty,
+              expiryDate: b.expiryDate,
+              mrp: b.mrp
+            });
+          }
         });
-      }
-      if (p.batch2 && p.batch2.qty > 0 && p.batch2.expiryDate && new Date(p.batch2.expiryDate) <= fiveDaysFromNow) {
-        alerts.push({
-          productId: p._id,
-          name: p.name,
-          batch: "2",
-          qty: p.batch2.qty,
-          expiryDate: p.batch2.expiryDate,
-          mrp: p.batch2.mrp
-        });
+      } else {
+        if (p.batch1 && p.batch1.qty > 0 && p.batch1.expiryDate && new Date(p.batch1.expiryDate) <= fiveDaysFromNow) {
+          alerts.push({
+            productId: p._id,
+            name: p.name,
+            batch: "1",
+            qty: p.batch1.qty,
+            expiryDate: p.batch1.expiryDate,
+            mrp: p.batch1.mrp
+          });
+        }
+        if (p.batch2 && p.batch2.qty > 0 && p.batch2.expiryDate && new Date(p.batch2.expiryDate) <= fiveDaysFromNow) {
+          alerts.push({
+            productId: p._id,
+            name: p.name,
+            batch: "2",
+            qty: p.batch2.qty,
+            expiryDate: p.batch2.expiryDate,
+            mrp: p.batch2.mrp
+          });
+        }
       }
     });
 
@@ -1486,7 +1746,7 @@ router.get("/alerts/sold-out", auth, async (req, res) => {
       return res.status(400).json({ success: false, message: "branchId is required" });
     }
 
-    // Find products where batch1 or batch2 has quantity <= 0 and expiryDate is not null
+    // Find products where batch1 or batch2 or batches has quantity <= 0 and expiryDate is not null
     const products = await Product.find({
       branchId,
       $or: [
@@ -1497,31 +1757,54 @@ router.get("/alerts/sold-out", auth, async (req, res) => {
         {
           "batch2.qty": { $lte: 0 },
           "batch2.expiryDate": { $ne: null }
+        },
+        {
+          batches: {
+            $elemMatch: {
+              qty: { $lte: 0 },
+              expiryDate: { $ne: null }
+            }
+          }
         }
       ]
     }).lean();
 
     const alerts = [];
     products.forEach(p => {
-      if (p.batch1 && p.batch1.qty <= 0 && p.batch1.expiryDate) {
-        alerts.push({
-          productId: p._id,
-          name: p.name,
-          batch: "1",
-          qty: p.batch1.qty,
-          expiryDate: p.batch1.expiryDate,
-          mrp: p.batch1.mrp
+      if (p.batches && Array.isArray(p.batches) && p.batches.length > 0) {
+        p.batches.forEach(b => {
+          if (b.qty <= 0 && b.expiryDate) {
+            alerts.push({
+              productId: p._id,
+              name: p.name,
+              batch: b.batchNo,
+              qty: b.qty,
+              expiryDate: b.expiryDate,
+              mrp: b.mrp
+            });
+          }
         });
-      }
-      if (p.batch2 && p.batch2.qty <= 0 && p.batch2.expiryDate) {
-        alerts.push({
-          productId: p._id,
-          name: p.name,
-          batch: "2",
-          qty: p.batch2.qty,
-          expiryDate: p.batch2.expiryDate,
-          mrp: p.batch2.mrp
-        });
+      } else {
+        if (p.batch1 && p.batch1.qty <= 0 && p.batch1.expiryDate) {
+          alerts.push({
+            productId: p._id,
+            name: p.name,
+            batch: "1",
+            qty: p.batch1.qty,
+            expiryDate: p.batch1.expiryDate,
+            mrp: p.batch1.mrp
+          });
+        }
+        if (p.batch2 && p.batch2.qty <= 0 && p.batch2.expiryDate) {
+          alerts.push({
+            productId: p._id,
+            name: p.name,
+            batch: "2",
+            qty: p.batch2.qty,
+            expiryDate: p.batch2.expiryDate,
+            mrp: p.batch2.mrp
+          });
+        }
       }
     });
 

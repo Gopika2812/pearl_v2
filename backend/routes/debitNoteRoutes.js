@@ -293,6 +293,7 @@ router.post("/", async (req, res) => {
     const mappedItems = items.map(item => ({
       ...item,
       qty: Number(item.qty || item.returnedQty || 0),
+      batch: item.batch || "0",
       hsn: item.hsn || ""
     }));
 
@@ -322,12 +323,12 @@ router.post("/", async (req, res) => {
       for (const item of mappedItems) {
         try {
           if (item.productId && item.productId !== "000000000000000000000000") {
-            const product = await Product.findByIdAndUpdate(
-              item.productId,
-              { $inc: { totalQty: -item.qty } },
-              { new: true }
-            );
-            if (product) console.log(`✅ Inventory reduced: ${product.name} -${item.qty}`);
+            const product = await Product.findById(item.productId);
+            if (product) {
+              product.updateBatchStock(item.batch || "0", -item.qty);
+              await product.save();
+              console.log(`✅ Inventory reduced: ${product.name} -${item.qty} from Batch ${item.batch || "0"}`);
+            }
           }
         } catch (err) {
           console.error(`⚠️ Failed to update product inventory:`, err.message);
@@ -431,7 +432,11 @@ router.put("/:id", async (req, res) => {
     if (oldDN.items && oldDN.items.length > 0) {
       for (const item of oldDN.items) {
         if (item.productId && item.productId.toString() !== "000000000000000000000000") {
-          await Product.findByIdAndUpdate(item.productId, { $inc: { totalQty: item.qty || item.returnedQty || 0 } });
+          const product = await Product.findById(item.productId);
+          if (product) {
+            product.updateBatchStock(item.batch || "0", item.qty || item.returnedQty || 0);
+            await product.save();
+          }
         }
       }
     }
@@ -480,7 +485,11 @@ router.put("/:id", async (req, res) => {
 
       // Update Inventory (Subtract new qty)
       if (item.productId && item.productId.toString() !== "000000000000000000000000") {
-        await Product.findByIdAndUpdate(item.productId, { $inc: { totalQty: -qty } });
+        const product = await Product.findById(item.productId);
+        if (product) {
+          product.updateBatchStock(item.batch || "0", -qty);
+          await product.save();
+        }
       }
     }
 
@@ -536,7 +545,11 @@ router.patch("/:id/cancel", async (req, res) => {
     if (debitNote.items && debitNote.items.length > 0) {
       for (const item of debitNote.items) {
         if (item.productId && item.productId.toString() !== "000000000000000000000000") {
-          await Product.findByIdAndUpdate(item.productId, { $inc: { totalQty: item.qty || item.returnedQty || 0 } });
+          const product = await Product.findById(item.productId);
+          if (product) {
+            product.updateBatchStock(item.batch || "0", item.qty || item.returnedQty || 0);
+            await product.save();
+          }
         }
       }
     }
@@ -594,12 +607,12 @@ router.delete("/:id", async (req, res) => {
       for (const item of debitNote.items) {
         try {
           if (item.productId && item.productId !== "000000000000000000000000") {
-            const product = await Product.findByIdAndUpdate(
-              item.productId,
-              { $inc: { totalQty: item.returnedQty || item.qty } },
-              { new: true }
-            );
-            if (product) console.log(`✅ Inventory restored: ${product.name} +${item.returnedQty || item.qty}`);
+            const product = await Product.findById(item.productId);
+            if (product) {
+              product.updateBatchStock(item.batch || "0", item.returnedQty || item.qty);
+              await product.save();
+              console.log(`✅ Inventory restored: ${product.name} +${item.returnedQty || item.qty} to Batch ${item.batch || "0"}`);
+            }
           }
         } catch (err) {
           console.error(`⚠️ Failed to restore product inventory:`, err.message);

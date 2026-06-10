@@ -51,9 +51,10 @@ const purchaseInvoiceSchema = new mongoose.Schema(
         unit: { type: String, default: "" },
         rowPrice: Number, // Pre-tax
         total: Number,    // Post-tax
-        batch: { type: String, enum: ["1", "2"], default: "1" },
+        batch: { type: String, default: "1" },
         expiryDate: { type: Date, default: null },
         mrp: { type: Number, default: 0 },
+        manufacturingDate: { type: Date, default: null },
       },
     ],
 

@@ -81,6 +81,7 @@ export default function InventorySalesOrderEntry({
   const [selectedBatch, setSelectedBatch] = useState("1");
   const [expiryDate, setExpiryDate] = useState("");
   const [mrp, setMrp] = useState(0);
+  const [manufacturingDate, setManufacturingDate] = useState("");
 
   const [items, setItems] = useState([]);
   const [sampleItems, setSampleItems] = useState([]);
@@ -697,15 +698,28 @@ export default function InventorySalesOrderEntry({
 
     // Auto-select batch (FIFO)
     let autoBatch = "1";
-    if (product.batch1 && product.batch1.qty > 0) {
-      autoBatch = "1";
-    } else if (product.batch2 && product.batch2.qty > 0) {
-      autoBatch = "2";
+    let selectedBatchData = null;
+    if (product.batches && product.batches.length > 0) {
+      const firstWithQty = product.batches.find(b => b.qty > 0);
+      if (firstWithQty) {
+        autoBatch = firstWithQty.batchNo;
+        selectedBatchData = firstWithQty;
+      } else {
+        autoBatch = product.batches[0].batchNo;
+        selectedBatchData = product.batches[0];
+      }
+    } else {
+      if (product.batch1 && product.batch1.qty > 0) {
+        autoBatch = "1";
+      } else if (product.batch2 && product.batch2.qty > 0) {
+        autoBatch = "2";
+      }
+      selectedBatchData = autoBatch === "1" ? product.batch1 : product.batch2;
     }
     setSelectedBatch(autoBatch);
-    const selectedBatchData = autoBatch === "1" ? product.batch1 : product.batch2;
     setExpiryDate(selectedBatchData?.expiryDate || "");
     setMrp(selectedBatchData?.mrp || 0);
+    setManufacturingDate(selectedBatchData?.manufacturingDate || "");
 
     // ⚡ PERFORMANCE: Targeted fetch for live available quantity only for selected item
     const fetchLiveQty = async () => {
@@ -725,9 +739,13 @@ export default function InventorySalesOrderEntry({
   const handleBatchChange = (batchVal) => {
     setSelectedBatch(batchVal);
     if (selectedProductData) {
-      const batchData = batchVal === "1" ? selectedProductData.batch1 : selectedProductData.batch2;
+      let batchData = selectedProductData.batches?.find(b => String(b.batchNo) === String(batchVal));
+      if (!batchData) {
+        batchData = batchVal === "1" ? selectedProductData.batch1 : selectedProductData.batch2;
+      }
       setExpiryDate(batchData?.expiryDate || "");
       setMrp(batchData?.mrp || 0);
+      setManufacturingDate(batchData?.manufacturingDate || "");
     }
   };
 
@@ -964,6 +982,7 @@ export default function InventorySalesOrderEntry({
     setSelectedBatch("1");
     setExpiryDate("");
     setMrp(0);
+    setManufacturingDate("");
     setShowItemDropdown(false);
   };
 
@@ -1261,6 +1280,7 @@ export default function InventorySalesOrderEntry({
     setSelectedBatch("1");
     setExpiryDate("");
     setMrp(0);
+    setManufacturingDate("");
 
     // Sample Items
     setSampleItems([]);
@@ -2032,7 +2052,7 @@ export default function InventorySalesOrderEntry({
               {/* Batch selection and info */}
               {selectedItem && (
                 <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 my-2 space-y-2">
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-4 gap-2">
                     <div>
                       <label className={labelClass}>Batch</label>
                       <select
@@ -2040,9 +2060,28 @@ export default function InventorySalesOrderEntry({
                         value={selectedBatch}
                         onChange={(e) => handleBatchChange(e.target.value)}
                       >
-                        <option value="1">Batch 1 ({selectedProductData?.batch1?.qty || 0})</option>
-                        <option value="2">Batch 2 ({selectedProductData?.batch2?.qty || 0})</option>
+                        {selectedProductData?.batches && selectedProductData.batches.length > 0 ? (
+                          selectedProductData.batches.map(b => (
+                            <option key={b.batchNo} value={b.batchNo}>
+                              Batch {b.batchNo} ({b.qty || 0})
+                            </option>
+                          ))
+                        ) : (
+                          <>
+                            <option value="1">Batch 1 ({selectedProductData?.batch1?.qty || 0})</option>
+                            <option value="2">Batch 2 ({selectedProductData?.batch2?.qty || 0})</option>
+                          </>
+                        )}
                       </select>
+                    </div>
+                    <div>
+                      <label className={labelClass}>Mfg Date</label>
+                      <input
+                        type="text"
+                        className={`${inputClass} bg-gray-100 text-gray-500`}
+                        value={manufacturingDate ? new Date(manufacturingDate).toLocaleDateString("en-IN") : "No Mfg Date"}
+                        readOnly
+                      />
                     </div>
                     <div>
                       <label className={labelClass}>Expiry Date</label>
@@ -2226,7 +2265,7 @@ export default function InventorySalesOrderEntry({
                       <td className="px-4 py-3 font-semibold">
                         {item.name}
                         <div className="text-[10px] text-gray-400">HSN: {item.hsn}</div>
-                        {item.batch && (
+                        {(item.batch !== undefined && item.batch !== null && item.batch !== "") && (
                           <div className="text-[10px] text-[#319bab] font-bold">
                             Batch {item.batch} | Exp: {item.expiryDate ? new Date(item.expiryDate).toLocaleDateString("en-IN") : "No Expiry"} | MRP: ₹{item.mrp}
                           </div>

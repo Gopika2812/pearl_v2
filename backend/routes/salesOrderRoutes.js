@@ -950,8 +950,7 @@ router.post("/:id/change-date", auth, clearCachePrefix("/api/sales-orders"), asy
         if (item.productId && item.qty > 0) {
           const product = await Product.findById(item.productId);
           if (product) {
-            const batchKey = item.batch === "2" ? "batch2" : "batch1";
-            product[batchKey].qty = (product[batchKey].qty || 0) + item.qty;
+            product.updateBatchStock(item.batch, item.qty);
             await product.save();
           }
         }
@@ -1266,8 +1265,7 @@ router.delete("/:id", auth, clearCachePrefix("/api/sales-orders"), async (req, r
         if (item.productId && item.qty > 0) {
           const product = await Product.findById(item.productId);
           if (product) {
-            const batchKey = item.batch === "2" ? "batch2" : "batch1";
-            product[batchKey].qty = (product[batchKey].qty || 0) + item.qty;
+            product.updateBatchStock(item.batch, item.qty);
             await product.save();
           }
           console.log(`✅ Stock restored for ${item.name}: +${item.qty} to batch ${item.batch || "1"}`);

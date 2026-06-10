@@ -1148,53 +1148,36 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
               const oldBatch = oldItem ? (oldItem.batch || "1") : null;
               const newBatch = newItem ? (newItem.batch || "1") : null;
 
-              if (!product.batch1) product.batch1 = { qty: 0, expiryDate: null, mrp: 0 };
-              if (!product.batch2) product.batch2 = { qty: 0, expiryDate: null, mrp: 0 };
-
-              // Record pre-update batch quantities
-              const preBatch1 = product.batch1.qty || 0;
-              const preBatch2 = product.batch2.qty || 0;
-
               if (oldBatch && newBatch && oldBatch === newBatch) {
                 // Same batch delta
                 const deltaQty = newQty - oldQty;
-                if (deltaQty !== 0) {
-                  const batchKey = newBatch === "2" ? "batch2" : "batch1";
-                  product[batchKey].qty = (product[batchKey].qty || 0) - deltaQty;
-                }
+                product.updateBatchStock(newBatch, -deltaQty);
               } else {
                 // Batch changed or first time
                 if (oldBatch) {
                   // Revert old batch stock
-                  const oldBatchKey = oldBatch === "2" ? "batch2" : "batch1";
-                  product[oldBatchKey].qty = (product[oldBatchKey].qty || 0) + oldQty;
+                  product.updateBatchStock(oldBatch, oldQty);
                 }
                 if (newBatch) {
                   // Deduct new batch stock
-                  const newBatchKey = newBatch === "2" ? "batch2" : "batch1";
-                  product[newBatchKey].qty = (product[newBatchKey].qty || 0) - newQty;
+                  product.updateBatchStock(newBatch, -newQty);
                 }
               }
 
               await product.save({ session });
 
-              // Check if either batch was sold out in this transaction
-              const postBatch1 = product.batch1.qty || 0;
-              const postBatch2 = product.batch2.qty || 0;
-
-              if (preBatch1 > 0 && postBatch1 <= 0) {
-                soldOutBatches.push({
-                  name: product.name,
-                  batch: "1",
-                  message: `${product.name} (Batch 1) has sold out completely! Make order today.`
-                });
-              }
-              if (preBatch2 > 0 && postBatch2 <= 0) {
-                soldOutBatches.push({
-                  name: product.name,
-                  batch: "2",
-                  message: `${product.name} (Batch 2) has sold out completely! Make order today.`
-                });
+              // Check if the batch was sold out in this transaction
+              if (newBatch) {
+                const batchObj = product.batches?.find(b => String(b.batchNo) === String(newBatch));
+                const postQty = batchObj?.qty || 0;
+                const preQty = (oldBatch === newBatch) ? (postQty + (newQty - oldQty)) : (postQty + newQty);
+                if (preQty > 0 && postQty <= 0) {
+                  soldOutBatches.push({
+                    name: product.name,
+                    batch: String(newBatch),
+                    message: `${product.name} (Batch ${newBatch}) has sold out completely! Make order today.`
+                  });
+                }
               }
 
               const deltaTotal = newQty - oldQty;

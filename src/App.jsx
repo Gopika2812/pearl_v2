@@ -50,6 +50,7 @@ import BranchProductRecords from "./pages/branch/BranchProductRecords";
 import BranchLockedPrices from "./pages/branch/BranchLockedPrices";
 import BranchAdminRequests from "./pages/branch/BranchAdminRequests";
 import BranchStockSummary from "./pages/branch/BranchStockSummary";
+import BranchInventoryAging from "./pages/branch/BranchInventoryAging";
 import BranchLedger from "./pages/branch/BranchLedger";
 import BranchExtraExpenseLedger from "./pages/branch/BranchExtraExpenseLedger";
 import BranchReceiptRecords from "./pages/branch/BranchReceiptRecords";
@@ -462,6 +463,7 @@ function AppContent() {
         "/branch/day-book": "day-book",
         "/branch/extra-expense-ledger": "extra-expense-ledger",
         "/branch/stock-summary": "stock-summary",
+        "/branch/batch-inventory": "stock-summary",
         "/branch/quick-links": "quick-links",
         "/branch/admin-requests": "admin-requests",
 
@@ -852,6 +854,7 @@ function AppContent() {
                   <Route path="/branch/summary" element={<ProtectedRoute element={<BranchSummary />} />} />
                   <Route path="/branch/product-records" element={<ProtectedRoute element={<BranchProductRecords />} />} />
                   <Route path="/branch/stock-summary" element={<ProtectedRoute element={<BranchStockSummary />} />} />
+                  <Route path="/branch/batch-inventory" element={<ProtectedRoute element={<BranchInventoryAging />} />} />
                   <Route path="/branch/locked-prices" element={<ProtectedRoute element={<BranchLockedPrices />} />} />
                   <Route path="/branch/day-book" element={<ProtectedRoute element={<BranchDayBook />} />} />
                   <Route path="/branch/admin-requests" element={<ProtectedRoute element={<BranchAdminRequests />} role={["ADMIN"]} />} />

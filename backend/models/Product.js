@@ -37,12 +37,26 @@ const productSchema = new mongoose.Schema(
     batch1: {
       qty: { type: Number, default: 0 },
       expiryDate: { type: Date, default: null },
-      mrp: { type: Number, default: 0 }
+      mrp: { type: Number, default: 0 },
+      manufacturingDate: { type: Date, default: null }
     },
     batch2: {
       qty: { type: Number, default: 0 },
       expiryDate: { type: Date, default: null },
-      mrp: { type: Number, default: 0 }
+      mrp: { type: Number, default: 0 },
+      manufacturingDate: { type: Date, default: null }
+    },
+    batches: {
+      type: [
+        {
+          batchNo: { type: String, required: true },
+          qty: { type: Number, default: 0 },
+          expiryDate: { type: Date, default: null },
+          mrp: { type: Number, default: 0 },
+          manufacturingDate: { type: Date, default: null }
+        }
+      ],
+      default: []
     },
     margin: { type: Number, default: 0 },
     marginPercentage: { type: Number, default: 0 }, // Margin as percentage for group calculations
@@ -116,9 +130,32 @@ const productSchema = new mongoose.Schema(
 
 // Auto-calculate margin and sync total stock before saving
 productSchema.pre("save", function () {
-  if (this.isModified("batch1.qty") || this.isModified("batch2.qty")) {
-    this.totalQty = (this.batch1?.qty || 0) + (this.batch2?.qty || 0);
+  if (!this.batches) {
+    this.batches = [];
   }
+
+  // 1. Sync legacy fields (batch1) to batches array if they are modified
+  // Map batch1 to batchNo: "0" for existing/opening stock compatibility
+  if (this.isModified("batch1.qty") || this.isModified("batch1.expiryDate") || this.isModified("batch1.mrp") || this.isModified("batch1.manufacturingDate")) {
+    let b0 = this.batches.find(b => b.batchNo === "0");
+    if (!b0) {
+      this.batches.push({ batchNo: "0", qty: this.batch1?.qty || 0, expiryDate: this.batch1?.expiryDate || null, mrp: this.batch1?.mrp || 0, manufacturingDate: this.batch1?.manufacturingDate || null });
+    } else {
+      b0.qty = this.batch1?.qty || 0;
+      b0.expiryDate = this.batch1?.expiryDate || null;
+      b0.mrp = this.batch1?.mrp || 0;
+      b0.manufacturingDate = this.batch1?.manufacturingDate || null;
+    }
+  }
+
+  // 2. Sync batches array back to legacy fields (batch1) for backwards compatibility
+  const b0FromArr = this.batches.find(b => b.batchNo === "0");
+  if (b0FromArr) {
+    this.batch1 = { qty: b0FromArr.qty, expiryDate: b0FromArr.expiryDate, mrp: b0FromArr.mrp, manufacturingDate: b0FromArr.manufacturingDate };
+  }
+
+  // 3. Compute totalQty from all batches
+  this.totalQty = this.batches.reduce((sum, b) => sum + (b.qty || 0), 0);
 
   const isNew = this.isNew;
   const pPriceChanged = this.isModified("purchasingPrice");
@@ -385,6 +422,48 @@ productSchema.post(["findOneAndUpdate", "findByIdAndUpdate", "save"], async func
     }
   }
 });
+
+// Method to update batch stock in a unified way
+productSchema.methods.updateBatchStock = function (batchNo, qtyDelta, expiryDate, mrp, manufacturingDate) {
+  if (!this.batches) {
+    this.batches = [];
+  }
+
+  const batchStr = String(batchNo);
+  let batch = this.batches.find(b => String(b.batchNo) === batchStr);
+  if (!batch) {
+    batch = {
+      batchNo: batchStr,
+      qty: 0,
+      expiryDate: null,
+      mrp: 0,
+      manufacturingDate: null
+    };
+    this.batches.push(batch);
+    batch = this.batches[this.batches.length - 1];
+  }
+
+  batch.qty = (batch.qty || 0) + Number(qtyDelta);
+  if (expiryDate !== undefined) {
+    batch.expiryDate = expiryDate ? new Date(expiryDate) : null;
+  }
+  if (mrp !== undefined) {
+    batch.mrp = Number(mrp) || 0;
+  }
+  if (manufacturingDate !== undefined) {
+    batch.manufacturingDate = manufacturingDate ? new Date(manufacturingDate) : null;
+  }
+
+  // Sync legacy fields immediately so it's reflected in save hook
+  if (batchStr === "0") {
+    this.batch1 = { qty: batch.qty, expiryDate: batch.expiryDate, mrp: batch.mrp, manufacturingDate: batch.manufacturingDate };
+    this.markModified("batch1");
+  }
+
+  this.totalQty = this.batches.reduce((sum, b) => sum + (b.qty || 0), 0);
+
+  this.markModified("batches");
+};
 
 const Product = mongoose.model("Product", productSchema);
 

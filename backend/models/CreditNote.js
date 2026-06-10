@@ -56,6 +56,7 @@ const creditNoteSchema = new mongoose.Schema(
           ref: "Product",
           required: true,
         },
+        batch: { type: String, default: "0" },
         name: String,
         hsn: String,
         unit: String,
@@ -160,9 +161,11 @@ creditNoteSchema.post("findByIdAndDelete", async function (doc) {
 
     // 1️⃣ RESTORE PRODUCTS TO INVENTORY (undo the return)
     for (const item of doc.items) {
-      await Product.findByIdAndUpdate(item.productId, {
-        $inc: { totalQty: -item.qty } // Remove from stock since we're cancelling the return
-      });
+      const product = await Product.findById(item.productId);
+      if (product) {
+        product.updateBatchStock(item.batch || "0", -item.qty);
+        await product.save();
+      }
     }
 
     // 2️⃣ RESTORE CUSTOMER BALANCE (undo the balance reduction)

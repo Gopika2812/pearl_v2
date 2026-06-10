@@ -330,6 +330,7 @@ router.post("/", async (req, res) => {
 
       returnedItems.push({
         productId: item.productId,
+        batch: item.batch || "0",
         name: item.name,
         hsn: finalHsn,
         unit: item.unit || "NOS",
@@ -410,9 +411,11 @@ router.post("/", async (req, res) => {
     // 1️⃣ ADD PRODUCTS BACK TO INVENTORY
     for (const item of returnedItems) {
       if (item.productId) {
-        await Product.findByIdAndUpdate(item.productId, {
-          $inc: { totalQty: item.qty }
-        });
+        const product = await Product.findById(item.productId);
+        if (product) {
+          product.updateBatchStock(item.batch || "0", item.qty);
+          await product.save();
+        }
       }
     }
 
@@ -649,9 +652,11 @@ router.put("/:id", async (req, res) => {
     // Reverse Inventory
     for (const item of oldCN.items) {
       if (item.productId) {
-        await Product.findByIdAndUpdate(item.productId, {
-          $inc: { totalQty: -item.qty }
-        });
+        const product = await Product.findById(item.productId);
+        if (product) {
+          product.updateBatchStock(item.batch || "0", -item.qty);
+          await product.save();
+        }
       }
     }
 
@@ -741,9 +746,11 @@ router.put("/:id", async (req, res) => {
     // Apply Inventory
     for (const item of newItems) {
       if (item.productId) {
-        await Product.findByIdAndUpdate(item.productId, {
-          $inc: { totalQty: item.qty }
-        });
+        const product = await Product.findById(item.productId);
+        if (product) {
+          product.updateBatchStock(item.batch || "0", item.qty);
+          await product.save();
+        }
       }
     }
 

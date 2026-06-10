@@ -319,23 +319,10 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
 
           if (oldBatch === newBatch) {
             const deltaQty = newQty - oldQty;
-            if (deltaQty !== 0) {
-              const batchKey = newBatch === "2" ? "batch2" : "batch1";
-              product[batchKey].qty = (product[batchKey].qty || 0) + deltaQty;
-            }
+            product.updateBatchStock(newBatch, deltaQty, item.expiryDate, item.mrp, item.manufacturingDate);
           } else {
-            const oldBatchKey = oldBatch === "2" ? "batch2" : "batch1";
-            const newBatchKey = newBatch === "2" ? "batch2" : "batch1";
-            product[oldBatchKey].qty = (product[oldBatchKey].qty || 0) - oldQty;
-            product[newBatchKey].qty = (product[newBatchKey].qty || 0) + newQty;
-          }
-
-          const activeBatchKey = newBatch === "2" ? "batch2" : "batch1";
-          if (item.expiryDate) {
-            product[activeBatchKey].expiryDate = new Date(item.expiryDate);
-          }
-          if (item.mrp) {
-            product[activeBatchKey].mrp = Number(item.mrp);
+            product.updateBatchStock(oldBatch, -oldQty);
+            product.updateBatchStock(newBatch, newQty, item.expiryDate, item.mrp, item.manufacturingDate);
           }
           await product.save();
         }
@@ -349,8 +336,7 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
         if (oldItem.productId && !newPids.has(oldItem.productId.toString())) {
           const product = await Product.findById(oldItem.productId);
           if (product) {
-            const batchKey = oldItem.batch === "2" ? "batch2" : "batch1";
-            product[batchKey].qty = (product[batchKey].qty || 0) - oldItem.qty;
+            product.updateBatchStock(oldItem.batch, -oldItem.qty);
             await product.save();
           }
         }
@@ -511,14 +497,7 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
       const product = await Product.findById(item.productId);
       if (product) {
         // B. Stock Update (Batch specific)
-        const batchKey = item.batch === "2" ? "batch2" : "batch1";
-        product[batchKey].qty = (product[batchKey].qty || 0) + (Number(item.qty) || 0);
-        if (item.expiryDate) {
-          product[batchKey].expiryDate = new Date(item.expiryDate);
-        }
-        if (item.mrp) {
-          product[batchKey].mrp = Number(item.mrp);
-        }
+        product.updateBatchStock(item.batch, item.qty, item.expiryDate, item.mrp, item.manufacturingDate);
         await product.save();
       }
     }
@@ -986,8 +965,7 @@ const revertPOEffects = async (order) => {
   for (const item of order.items) {
     const product = await Product.findById(item.productId);
     if (product) {
-      const batchKey = item.batch === "2" ? "batch2" : "batch1";
-      product[batchKey].qty = (product[batchKey].qty || 0) - item.qty;
+      product.updateBatchStock(item.batch, -item.qty);
       await product.save();
     }
     console.log(`📉 Reverted stock for ${item.name}: -${item.qty} from batch ${item.batch || "1"}`);
@@ -1149,8 +1127,7 @@ router.patch("/:id/approve-cancel", async (req, res) => {
         if (item.productId && item.qty) {
           const product = await Product.findById(item.productId);
           if (product) {
-            const batchKey = item.batch === "2" ? "batch2" : "batch1";
-            product[batchKey].qty = (product[batchKey].qty || 0) - item.qty;
+            product.updateBatchStock(item.batch, -item.qty);
             await product.save();
           }
           console.log(`📉 Cancel revert stock: ${item.name || item.productId} -${item.qty} from batch ${item.batch || "1"}`);

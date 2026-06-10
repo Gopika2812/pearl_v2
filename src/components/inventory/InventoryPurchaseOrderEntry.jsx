@@ -102,11 +102,15 @@ const InventoryPurchaseOrderEntry = ({
   const [batch, setBatch] = useState("1");
   const [expiryDate, setExpiryDate] = useState("");
   const [mrp, setMrp] = useState("");
+  const [manufacturingDate, setManufacturingDate] = useState("");
 
-  // Autofill expiry date and mrp based on selected product/batch
+  // Autofill manufacturing date, expiry date, and mrp based on selected product/batch
   useEffect(() => {
     if (selectedProductData) {
-      const activeBatch = batch === "2" ? selectedProductData.batch2 : selectedProductData.batch1;
+      let activeBatch = selectedProductData.batches?.find(b => String(b.batchNo) === String(batch));
+      if (!activeBatch) {
+        activeBatch = batch === "2" ? selectedProductData.batch2 : selectedProductData.batch1;
+      }
       if (activeBatch) {
         setMrp(activeBatch.mrp || "");
         if (activeBatch.expiryDate) {
@@ -114,9 +118,15 @@ const InventoryPurchaseOrderEntry = ({
         } else {
           setExpiryDate("");
         }
+        if (activeBatch.manufacturingDate) {
+          setManufacturingDate(new Date(activeBatch.manufacturingDate).toISOString().split('T')[0]);
+        } else {
+          setManufacturingDate("");
+        }
       } else {
         setMrp("");
         setExpiryDate("");
+        setManufacturingDate("");
       }
     }
   }, [selectedProductData, batch]);
@@ -290,6 +300,26 @@ const InventoryPurchaseOrderEntry = ({
     if (!igst) {
       setCgst((product.gst || product.tax || 0) / 2);
       setSgst((product.gst || product.tax || 0) / 2);
+    }
+
+    // Fetch next batch number automatically
+    const branchId = currentBranch?._id || currentBranch?.id;
+    if (branchId) {
+      fetchWithAuth(`${API_BASE}/products/next-batch/${productId}?branchId=${branchId}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.success && data.nextBatch) {
+            setBatch(data.nextBatch);
+          } else {
+            setBatch("1");
+          }
+        })
+        .catch(err => {
+          console.error("Failed to fetch next batch:", err);
+          setBatch("1");
+        });
+    } else {
+      setBatch("1");
     }
   };
 
@@ -513,6 +543,7 @@ const InventoryPurchaseOrderEntry = ({
         batch: batch,
         expiryDate: expiryDate || null,
         mrp: Number(mrp || 0),
+        manufacturingDate: manufacturingDate || null,
       },
     ]);
 
@@ -538,6 +569,7 @@ const InventoryPurchaseOrderEntry = ({
     setBatch("1");
     setExpiryDate("");
     setMrp("");
+    setManufacturingDate("");
   };
 
   const removeItem = (index) => {
@@ -692,6 +724,7 @@ const InventoryPurchaseOrderEntry = ({
     setBatch("1");
     setExpiryDate("");
     setMrp("");
+    setManufacturingDate("");
 
     // Footer
     setExtraExpenses([]);
@@ -1179,18 +1212,27 @@ const InventoryPurchaseOrderEntry = ({
               </div>
             </div>
 
-            {/* ROW 2.5: Batch, Expiry, MRP */}
-            <div className="grid grid-cols-3 gap-3 border-t border-gray-100 pt-3">
+            {/* ROW 2.5: Batch, Mfg Date, Expiry, MRP */}
+            <div className="grid grid-cols-4 gap-3 border-t border-gray-100 pt-3">
               <div>
-                <label className={labelClass}>Batch Type</label>
-                <select
-                  className={selectClass}
+                <label className={labelClass}>Batch Number</label>
+                <input
+                  type="text"
+                  className={inputClass}
                   value={batch}
                   onChange={(e) => setBatch(e.target.value)}
-                >
-                  <option value="1">Batch 1</option>
-                  <option value="2">Batch 2</option>
-                </select>
+                  placeholder="Batch number"
+                />
+              </div>
+
+              <div>
+                <label className={labelClass}>Mfg Date</label>
+                <input
+                  type="date"
+                  className={inputClass}
+                  value={manufacturingDate}
+                  onChange={(e) => setManufacturingDate(e.target.value)}
+                />
               </div>
 
               <div>
@@ -1363,7 +1405,12 @@ const InventoryPurchaseOrderEntry = ({
                         </div>
                       </td>
                       <td className="px-4 py-3 text-center text-xs">
-                        <div className="font-bold bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full inline-block mb-1">Batch {item.batch || "1"}</div>
+                        <div className="font-bold bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full inline-block mb-1">Batch {item.batch !== undefined && item.batch !== null && item.batch !== "" ? item.batch : "1"}</div>
+                        {item.manufacturingDate && (
+                          <div className="text-green-600 font-semibold">
+                            Mfg: {new Date(item.manufacturingDate).toLocaleDateString("en-IN", { day: '2-digit', month: 'short', year: 'numeric' })}
+                          </div>
+                        )}
                         {item.expiryDate && (
                           <div className="text-red-500 font-semibold">
                             Exp: {new Date(item.expiryDate).toLocaleDateString("en-IN", { day: '2-digit', month: 'short', year: 'numeric' })}

@@ -37,6 +37,7 @@ const debitNoteSchema = new mongoose.Schema(
           ref: "Product",
           required: true,
         },
+        batch: { type: String, default: "0" },
         name: String,
         hsn: String,
         qty: Number,
