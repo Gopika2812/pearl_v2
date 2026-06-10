@@ -1126,9 +1126,10 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
         const roundingOff = Math.round((grandTotal - preciseGrandTotal) * 100) / 100;
 
         // ==========================================
-        // 3️⃣ UPDATE STOCK (DELTA-BASED)
+        // 3️⃣ UPDATE STOCK (DELTA-BASED BATCHING)
         // ==========================================
         let stockAdjustments = [];
+        let soldOutBatches = [];
         if (invoiceType === "TAX_INVOICE") {
           const lastItems = salesOrder.lastInvoicedItems || [];
           const allProductIds = new Set([
@@ -1139,11 +1140,67 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
           for (const pId of allProductIds) {
             const newItem = processedItems.find(i => i.productId && (i.productId._id || i.productId).toString() === pId);
             const oldItem = lastItems.find(i => i.productId && (i.productId._id || i.productId).toString() === pId);
-            const deltaQty = (newItem?.qty || 0) - (oldItem?.qty || 0);
-            if (deltaQty !== 0) {
-              await Product.updateOne({ _id: pId }, { $inc: { totalQty: -deltaQty } }, { session });
-              const prodName = newItem?.name || oldItem?.name || "Unknown Product";
-              stockAdjustments.push(`${prodName} (${deltaQty > 0 ? '-' : '+'}${Math.abs(deltaQty)})`);
+            
+            const product = await Product.findById(pId).session(session);
+            if (product) {
+              const oldQty = oldItem ? (Number(oldItem.qty) || 0) : 0;
+              const newQty = newItem ? (Number(newItem.qty) || 0) : 0;
+              const oldBatch = oldItem ? (oldItem.batch || "1") : null;
+              const newBatch = newItem ? (newItem.batch || "1") : null;
+
+              if (!product.batch1) product.batch1 = { qty: 0, expiryDate: null, mrp: 0 };
+              if (!product.batch2) product.batch2 = { qty: 0, expiryDate: null, mrp: 0 };
+
+              // Record pre-update batch quantities
+              const preBatch1 = product.batch1.qty || 0;
+              const preBatch2 = product.batch2.qty || 0;
+
+              if (oldBatch && newBatch && oldBatch === newBatch) {
+                // Same batch delta
+                const deltaQty = newQty - oldQty;
+                if (deltaQty !== 0) {
+                  const batchKey = newBatch === "2" ? "batch2" : "batch1";
+                  product[batchKey].qty = (product[batchKey].qty || 0) - deltaQty;
+                }
+              } else {
+                // Batch changed or first time
+                if (oldBatch) {
+                  // Revert old batch stock
+                  const oldBatchKey = oldBatch === "2" ? "batch2" : "batch1";
+                  product[oldBatchKey].qty = (product[oldBatchKey].qty || 0) + oldQty;
+                }
+                if (newBatch) {
+                  // Deduct new batch stock
+                  const newBatchKey = newBatch === "2" ? "batch2" : "batch1";
+                  product[newBatchKey].qty = (product[newBatchKey].qty || 0) - newQty;
+                }
+              }
+
+              await product.save({ session });
+
+              // Check if either batch was sold out in this transaction
+              const postBatch1 = product.batch1.qty || 0;
+              const postBatch2 = product.batch2.qty || 0;
+
+              if (preBatch1 > 0 && postBatch1 <= 0) {
+                soldOutBatches.push({
+                  name: product.name,
+                  batch: "1",
+                  message: `${product.name} (Batch 1) has sold out completely! Make order today.`
+                });
+              }
+              if (preBatch2 > 0 && postBatch2 <= 0) {
+                soldOutBatches.push({
+                  name: product.name,
+                  batch: "2",
+                  message: `${product.name} (Batch 2) has sold out completely! Make order today.`
+                });
+              }
+
+              const deltaTotal = newQty - oldQty;
+              if (deltaTotal !== 0) {
+                stockAdjustments.push(`${product.name} (${deltaTotal > 0 ? '-' : '+'}${Math.abs(deltaTotal)})`);
+              }
             }
           }
         }
@@ -1415,7 +1472,8 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
           success: true, 
           invoiceNumber: invoice ? invoice.invoiceNumber : salesOrder.invoiceId, 
           invoiceId: invoice ? invoice._id : null, 
-          invoice: invoice ? (invoice.toObject ? invoice.toObject() : invoice) : null 
+          invoice: invoice ? (invoice.toObject ? invoice.toObject() : invoice) : null,
+          soldOutBatches
         });
 
       } catch (error) {

@@ -1371,7 +1371,14 @@ const BranchSalesInvoices = () => {
                                         .filter(item => item && (Number(item.qty || 0) > 0 || (item.total || 0) > 0 || Number(item.confirmedQty || 0) > 0))
                                         .map((item, idx) => (
                                           <tr key={idx} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50 transition">
-                                            <td className="py-3 font-bold text-slate-700">{item.name || "Unknown Product"}</td>
+                                            <td className="py-3 font-bold text-slate-700">
+                                              <div>{item.name || "Unknown Product"}</div>
+                                              {item.batch && (
+                                                <div className="text-[10px] text-gray-500 font-bold mt-0.5">
+                                                  Batch {item.batch}{item.expiryDate ? ` | Exp: ${new Date(item.expiryDate).toLocaleDateString("en-IN")}` : ""}
+                                                </div>
+                                              )}
+                                            </td>
                                             <td className="py-3 text-center font-black text-indigo-600 bg-indigo-50/50 rounded-lg">{item.qty || 0} {item.unit || "Units"}</td>
                                             <td className="py-3 text-right">
                                               <div className="text-xs font-bold text-slate-400">{item.discountPercent || 0}%</div>

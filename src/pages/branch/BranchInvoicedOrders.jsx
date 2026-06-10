@@ -52,6 +52,7 @@ const BranchInvoicedOrders = () => {
   const [dateChangingOrder, setDateChangingOrder] = useState(null);
   const [newOrderDate, setNewOrderDate] = useState("");
   const [movingDate, setMovingDate] = useState(false);
+  const [moveDateReason, setMoveDateReason] = useState("");
 
   // Spotted Customer Payment Modal State
   const [showSpottedPaymentModal, setShowSpottedPaymentModal] = useState(false);
@@ -484,12 +485,17 @@ const BranchInvoicedOrders = () => {
     setDateChangingOrder(order);
     const orderD = order.orderDate ? new Date(order.orderDate) : new Date(order.createdAt);
     setNewOrderDate(orderD.toISOString().split('T')[0]);
+    setMoveDateReason("");
     setShowChangeDateModal(true);
   };
 
   const handleChangeDateSubmit = async () => {
     if (!newOrderDate) {
       toast.warning("Please select a date!");
+      return;
+    }
+    if (!moveDateReason.trim()) {
+      toast.warning("Please enter a reason for moving the date!");
       return;
     }
     setMovingDate(true);
@@ -500,7 +506,7 @@ const BranchInvoicedOrders = () => {
           "Content-Type": "application/json",
           Authorization: `Bearer ${localStorage.getItem("token")}`,
         },
-        body: JSON.stringify({ newDate: newOrderDate }),
+        body: JSON.stringify({ newDate: newOrderDate, reason: moveDateReason }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed to change date");
@@ -1410,7 +1416,12 @@ const BranchInvoicedOrders = () => {
                                         {(order.items || []).map((item, idx) => (
                                           <tr key={idx} className="bg-white">
                                             <td className="py-2 px-3 font-semibold">
-                                              {item.name}
+                                              <div>{item.name}</div>
+                                              {item.batch && (
+                                                <div className="text-[10px] text-gray-500 font-bold mt-0.5">
+                                                  Batch {item.batch}{item.expiryDate ? ` | Exp: ${new Date(item.expiryDate).toLocaleDateString("en-IN")}` : ""}
+                                                </div>
+                                              )}
                                             </td>
                                             <td className="py-2 px-3 text-center text-gray-600">
                                               {item.hsn}
@@ -1728,7 +1739,12 @@ const BranchInvoicedOrders = () => {
                                                         : ""}
                                                     </td>
                                                     <td className="py-2 px-3 font-semibold">
-                                                      {invoiceItem.name}
+                                                      <div>{invoiceItem.name}</div>
+                                                      {invoiceItem.batch && (
+                                                        <div className="text-[10px] text-gray-500 font-bold mt-0.5">
+                                                          Batch {invoiceItem.batch}{invoiceItem.expiryDate ? ` | Exp: ${new Date(invoiceItem.expiryDate).toLocaleDateString("en-IN")}` : ""}
+                                                        </div>
+                                                      )}
                                                     </td>
                                                     <td className="py-2 px-3 text-center text-gray-500 font-bold">
                                                       {invoiceItem.hsn || "-"}
@@ -2148,9 +2164,22 @@ const BranchInvoicedOrders = () => {
                 <label className="block text-[11px] font-bold text-gray-500 mb-1 uppercase tracking-tight">Select New Date</label>
                 <input
                   type="date"
+                  min={new Date().toLocaleDateString('en-CA')}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2.5 focus:ring-1 focus:ring-purple-500 outline-none text-sm font-semibold"
                   value={newOrderDate}
                   onChange={(e) => setNewOrderDate(e.target.value)}
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-gray-500 mb-1 uppercase tracking-tight">Reason for Move</label>
+                <textarea
+                  placeholder="Enter reason..."
+                  rows={2}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 focus:ring-1 focus:ring-purple-500 outline-none text-sm font-semibold resize-none"
+                  value={moveDateReason}
+                  onChange={(e) => setMoveDateReason(e.target.value)}
+                  required
                 />
               </div>
 
@@ -2168,7 +2197,7 @@ const BranchInvoicedOrders = () => {
                 </button>
                 <button
                   onClick={handleChangeDateSubmit}
-                  disabled={movingDate || !newOrderDate}
+                  disabled={movingDate || !newOrderDate || !moveDateReason.trim()}
                   className="flex-1 py-3 bg-purple-600 text-white rounded-xl font-black hover:bg-purple-700 transition text-sm disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-purple-200"
                 >
                   {movingDate ? (

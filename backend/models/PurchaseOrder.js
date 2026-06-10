@@ -30,6 +30,9 @@ const PurchaseItemSchema = new mongoose.Schema({
   altQty: { type: Number, default: 0 },
   altUnit: { type: String, default: "" },
   total: Number,
+  batch: { type: String, enum: ["1", "2"], default: "1" },
+  expiryDate: { type: Date, default: null },
+  mrp: { type: Number, default: 0 },
 });
 
 const PurchaseOrderSchema = new mongoose.Schema(

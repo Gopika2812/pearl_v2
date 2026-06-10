@@ -58,6 +58,8 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
     leadTime: 7,
     minStockQty: 10,
     maxStockQty: 50,
+    batch1: { qty: 0, expiryDate: "", mrp: 0 },
+    batch2: { qty: 0, expiryDate: "", mrp: 0 },
 
     preferredVendor: "",
     restockingConfig: {
@@ -79,6 +81,20 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
   // State to handle bulk upload results
   const [uploadResult, setUploadResult] = useState(null);
   const [skipExisting, setSkipExisting] = useState(false);
+
+  // Auto-align totalQty when batch quantities change
+  useEffect(() => {
+    const b1Qty = Number(product.batch1?.qty || 0);
+    const b2Qty = Number(product.batch2?.qty || 0);
+    const calculatedTotal = b1Qty + b2Qty;
+    if (isOpen && calculatedTotal !== Number(product.totalQty || 0)) {
+      setProduct(prev => ({
+        ...prev,
+        totalQty: calculatedTotal.toString(),
+        openingQty: calculatedTotal.toString()
+      }));
+    }
+  }, [product.batch1?.qty, product.batch2?.qty, isOpen]);
 
   // Pre-fill form when editing
   useEffect(() => {
@@ -112,6 +128,11 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
         }
       }
       
+      const formatExpiryDate = (date) => {
+        if (!date) return "";
+        return new Date(date).toISOString().split('T')[0];
+      };
+
       setProduct({
         name: editingItem.name || "",
         productGroup: groupValue,
@@ -135,6 +156,16 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
         leadTime: editingItem.leadTime || 7,
         minStockQty: editingItem.minStockQty || 10,
         maxStockQty: editingItem.maxStockQty || 50,
+        batch1: {
+          qty: editingItem.batch1?.qty || 0,
+          expiryDate: formatExpiryDate(editingItem.batch1?.expiryDate),
+          mrp: editingItem.batch1?.mrp || 0
+        },
+        batch2: {
+          qty: editingItem.batch2?.qty || 0,
+          expiryDate: formatExpiryDate(editingItem.batch2?.expiryDate),
+          mrp: editingItem.batch2?.mrp || 0
+        },
 
         preferredVendor: editingItem.preferredVendor || "",
         restockingConfig: editingItem.restockingConfig || {
@@ -173,6 +204,8 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
         leadTime: 7,
         minStockQty: 10,
         maxStockQty: 50,
+        batch1: { qty: 0, expiryDate: "", mrp: 0 },
+        batch2: { qty: 0, expiryDate: "", mrp: 0 },
 
         preferredVendor: "",
         restockingConfig: {
@@ -356,7 +389,17 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
       maxStockQty: Number(product.maxStockQty),
       preferredVendor: product.preferredVendor,
       restockingConfig: product.restockingConfig,
-      unitConversion: product.unitConversion
+      unitConversion: product.unitConversion,
+      batch1: {
+        qty: Number(product.batch1?.qty || 0),
+        expiryDate: product.batch1?.expiryDate ? new Date(product.batch1.expiryDate) : null,
+        mrp: Number(product.batch1?.mrp || 0)
+      },
+      batch2: {
+        qty: Number(product.batch2?.qty || 0),
+        expiryDate: product.batch2?.expiryDate ? new Date(product.batch2.expiryDate) : null,
+        mrp: Number(product.batch2?.mrp || 0)
+      }
     };
 
     try {
@@ -376,6 +419,7 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
       if (!res.ok) throw new Error(data.message || `${editingItem ? "Update" : "Save"} failed`);
 
       alert(`Product ${editingItem ? "updated" : "saved"} successfully!`);
+      window.dispatchEvent(new Event("refresh-expiry-alerts"));
       console.log("Saved:", data);
 
       setProduct({
@@ -616,6 +660,99 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
             <p className="text-[9px] text-emerald-600/70 font-bold mt-2 italic px-1">
               Note: Changing 'Opening Qty' will automatically recalculate your 'Closing Stock' based on April records.
             </p>
+          </div>
+
+          {/* Batches Section */}
+          <div className="bg-blue-50/50 border border-blue-100 p-4 rounded-xl mb-4">
+             <h4 className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-3">📦 Product Batches (Batch 1 & 2)</h4>
+             
+             {/* Batch 1 */}
+             <div className="grid grid-cols-3 gap-3 mb-3 p-3 bg-white rounded-lg border border-blue-50">
+                <div className="col-span-3 flex justify-between items-center">
+                   <span className="text-xs font-black text-slate-500 uppercase">Batch 1</span>
+                </div>
+                <div>
+                   <label className="text-[9px] font-bold text-gray-500 uppercase">Quantity</label>
+                   <input 
+                     type="number"
+                     className="w-full p-2 border rounded-lg"
+                     value={product.batch1?.qty || 0}
+                     onChange={(e) => setProduct({
+                       ...product,
+                       batch1: { ...(product.batch1 || {}), qty: e.target.value }
+                     })}
+                   />
+                </div>
+                <div>
+                   <label className="text-[9px] font-bold text-gray-500 uppercase">Expiry Date</label>
+                   <input 
+                     type="date"
+                     className="w-full p-2 border rounded-lg text-xs"
+                     value={product.batch1?.expiryDate || ""}
+                     onChange={(e) => setProduct({
+                       ...product,
+                       batch1: { ...(product.batch1 || {}), expiryDate: e.target.value }
+                     })}
+                   />
+                </div>
+                <div>
+                   <label className="text-[9px] font-bold text-gray-500 uppercase">MRP (₹)</label>
+                   <input 
+                     type="number"
+                     step="0.01"
+                     className="w-full p-2 border rounded-lg"
+                     value={product.batch1?.mrp || 0}
+                     onChange={(e) => setProduct({
+                       ...product,
+                       batch1: { ...(product.batch1 || {}), mrp: e.target.value }
+                     })}
+                   />
+                </div>
+             </div>
+
+             {/* Batch 2 */}
+             <div className="grid grid-cols-3 gap-3 p-3 bg-white rounded-lg border border-blue-50">
+                <div className="col-span-3 flex justify-between items-center">
+                   <span className="text-xs font-black text-slate-500 uppercase">Batch 2</span>
+                </div>
+                <div>
+                   <label className="text-[9px] font-bold text-gray-500 uppercase">Quantity</label>
+                   <input 
+                     type="number"
+                     className="w-full p-2 border rounded-lg"
+                     value={product.batch2?.qty || 0}
+                     onChange={(e) => setProduct({
+                       ...product,
+                       batch2: { ...(product.batch2 || {}), qty: e.target.value }
+                     })}
+                   />
+                </div>
+                <div>
+                   <label className="text-[9px] font-bold text-gray-500 uppercase">Expiry Date</label>
+                   <input 
+                     type="date"
+                     className="w-full p-2 border rounded-lg text-xs"
+                     value={product.batch2?.expiryDate || ""}
+                     onChange={(e) => setProduct({
+                       ...product,
+                       batch2: { ...(product.batch2 || {}), expiryDate: e.target.value }
+                     })}
+                   />
+                </div>
+                <div>
+                   <label className="text-[9px] font-bold text-gray-500 uppercase">MRP (₹)</label>
+                   <input 
+                     type="number"
+                     step="0.01"
+                     className="w-full p-2 border rounded-lg"
+                     value={product.batch2?.mrp || 0}
+                     onChange={(e) => setProduct({
+                       ...product,
+                       batch2: { ...(product.batch2 || {}), mrp: e.target.value }
+                     })}
+                   />
+                </div>
+             </div>
           </div>
 
           {/* 2-Column Grid */}

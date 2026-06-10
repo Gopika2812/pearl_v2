@@ -861,10 +861,17 @@ router.get("/commissions/order/:salesOrderId", async (req, res) => {
 router.post("/:id/change-date", auth, clearCachePrefix("/api/sales-orders"), async (req, res) => {
   try {
     const { id } = req.params;
-    const { newDate } = req.body;
+    const { newDate, reason } = req.body;
 
     if (!newDate) {
       return res.status(400).json({ success: false, message: "New date is required" });
+    }
+
+    const IST = "Asia/Kolkata";
+    const today = moment.tz(IST).startOf("day");
+    const requestedDate = moment.tz(newDate, IST).startOf("day");
+    if (requestedDate.isBefore(today)) {
+      return res.status(400).json({ success: false, message: "Cannot move order to a previous day (past date)." });
     }
 
     // 🛡️ CHECK: Move Date Permission
@@ -934,14 +941,19 @@ router.post("/:id/change-date", auth, clearCachePrefix("/api/sales-orders"), asy
         }
       }
 
-      // B. Revert Product Stock
+      // B. Revert Product Stock (Batch specific)
       const itemsToRevert = (originalOrder.lastInvoicedItems && originalOrder.lastInvoicedItems.length > 0)
         ? originalOrder.lastInvoicedItems
         : originalOrder.items;
-
+ 
       for (const item of itemsToRevert) {
         if (item.productId && item.qty > 0) {
-          await Product.findByIdAndUpdate(item.productId, { $inc: { totalQty: item.qty } });
+          const product = await Product.findById(item.productId);
+          if (product) {
+            const batchKey = item.batch === "2" ? "batch2" : "batch1";
+            product[batchKey].qty = (product[batchKey].qty || 0) + item.qty;
+            await product.save();
+          }
         }
       }
 
@@ -978,7 +990,7 @@ router.post("/:id/change-date", auth, clearCachePrefix("/api/sales-orders"), asy
     );
 
     originalOrder.status = "CANCELLED";
-    originalOrder.cancelNarration = `Cancelled for date change to ${newDate}`;
+    originalOrder.cancelNarration = `Cancelled for date change to ${newDate}${reason ? ` (Reason: ${reason})` : ""}`;
     originalOrder.cancelledBy = req.user.username || req.user.id;
     originalOrder.cancelledAt = new Date();
     await originalOrder.save();
@@ -1160,7 +1172,7 @@ router.post("/:id/change-date", auth, clearCachePrefix("/api/sales-orders"), asy
       username: req.user.username,
       branchId: originalOrder.branchId,
       action: "CHANGE_SO_DATE",
-      description: `Moved Order ${originalOrder.invoiceId} to ${newDate} as ${newSalesOrder.invoiceId}`,
+      description: `Moved Order ${originalOrder.invoiceId} to ${newDate} as ${newSalesOrder.invoiceId}${reason ? ` (Reason: ${reason})` : ""}`,
       targetId: newSalesOrder._id,
       targetModel: "SalesOrder",
     });
@@ -1245,15 +1257,20 @@ router.delete("/:id", auth, clearCachePrefix("/api/sales-orders"), async (req, r
         }
       }
 
-      // 2. Revert Product Stock using lastInvoicedItems
+      // 2. Revert Product Stock using lastInvoicedItems (Batch specific)
       const itemsToRevert = (salesOrder.lastInvoicedItems && salesOrder.lastInvoicedItems.length > 0)
         ? salesOrder.lastInvoicedItems
         : salesOrder.items;
 
       for (const item of itemsToRevert) {
         if (item.productId && item.qty > 0) {
-          await Product.findByIdAndUpdate(item.productId, { $inc: { totalQty: item.qty } });
-          console.log(`✅ Stock restored for ${item.name}: +${item.qty}`);
+          const product = await Product.findById(item.productId);
+          if (product) {
+            const batchKey = item.batch === "2" ? "batch2" : "batch1";
+            product[batchKey].qty = (product[batchKey].qty || 0) + item.qty;
+            await product.save();
+          }
+          console.log(`✅ Stock restored for ${item.name}: +${item.qty} to batch ${item.batch || "1"}`);
         }
       }
 
@@ -1508,8 +1525,13 @@ router.patch("/:id/generate-invoice", auth, clearCachePrefix("/api/sales-orders"
 
       // 1. Calculate Deltas
       const oldQtyMap = {};
+      const oldBatchMap = {};
       (salesOrder.lastInvoicedItems || []).forEach(item => {
-        oldQtyMap[item.productId.toString()] = item.qty || 0;
+        if (item.productId) {
+          const pid = item.productId.toString();
+          oldQtyMap[pid] = item.qty || 0;
+          oldBatchMap[pid] = item.batch || "1";
+        }
       });
 
       const itemsToInvoice = invoiceItems || salesOrder.items;
@@ -1518,20 +1540,45 @@ router.patch("/:id/generate-invoice", auth, clearCachePrefix("/api/sales-orders"
 
       // Stock Deltas
       for (const item of allNewItems) {
-        const pid = item.productId.toString();
-        const oldQty = oldQtyMap[pid] || 0;
-        const deltaQty = item.qty - oldQty;
-        if (deltaQty !== 0) {
-          await Product.findByIdAndUpdate(item.productId, { $inc: { totalQty: -deltaQty } });
+        if (item.productId) {
+          const pid = item.productId.toString();
+          const oldQty = oldQtyMap[pid] || 0;
+          const oldBatch = oldBatchMap[pid] || "1";
+          const newQty = item.qty || 0;
+          const newBatch = item.batch || "1";
+
+          const product = await Product.findById(item.productId);
+          if (product) {
+            if (oldBatch === newBatch) {
+              const deltaQty = newQty - oldQty;
+              if (deltaQty !== 0) {
+                const batchKey = newBatch === "2" ? "batch2" : "batch1";
+                product[batchKey].qty = (product[batchKey].qty || 0) - deltaQty;
+              }
+            } else {
+              const oldBatchKey = oldBatch === "2" ? "batch2" : "batch1";
+              const newBatchKey = newBatch === "2" ? "batch2" : "batch1";
+              product[oldBatchKey].qty = (product[oldBatchKey].qty || 0) + oldQty;
+              product[newBatchKey].qty = (product[newBatchKey].qty || 0) - newQty;
+            }
+            await product.save();
+          }
         }
       }
 
       // Handle removed items
       const newPidSet = new Set(allNewItems.map(i => i.productId.toString()));
       for (const oldItem of salesOrder.lastInvoicedItems) {
-        const pid = oldItem.productId.toString();
-        if (!newPidSet.has(pid)) {
-          await Product.findByIdAndUpdate(pid, { $inc: { totalQty: oldItem.qty } });
+        if (oldItem.productId) {
+          const pid = oldItem.productId.toString();
+          if (!newPidSet.has(pid)) {
+            const product = await Product.findById(oldItem.productId);
+            if (product) {
+              const batchKey = oldItem.batch === "2" ? "batch2" : "batch1";
+              product[batchKey].qty = (product[batchKey].qty || 0) + oldItem.qty;
+              await product.save();
+            }
+          }
         }
       }
 

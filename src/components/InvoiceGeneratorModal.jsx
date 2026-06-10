@@ -1,5 +1,6 @@
 import html2canvas from "html2canvas";
 import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   FaCheck,
   FaEdit,
@@ -16,6 +17,7 @@ import { useBranch } from "../context/BranchContext";
 import { useInventory } from "../context/InventoryContext";
 
 const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false }) => {
+  const navigate = useNavigate();
   const { currentBranch, user } = useBranch();
   const { products } = useInventory();
   const isSuperAdmin = user?.role?.toUpperCase() === "SUPER_ADMIN";
@@ -28,6 +30,8 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
   const [activeTab, setActiveTab] = useState("edit");
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [soldOutBatches, setSoldOutBatches] = useState([]);
+  const [showSoldOutModal, setShowSoldOutModal] = useState(false);
 
   // Lifecycle guard
   const isMounted = useRef(false);
@@ -555,6 +559,11 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
       setGeneratedInvoice(data.invoice);
       setActiveTab("success");
       toast.success("Invoice finalized successfully!");
+
+      if (data.soldOutBatches && data.soldOutBatches.length > 0) {
+        setSoldOutBatches(data.soldOutBatches);
+        setShowSoldOutModal(true);
+      }
 
       // Auto print if selected
       if (shouldPrint) {
@@ -1970,6 +1979,59 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
           </div>
         </div>
       </div>
+
+      {/* Sold Out Alert Popup Modal */}
+      {showSoldOutModal && soldOutBatches.length > 0 && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[99999] p-4">
+          <div className="bg-white/95 backdrop-blur-md rounded-3xl shadow-2xl border border-slate-100 max-w-md w-full overflow-hidden transform transition-all duration-300 scale-100 animate-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="bg-amber-500 p-6 text-white flex items-center gap-3">
+              <div className="bg-white/20 p-2.5 rounded-2xl">
+                <FaExclamationTriangle size={24} className="text-white animate-bounce" />
+              </div>
+              <div>
+                <h3 className="text-sm font-black uppercase tracking-wider leading-none mb-1">Batch Sold Out Alert</h3>
+                <p className="text-xs text-amber-100 font-semibold">One or more product batches have sold out completely!</p>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 max-h-[50vh] overflow-y-auto space-y-4">
+              <div className="space-y-2">
+                {soldOutBatches.map((alert, idx) => (
+                  <div key={idx} className="p-4 bg-amber-50/50 border border-amber-100 rounded-2xl text-xs font-semibold text-slate-700 leading-relaxed">
+                    {alert.message || `Product ${alert.name} (Batch ${alert.batch}) has sold out completely! Make order today.`}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowSoldOutModal(false);
+                  setSoldOutBatches([]);
+                  navigate("/branch/po");
+                  if (onClose) onClose();
+                }}
+                className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white text-xs font-black uppercase tracking-widest transition shadow-md active:scale-95 cursor-pointer"
+              >
+                Make Purchase Order
+              </button>
+              <button
+                onClick={() => {
+                  setShowSoldOutModal(false);
+                  setSoldOutBatches([]);
+                }}
+                className="px-6 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-xs font-black uppercase tracking-widest transition shadow-md active:scale-95 cursor-pointer"
+              >
+                Acknowledge
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

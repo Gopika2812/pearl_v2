@@ -78,6 +78,10 @@ export default function InventorySalesOrderEntry({
   const [igst, setIgst] = useState(false);
   const [hsn, setHsn] = useState("");
 
+  const [selectedBatch, setSelectedBatch] = useState("1");
+  const [expiryDate, setExpiryDate] = useState("");
+  const [mrp, setMrp] = useState(0);
+
   const [items, setItems] = useState([]);
   const [sampleItems, setSampleItems] = useState([]);
 
@@ -691,6 +695,18 @@ export default function InventorySalesOrderEntry({
       fetchCustomerLockedPrice(customerId, id);
     }
 
+    // Auto-select batch (FIFO)
+    let autoBatch = "1";
+    if (product.batch1 && product.batch1.qty > 0) {
+      autoBatch = "1";
+    } else if (product.batch2 && product.batch2.qty > 0) {
+      autoBatch = "2";
+    }
+    setSelectedBatch(autoBatch);
+    const selectedBatchData = autoBatch === "1" ? product.batch1 : product.batch2;
+    setExpiryDate(selectedBatchData?.expiryDate || "");
+    setMrp(selectedBatchData?.mrp || 0);
+
     // ⚡ PERFORMANCE: Targeted fetch for live available quantity only for selected item
     const fetchLiveQty = async () => {
       try {
@@ -704,6 +720,15 @@ export default function InventorySalesOrderEntry({
       }
     };
     fetchLiveQty();
+  };
+
+  const handleBatchChange = (batchVal) => {
+    setSelectedBatch(batchVal);
+    if (selectedProductData) {
+      const batchData = batchVal === "1" ? selectedProductData.batch1 : selectedProductData.batch2;
+      setExpiryDate(batchData?.expiryDate || "");
+      setMrp(batchData?.mrp || 0);
+    }
   };
 
   const fetchCustomerLockedPrice = async (cId, pId) => {
@@ -900,6 +925,9 @@ export default function InventorySalesOrderEntry({
         isNegativeStockBilled,
         altQty: Number(altQty),
         altUnit: convAltUnit,
+        batch: selectedBatch,
+        expiryDate: expiryDate || null,
+        mrp: Number(mrp) || 0,
       },
     ]);
 
@@ -933,6 +961,9 @@ export default function InventorySalesOrderEntry({
     setGst(0);
     setIgst(false);
     setHsn("");
+    setSelectedBatch("1");
+    setExpiryDate("");
+    setMrp(0);
     setShowItemDropdown(false);
   };
 
@@ -1227,6 +1258,9 @@ export default function InventorySalesOrderEntry({
     setSgst(0);
     setIgst(false);
     setHsn("");
+    setSelectedBatch("1");
+    setExpiryDate("");
+    setMrp(0);
 
     // Sample Items
     setSampleItems([]);
@@ -1995,6 +2029,43 @@ export default function InventorySalesOrderEntry({
                 </div>
               </div>
 
+              {/* Batch selection and info */}
+              {selectedItem && (
+                <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 my-2 space-y-2">
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <label className={labelClass}>Batch</label>
+                      <select
+                        className={selectClass}
+                        value={selectedBatch}
+                        onChange={(e) => handleBatchChange(e.target.value)}
+                      >
+                        <option value="1">Batch 1 ({selectedProductData?.batch1?.qty || 0})</option>
+                        <option value="2">Batch 2 ({selectedProductData?.batch2?.qty || 0})</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className={labelClass}>Expiry Date</label>
+                      <input
+                        type="text"
+                        className={`${inputClass} bg-gray-100 text-gray-500`}
+                        value={expiryDate ? new Date(expiryDate).toLocaleDateString("en-IN") : "No Expiry"}
+                        readOnly
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>MRP</label>
+                      <input
+                        type="text"
+                        className={`${inputClass} bg-gray-100 text-gray-500`}
+                        value={mrp ? `₹${mrp}` : "₹0"}
+                        readOnly
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* UNIT CONVERSION UI */}
               <div className="bg-[#319bab]/5 p-3 rounded-lg border border-[#319bab]/20 my-2 space-y-2">
                 <div className="flex items-center justify-between">
@@ -2155,6 +2226,11 @@ export default function InventorySalesOrderEntry({
                       <td className="px-4 py-3 font-semibold">
                         {item.name}
                         <div className="text-[10px] text-gray-400">HSN: {item.hsn}</div>
+                        {item.batch && (
+                          <div className="text-[10px] text-[#319bab] font-bold">
+                            Batch {item.batch} | Exp: {item.expiryDate ? new Date(item.expiryDate).toLocaleDateString("en-IN") : "No Expiry"} | MRP: ₹{item.mrp}
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-center">
                         <div className="font-bold">{item.qty} {item.unit || "Pcs"}</div>

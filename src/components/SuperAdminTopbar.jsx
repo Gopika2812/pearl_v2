@@ -18,9 +18,150 @@ const SuperAdminTopbar = ({ onMenuClick }) => {
   const [branchDropdownOpen, setBranchDropdownOpen] = useState(false);
   const [user, setUser] = useState(null);
   const [branches, setBranches] = useState([]);
+  const [expiryAlerts, setExpiryAlerts] = useState([]);
+  const [soldOutAlerts, setSoldOutAlerts] = useState([]);
+  const [showExpiryModal, setShowExpiryModal] = useState(false);
 
   const profileRef = useRef(null);
   const branchDropdownRef = useRef(null);
+
+  const getExpiryLabel = (expiryDate) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const exp = new Date(expiryDate);
+    exp.setHours(0, 0, 0, 0);
+    const diffTime = exp - today;
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays < 0) {
+      return <span className="text-rose-600 font-bold uppercase tracking-tighter">EXPIRED!</span>;
+    } else if (diffDays === 0) {
+      return <span className="text-rose-500 font-bold uppercase tracking-tighter">Expires Today!</span>;
+    } else if (diffDays === 1) {
+      return <span className="text-amber-500 font-bold">Expires Tomorrow</span>;
+    } else {
+      return <span className="text-amber-600 font-semibold">Expires in {diffDays} days</span>;
+    }
+  };
+
+  const handleDismissAlert = (alertToDismiss, isSoldOut = false) => {
+    const branchId = superAdminViewBranch?._id;
+    if (!branchId) return;
+    const key = `${branchId}_${alertToDismiss.productId}_${alertToDismiss.batch}_${alertToDismiss.qty}_${alertToDismiss.expiryDate}`;
+    const storageKey = isSoldOut ? "dismissedSoldOutAlerts" : "dismissedExpiryAlerts";
+    
+    let currentDismissed = [];
+    try {
+      const stored = localStorage.getItem(storageKey);
+      currentDismissed = stored ? JSON.parse(stored) : [];
+    } catch {}
+
+    const updated = [...currentDismissed, key];
+    localStorage.setItem(storageKey, JSON.stringify(updated));
+
+    if (isSoldOut) {
+      const remaining = soldOutAlerts.filter(a => {
+        const aKey = `${branchId}_${a.productId}_${a.batch}_${a.qty}_${a.expiryDate}`;
+        return aKey !== key;
+      });
+      setSoldOutAlerts(remaining);
+      if (remaining.length === 0 && expiryAlerts.length === 0) {
+        setShowExpiryModal(false);
+      }
+    } else {
+      const remaining = expiryAlerts.filter(a => {
+        const aKey = `${branchId}_${a.productId}_${a.batch}_${a.qty}_${a.expiryDate}`;
+        return aKey !== key;
+      });
+      setExpiryAlerts(remaining);
+      if (remaining.length === 0 && soldOutAlerts.length === 0) {
+        setShowExpiryModal(false);
+      }
+    }
+  };
+
+  const handleClearAllAlerts = () => {
+    const branchId = superAdminViewBranch?._id;
+    if (!branchId) return;
+    
+    if (expiryAlerts.length > 0) {
+      let currentDismissed = [];
+      try {
+        const stored = localStorage.getItem("dismissedExpiryAlerts");
+        currentDismissed = stored ? JSON.parse(stored) : [];
+      } catch {}
+      const keysToDismiss = expiryAlerts.map(alert => 
+        `${branchId}_${alert.productId}_${alert.batch}_${alert.qty}_${alert.expiryDate}`
+      );
+      const updated = [...currentDismissed, ...keysToDismiss];
+      localStorage.setItem("dismissedExpiryAlerts", JSON.stringify(updated));
+      setExpiryAlerts([]);
+    }
+
+    if (soldOutAlerts.length > 0) {
+      let currentDismissed = [];
+      try {
+        const stored = localStorage.getItem("dismissedSoldOutAlerts");
+        currentDismissed = stored ? JSON.parse(stored) : [];
+      } catch {}
+      const keysToDismiss = soldOutAlerts.map(alert => 
+        `${branchId}_${alert.productId}_${alert.batch}_${alert.qty}_${alert.expiryDate}`
+      );
+      const updated = [...currentDismissed, ...keysToDismiss];
+      localStorage.setItem("dismissedSoldOutAlerts", JSON.stringify(updated));
+      setSoldOutAlerts([]);
+    }
+
+    setShowExpiryModal(false);
+  };
+
+  const handleTakeAction = () => {
+    const branchId = superAdminViewBranch?._id;
+    if (!branchId) return;
+    
+    let currentDismissed = [];
+    try {
+      const stored = localStorage.getItem("dismissedExpiryAlerts");
+      currentDismissed = stored ? JSON.parse(stored) : [];
+    } catch {}
+
+    const keysToDismiss = expiryAlerts.map(alert => 
+      `${branchId}_${alert.productId}_${alert.batch}_${alert.qty}_${alert.expiryDate}`
+    );
+
+    const updated = [...currentDismissed, ...keysToDismiss];
+    localStorage.setItem("dismissedExpiryAlerts", JSON.stringify(updated));
+
+    setExpiryAlerts([]);
+    if (soldOutAlerts.length === 0) {
+      setShowExpiryModal(false);
+    }
+    navigate("/branch/recycling");
+  };
+
+  const handleMakePO = () => {
+    const branchId = superAdminViewBranch?._id;
+    if (!branchId) return;
+    
+    let currentDismissed = [];
+    try {
+      const stored = localStorage.getItem("dismissedSoldOutAlerts");
+      currentDismissed = stored ? JSON.parse(stored) : [];
+    } catch {}
+
+    const keysToDismiss = soldOutAlerts.map(alert => 
+      `${branchId}_${alert.productId}_${alert.batch}_${alert.qty}_${alert.expiryDate}`
+    );
+
+    const updated = [...currentDismissed, ...keysToDismiss];
+    localStorage.setItem("dismissedSoldOutAlerts", JSON.stringify(updated));
+
+    setSoldOutAlerts([]);
+    if (expiryAlerts.length === 0) {
+      setShowExpiryModal(false);
+    }
+    navigate("/branch/po");
+  };
 
   useEffect(() => {
     const interval = setInterval(() => setTime(new Date()), 1000);
@@ -70,16 +211,89 @@ const SuperAdminTopbar = ({ onMenuClick }) => {
       }
     };
 
+    const fetchExpiryAlerts = async () => {
+      if (!superAdminViewBranch?._id) return;
+      try {
+        const token = localStorage.getItem("token");
+        if (!token) return;
+        const [expiryRes, soldOutRes] = await Promise.all([
+          fetch(`${API_BASE}/products/alerts/expiry?branchId=${superAdminViewBranch._id}`, {
+            headers: { "Authorization": `Bearer ${token}` }
+          }),
+          fetch(`${API_BASE}/products/alerts/sold-out?branchId=${superAdminViewBranch._id}`, {
+            headers: { "Authorization": `Bearer ${token}` }
+          })
+        ]);
+        const expiryData = await expiryRes.json();
+        const soldOutData = await soldOutRes.json();
+
+        let activeExpiry = [];
+        let activeSoldOut = [];
+
+        if (expiryData.success && expiryData.data) {
+          let dismissedExpiry = [];
+          try {
+            const stored = localStorage.getItem("dismissedExpiryAlerts");
+            dismissedExpiry = stored ? JSON.parse(stored) : [];
+          } catch {}
+
+          activeExpiry = expiryData.data.filter(alert => {
+            const key = `${superAdminViewBranch._id}_${alert.productId}_${alert.batch}_${alert.qty}_${alert.expiryDate}`;
+            return !dismissedExpiry.includes(key);
+          });
+        }
+
+        if (soldOutData.success && soldOutData.data) {
+          let dismissedSoldOut = [];
+          try {
+            const stored = localStorage.getItem("dismissedSoldOutAlerts");
+            dismissedSoldOut = stored ? JSON.parse(stored) : [];
+          } catch {}
+
+          activeSoldOut = soldOutData.data.filter(alert => {
+            const key = `${superAdminViewBranch._id}_${alert.productId}_${alert.batch}_${alert.qty}_${alert.expiryDate}`;
+            return !dismissedSoldOut.includes(key);
+          });
+        }
+
+        setExpiryAlerts(activeExpiry);
+        setSoldOutAlerts(activeSoldOut);
+
+        const sessionKey = `expiry_alert_shown_${superAdminViewBranch._id}`;
+        const alreadyShown = sessionStorage.getItem(sessionKey);
+        const totalActiveCount = activeExpiry.length + activeSoldOut.length;
+        if (totalActiveCount > 0 && !alreadyShown) {
+          setShowExpiryModal(true);
+          sessionStorage.setItem(sessionKey, "true");
+        }
+      } catch (err) {
+        console.error("Failed to fetch alerts:", err);
+      }
+    };
+
+    const handleRefresh = () => {
+      fetchExpiryAlerts();
+    };
+    window.addEventListener("refresh-expiry-alerts", handleRefresh);
+    window.addEventListener("refresh-sold-out-alerts", handleRefresh);
+
     fetchTokenStats();
     fetchCreditRequestCount();
     fetchDelayedPickups();
+    fetchExpiryAlerts();
 
     const interval = setInterval(() => {
       fetchTokenStats();
       fetchCreditRequestCount();
       fetchDelayedPickups();
+      fetchExpiryAlerts();
     }, 60000); // refresh every minute
-    return () => clearInterval(interval);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("refresh-expiry-alerts", handleRefresh);
+      window.removeEventListener("refresh-sold-out-alerts", handleRefresh);
+    };
   }, [superAdminViewBranch?._id]);
 
   useEffect(() => {
@@ -148,6 +362,7 @@ const SuperAdminTopbar = ({ onMenuClick }) => {
   };
 
   return (
+    <>
     <header className="fixed top-0 right-0 left-0 md:left-20 z-50 transition-all duration-300 h-16 md:h-[80px] p-2 md:p-4 flex items-center justify-center pointer-events-none">
       <div className="bg-secondary/90 backdrop-blur-md shadow-2xl px-4 md:px-8 py-3 rounded-3xl w-full max-w-[1600px] relative pointer-events-auto border border-white/10 flex items-center justify-between">
         
@@ -237,8 +452,8 @@ const SuperAdminTopbar = ({ onMenuClick }) => {
                           {b.code.substring(0, 2)}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-bold truncate">{b.name}</p>
-                          <p className={`text-[10px] font-medium ${superAdminViewBranch?._id === b._id ? "text-white/40" : "text-secondary/40"}`}>{b.location || "Remote Node"}</p>
+                           <p className="text-sm font-bold truncate">{b.name}</p>
+                           <p className={`text-[10px] font-medium ${superAdminViewBranch?._id === b._id ? "text-white/40" : "text-secondary/40"}`}>{b.location || "Remote Node"}</p>
                         </div>
                         {superAdminViewBranch?._id === b._id && (
                           <FaEye size={14} className="text-primary" />
@@ -278,6 +493,23 @@ const SuperAdminTopbar = ({ onMenuClick }) => {
                 </div>
               </div>
             </button>
+
+            {/* Expiry & Sold-Out Alerts Button */}
+            {(expiryAlerts.length > 0 || soldOutAlerts.length > 0) && (
+              <button
+                onClick={() => setShowExpiryModal(true)}
+                className="flex items-center gap-2.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 px-4 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all border border-rose-500/20 relative shadow-lg shadow-rose-500/5 cursor-pointer"
+                title={`${expiryAlerts.length + soldOutAlerts.length} Inventory Alerts active`}
+              >
+                <div className="relative">
+                  <FaExclamationTriangle className="text-rose-500 animate-pulse" />
+                </div>
+                <span className="hidden sm:inline">Inventory Alerts</span>
+                <span className="absolute -top-1 -right-1 bg-rose-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full border-2 border-secondary shadow-lg">
+                  {expiryAlerts.length + soldOutAlerts.length}
+                </span>
+              </button>
+            )}
 
             {/* Delayed Pickups Notification */}
             {(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN" || user?.role === "MANAGER") && delayedPickups > 0 && (
@@ -379,6 +611,172 @@ const SuperAdminTopbar = ({ onMenuClick }) => {
           </div>
       </div>
     </header>
+
+    {/* Expiry & Sold-Out Warning Modal */}
+    {showExpiryModal && (expiryAlerts.length > 0 || soldOutAlerts.length > 0) && (
+      <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4 pointer-events-auto">
+        <div className="bg-white/95 backdrop-blur-md rounded-3xl shadow-2xl border border-slate-100 max-w-lg w-full overflow-hidden transform transition-all duration-300 scale-100 animate-in zoom-in-95 duration-200">
+          {/* Header */}
+          <div className={`p-6 text-white flex items-center justify-between gap-3 ${
+            expiryAlerts.length > 0 && soldOutAlerts.length > 0
+              ? "bg-gradient-to-r from-rose-500 to-amber-500"
+              : expiryAlerts.length > 0
+              ? "bg-rose-500"
+              : "bg-amber-500"
+          }`}>
+            <div className="flex items-center gap-3">
+              <div className="bg-white/20 p-2.5 rounded-2xl">
+                <FaExclamationTriangle size={24} className="text-white animate-bounce" />
+              </div>
+              <div>
+                <h3 className="text-sm font-black uppercase tracking-wider leading-none mb-1">
+                  {expiryAlerts.length > 0 && soldOutAlerts.length > 0
+                    ? "Inventory Batch Alerts"
+                    : expiryAlerts.length > 0
+                    ? "Batch Expiry Warning"
+                    : "Batch Sold Out Warning"}
+                </h3>
+                <p className="text-xs text-white/90 font-semibold">
+                  {expiryAlerts.length > 0 && soldOutAlerts.length > 0
+                    ? "Attention required for the following product batches!"
+                    : expiryAlerts.length > 0
+                    ? "The following product batches will expire within 5 days!"
+                    : "The following product batches have sold out completely!"}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={handleClearAllAlerts}
+              className="px-3 py-1.5 bg-white/20 hover:bg-white/30 active:scale-95 transition-all text-white text-[10px] font-black uppercase tracking-wider rounded-lg shrink-0 cursor-pointer"
+            >
+              Clear All
+            </button>
+          </div>
+
+          {/* Content / Table */}
+          <div className="p-6 max-h-[60vh] overflow-y-auto space-y-4">
+            {expiryAlerts.length > 0 && (
+              <div>
+                <h4 className="text-[10px] font-black uppercase tracking-wider text-rose-500 mb-2 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 bg-rose-500 rounded-full"></span>
+                  Expiring Soon
+                </h4>
+                <div className="divide-y divide-slate-100 border border-slate-100 rounded-2xl overflow-hidden shadow-sm bg-white">
+                  {expiryAlerts.map((alert, idx) => (
+                    <div key={idx} className="p-4 bg-slate-50/30 hover:bg-slate-50 transition flex justify-between items-center text-xs">
+                      <div className="text-left pr-2 text-secondary">
+                        <div className="font-black text-slate-800 text-sm">{alert.name}</div>
+                        <div className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-wider">
+                          Batch: <span className="text-slate-600">{alert.batch}</span> | Qty: <span className="text-slate-600">{alert.qty}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4 text-right shrink-0">
+                        <div className="flex flex-col items-end">
+                          <div className="font-black text-rose-600">
+                            Exp: {new Date(alert.expiryDate).toLocaleDateString("en-IN")}
+                          </div>
+                          <div className="text-[10px] font-bold mt-0.5">
+                            {getExpiryLabel(alert.expiryDate)}
+                          </div>
+                          <div className="text-[10px] font-bold text-slate-400 mt-0.5">
+                            MRP: ₹{alert.mrp}
+                          </div>
+                        </div>
+                        
+                        {/* Dismiss cross mark */}
+                        <button
+                          onClick={() => handleDismissAlert(alert, false)}
+                          className="p-1 rounded-lg text-slate-300 hover:text-rose-500 hover:bg-rose-50 transition-all font-black text-sm cursor-pointer"
+                          title="Dismiss Alert"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {soldOutAlerts.length > 0 && (
+              <div>
+                <h4 className="text-[10px] font-black uppercase tracking-wider text-amber-600 mb-2 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 bg-amber-500 rounded-full"></span>
+                  Sold Out Batches
+                </h4>
+                <div className="divide-y divide-slate-100 border border-slate-100 rounded-2xl overflow-hidden shadow-sm bg-white">
+                  {soldOutAlerts.map((alert, idx) => (
+                    <div key={idx} className="p-4 bg-slate-50/30 hover:bg-slate-50 transition flex justify-between items-center text-xs">
+                      <div className="text-left pr-2 text-secondary">
+                        <div className="font-black text-slate-800 text-sm">{alert.name}</div>
+                        <div className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-wider">
+                          Batch: <span className="text-slate-600">{alert.batch}</span> | Qty: <span className="text-rose-600 font-black">SOLD OUT</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4 text-right shrink-0">
+                        <div className="flex flex-col items-end">
+                          <div className="font-black text-slate-500">
+                            Exp: {alert.expiryDate ? new Date(alert.expiryDate).toLocaleDateString("en-IN") : "N/A"}
+                          </div>
+                          <div className="text-[10px] font-bold text-slate-400 mt-0.5">
+                            MRP: ₹{alert.mrp}
+                          </div>
+                          <button
+                            onClick={() => {
+                              handleDismissAlert(alert, true);
+                              navigate("/branch/po");
+                            }}
+                            className="mt-1 px-2.5 py-1 text-[9px] font-black uppercase tracking-wider text-white bg-amber-500 hover:bg-amber-600 rounded-lg shadow-sm active:scale-95 transition-all"
+                          >
+                            Make PO
+                          </button>
+                        </div>
+                        
+                        {/* Dismiss cross mark */}
+                        <button
+                          onClick={() => handleDismissAlert(alert, true)}
+                          className="p-1 rounded-lg text-slate-300 hover:text-amber-500 hover:bg-amber-50 transition-all font-black text-sm cursor-pointer"
+                          title="Dismiss Alert"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 flex-wrap">
+            {expiryAlerts.length > 0 && (
+              <button
+                onClick={handleTakeAction}
+                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700 text-white text-xs font-black uppercase tracking-widest transition shadow-md active:scale-95 cursor-pointer"
+              >
+                Restock / Recycle
+              </button>
+            )}
+            {soldOutAlerts.length > 0 && (
+              <button
+                onClick={handleMakePO}
+                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white text-xs font-black uppercase tracking-widest transition shadow-md active:scale-95 cursor-pointer"
+              >
+                Make Purchase Order
+              </button>
+            )}
+            <button
+              onClick={() => setShowExpiryModal(false)}
+              className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-xs font-black uppercase tracking-widest transition shadow-md active:scale-95 cursor-pointer"
+            >
+              Close Warning
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 };
 

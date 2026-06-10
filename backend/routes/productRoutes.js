@@ -32,7 +32,7 @@ const upload = multer({
 // POST: Add New Product
 router.post("/", async (req, res) => {
   try {
-    const { productGroup, productCategories = [], name, perQty, units, totalQty, purchasingPrice, sellingPrice, adminMargin, marginPercentage, lockedPrice, hsnCode, gst, branchId } = req.body;
+    const { productGroup, productCategories = [], name, perQty, units, totalQty, purchasingPrice, sellingPrice, adminMargin, marginPercentage, lockedPrice, hsnCode, gst, branchId, batch1, batch2 } = req.body;
 
     if (!name || !perQty || !units || hsnCode === undefined || !branchId) {
       return res.status(400).json({
@@ -124,6 +124,8 @@ router.post("/", async (req, res) => {
       lockedPrice: Math.round((Number(lockedPrice) || 0) * 100) / 100,
       hsnCode,
       gst: Math.round((Number(gst) || 0) * 100) / 100,
+      batch1: batch1 || { qty: 0, expiryDate: null, mrp: 0 },
+      batch2: batch2 || { qty: 0, expiryDate: null, mrp: 0 }
     });
 
     const savedProduct = await product.save();
@@ -1121,7 +1123,8 @@ router.put("/:id", auth, async (req, res) => {
       purchasingPrice, sellingPrice, adminMargin, marginPercentage, lockedPrice, margin,
       hsnCode, gst, branchId, unitConversion, openingQty, manualOpeningDate,
       totalQtyUnit, mrp, reorderLevel, reorderQty, leadTime, checkPeriod,
-      preferredVendor, minStockQty, maxStockQty, restockingDays, restockingConfig
+      preferredVendor, minStockQty, maxStockQty, restockingDays, restockingConfig,
+      batch1, batch2
     } = req.body;
 
     // Validate ObjectId
@@ -1192,6 +1195,9 @@ router.put("/:id", auth, async (req, res) => {
     if (maxStockQty !== undefined) updateData.maxStockQty = Number(maxStockQty);
     if (restockingDays !== undefined) updateData.restockingDays = restockingDays;
     if (restockingConfig !== undefined) updateData.restockingConfig = restockingConfig;
+    if (batch1 !== undefined) updateData.batch1 = batch1;
+    if (batch2 !== undefined) updateData.batch2 = batch2;
+
 
     // ⚡ AUTO-RECONCILE: If openingQty or totalQty needs sync
     if (openingQty !== undefined || totalQty !== undefined) {
@@ -1414,6 +1420,118 @@ router.delete("/bulk-delete", auth, async (req, res) => {
     });
   }
 });
+
+// GET: Fetch product batches expiring within 5 days
+router.get("/alerts/expiry", auth, async (req, res) => {
+  try {
+    const { branchId } = req.query;
+    if (!branchId) {
+      return res.status(400).json({ success: false, message: "branchId is required" });
+    }
+
+    const fiveDaysFromNow = new Date();
+    fiveDaysFromNow.setDate(fiveDaysFromNow.getDate() + 5);
+
+    // Find products where batch1 or batch2 has quantity > 0 and expiryDate is <= fiveDaysFromNow
+    const products = await Product.find({
+      branchId,
+      $or: [
+        {
+          "batch1.qty": { $gt: 0 },
+          "batch1.expiryDate": { $ne: null, $lte: fiveDaysFromNow }
+        },
+        {
+          "batch2.qty": { $gt: 0 },
+          "batch2.expiryDate": { $ne: null, $lte: fiveDaysFromNow }
+        }
+      ]
+    }).lean();
+
+    const alerts = [];
+    products.forEach(p => {
+      if (p.batch1 && p.batch1.qty > 0 && p.batch1.expiryDate && new Date(p.batch1.expiryDate) <= fiveDaysFromNow) {
+        alerts.push({
+          productId: p._id,
+          name: p.name,
+          batch: "1",
+          qty: p.batch1.qty,
+          expiryDate: p.batch1.expiryDate,
+          mrp: p.batch1.mrp
+        });
+      }
+      if (p.batch2 && p.batch2.qty > 0 && p.batch2.expiryDate && new Date(p.batch2.expiryDate) <= fiveDaysFromNow) {
+        alerts.push({
+          productId: p._id,
+          name: p.name,
+          batch: "2",
+          qty: p.batch2.qty,
+          expiryDate: p.batch2.expiryDate,
+          mrp: p.batch2.mrp
+        });
+      }
+    });
+
+    res.json({ success: true, data: alerts });
+  } catch (error) {
+    console.error("Expiry alerts fetch error:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch expiry alerts", error: error.message });
+  }
+});
+
+// GET: Fetch product batches that are sold out (qty <= 0) and were active (expiryDate is not null)
+router.get("/alerts/sold-out", auth, async (req, res) => {
+  try {
+    const { branchId } = req.query;
+    if (!branchId) {
+      return res.status(400).json({ success: false, message: "branchId is required" });
+    }
+
+    // Find products where batch1 or batch2 has quantity <= 0 and expiryDate is not null
+    const products = await Product.find({
+      branchId,
+      $or: [
+        {
+          "batch1.qty": { $lte: 0 },
+          "batch1.expiryDate": { $ne: null }
+        },
+        {
+          "batch2.qty": { $lte: 0 },
+          "batch2.expiryDate": { $ne: null }
+        }
+      ]
+    }).lean();
+
+    const alerts = [];
+    products.forEach(p => {
+      if (p.batch1 && p.batch1.qty <= 0 && p.batch1.expiryDate) {
+        alerts.push({
+          productId: p._id,
+          name: p.name,
+          batch: "1",
+          qty: p.batch1.qty,
+          expiryDate: p.batch1.expiryDate,
+          mrp: p.batch1.mrp
+        });
+      }
+      if (p.batch2 && p.batch2.qty <= 0 && p.batch2.expiryDate) {
+        alerts.push({
+          productId: p._id,
+          name: p.name,
+          batch: "2",
+          qty: p.batch2.qty,
+          expiryDate: p.batch2.expiryDate,
+          mrp: p.batch2.mrp
+        });
+      }
+    });
+
+    res.json({ success: true, data: alerts });
+  } catch (error) {
+    console.error("Sold out alerts fetch error:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch sold out alerts", error: error.message });
+  }
+});
+
 
 // GET: Fetch available qty for a specific product (for Sales Order)
 // Formula: Closing Stock = Opening Qty (Anchor) + Total Inwards - Total Outwards
@@ -1962,7 +2080,17 @@ router.get("/:id/ledger", auth, async (req, res) => {
       rate: 0,
       value: 0
     }));
-    const unified = [...sales, ...purchases, ...debitNotes, ...creditNotes, ...psvTxns].sort((a, b) => new Date(a.date) - new Date(b.date));
+    const unified = [...sales, ...purchases, ...debitNotes, ...creditNotes, ...psvTxns].sort((a, b) => {
+      const dateA = new Date(a.date);
+      const dateB = new Date(b.date);
+      if (dateA.getTime() !== dateB.getTime()) {
+        return dateA - dateB;
+      }
+      // If date/time is identical, sort INWARD (Purchases, Credit Notes) before OUTWARD (Sales, Debit Notes)
+      if (a.type === "INWARD" && b.type === "OUTWARD") return -1;
+      if (a.type === "OUTWARD" && b.type === "INWARD") return 1;
+      return 0;
+    });
 
     res.json({
       success: true,

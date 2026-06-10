@@ -182,6 +182,7 @@ const BranchPurchaseOrders = () => {
       if (!res.ok) throw new Error(data.message || "Failed to generate invoice");
 
       toast.success(`Purchase Invoice ${data.piNumber} generated successfully!`);
+      window.dispatchEvent(new Event("refresh-expiry-alerts"));
       setShowInvoiceModal(false);
       setEditingOrder(null);
       fetchPurchaseOrders();
@@ -750,7 +751,12 @@ const BranchPurchaseOrders = () => {
                                         {(order.items || []).map((item, idx) => (
                                           <tr key={idx} className="bg-white">
                                             <td className="py-2 px-3 font-semibold">
-                                              {item.name}
+                                              <div>{item.name}</div>
+                                              {item.batch && (
+                                                <div className="text-[10px] text-[#319bab] font-bold mt-1">
+                                                  Batch {item.batch} | Exp: {item.expiryDate ? new Date(item.expiryDate).toLocaleDateString("en-IN") : "No Expiry"} | MRP: ₹{item.mrp || 0}
+                                                </div>
+                                              )}
                                             </td>
                                             <td className="py-2 px-3 text-center text-gray-600">
                                               {item.hsn}

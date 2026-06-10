@@ -34,6 +34,16 @@ const productSchema = new mongoose.Schema(
     sellingPrice: { type: Number, default: 0 },
     lockedPrice: { type: Number, default: 0 },
     mrp: { type: Number, default: 0 }, // Maximum Retail Price
+    batch1: {
+      qty: { type: Number, default: 0 },
+      expiryDate: { type: Date, default: null },
+      mrp: { type: Number, default: 0 }
+    },
+    batch2: {
+      qty: { type: Number, default: 0 },
+      expiryDate: { type: Date, default: null },
+      mrp: { type: Number, default: 0 }
+    },
     margin: { type: Number, default: 0 },
     marginPercentage: { type: Number, default: 0 }, // Margin as percentage for group calculations
     hsnCode: {
@@ -104,8 +114,12 @@ const productSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Auto-calculate margin before saving
+// Auto-calculate margin and sync total stock before saving
 productSchema.pre("save", function () {
+  if (this.isModified("batch1.qty") || this.isModified("batch2.qty")) {
+    this.totalQty = (this.batch1?.qty || 0) + (this.batch2?.qty || 0);
+  }
+
   const isNew = this.isNew;
   const pPriceChanged = this.isModified("purchasingPrice");
   const mcpChanged = this.isModified("marketCapPrice");

@@ -69,7 +69,10 @@ const salesOrderSchema = new mongoose.Schema(
         confirmedQty: { type: Number, default: 0 },
         backOrderQty: { type: Number, default: 0 },
         isConfirmed: { type: Boolean, default: false },
-        isNeutralized: { type: Boolean, default: false }
+        isNeutralized: { type: Boolean, default: false },
+        batch: { type: String, enum: ["1", "2"], default: "1" },
+        expiryDate: { type: Date, default: null },
+        mrp: { type: Number, default: 0 },
       },
     ],
 
@@ -127,7 +130,10 @@ const salesOrderSchema = new mongoose.Schema(
         confirmedQty: { type: Number, default: 0 },
         backOrderQty: { type: Number, default: 0 },
         isConfirmed: { type: Boolean, default: false },
-        isNeutralized: { type: Boolean, default: false }
+        isNeutralized: { type: Boolean, default: false },
+        batch: { type: String, enum: ["1", "2"], default: "1" },
+        expiryDate: { type: Date, default: null },
+        mrp: { type: Number, default: 0 },
       },
     ],
 
@@ -273,7 +279,10 @@ const salesOrderSchema = new mongoose.Schema(
         total: Number,
         originalQty: { type: Number, default: 0 },
         confirmedQty: { type: Number, default: 0 },
-        backOrderQty: { type: Number, default: 0 }
+        backOrderQty: { type: Number, default: 0 },
+        batch: { type: String, enum: ["1", "2"], default: "1" },
+        expiryDate: { type: Date, default: null },
+        mrp: { type: Number, default: 0 },
       },
     ],
     lastInvoicedGrandTotal: Number,

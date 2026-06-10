@@ -98,6 +98,29 @@ const InventoryPurchaseOrderEntry = ({
   const [igst, setIgst] = useState(false);
   const [selectedProductData, setSelectedProductData] = useState(null);
 
+  // Batch details states
+  const [batch, setBatch] = useState("1");
+  const [expiryDate, setExpiryDate] = useState("");
+  const [mrp, setMrp] = useState("");
+
+  // Autofill expiry date and mrp based on selected product/batch
+  useEffect(() => {
+    if (selectedProductData) {
+      const activeBatch = batch === "2" ? selectedProductData.batch2 : selectedProductData.batch1;
+      if (activeBatch) {
+        setMrp(activeBatch.mrp || "");
+        if (activeBatch.expiryDate) {
+          setExpiryDate(new Date(activeBatch.expiryDate).toISOString().split('T')[0]);
+        } else {
+          setExpiryDate("");
+        }
+      } else {
+        setMrp("");
+        setExpiryDate("");
+      }
+    }
+  }, [selectedProductData, batch]);
+
   // UNIT CONVERSION STATES
   const [convValue, setConvValue] = useState("");
   const [convUnit, setConvUnit] = useState("");
@@ -487,6 +510,9 @@ const InventoryPurchaseOrderEntry = ({
         sgst,
         igst: igst ? gst : 0,
         total: total.toFixed(2),
+        batch: batch,
+        expiryDate: expiryDate || null,
+        mrp: Number(mrp || 0),
       },
     ]);
 
@@ -509,6 +535,9 @@ const InventoryPurchaseOrderEntry = ({
     setIgst(false);
     setCgst(0);
     setSgst(0);
+    setBatch("1");
+    setExpiryDate("");
+    setMrp("");
   };
 
   const removeItem = (index) => {
@@ -660,6 +689,9 @@ const InventoryPurchaseOrderEntry = ({
     setSgst(0);
     setIgst(false);
     setSelectedProductData(null);
+    setBatch("1");
+    setExpiryDate("");
+    setMrp("");
 
     // Footer
     setExtraExpenses([]);
@@ -1147,6 +1179,43 @@ const InventoryPurchaseOrderEntry = ({
               </div>
             </div>
 
+            {/* ROW 2.5: Batch, Expiry, MRP */}
+            <div className="grid grid-cols-3 gap-3 border-t border-gray-100 pt-3">
+              <div>
+                <label className={labelClass}>Batch Type</label>
+                <select
+                  className={selectClass}
+                  value={batch}
+                  onChange={(e) => setBatch(e.target.value)}
+                >
+                  <option value="1">Batch 1</option>
+                  <option value="2">Batch 2</option>
+                </select>
+              </div>
+
+              <div>
+                <label className={labelClass}>Expiry Date</label>
+                <input
+                  type="date"
+                  className={inputClass}
+                  value={expiryDate}
+                  onChange={(e) => setExpiryDate(e.target.value)}
+                />
+              </div>
+
+              <div>
+                <label className={labelClass}>MRP (₹)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  className={inputClass}
+                  value={mrp}
+                  onChange={(e) => setMrp(e.target.value)}
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
+
             {/* ROW 3: Taxes and Add Button */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 items-end">
               <div>
@@ -1274,6 +1343,7 @@ const InventoryPurchaseOrderEntry = ({
                 <thead className="bg-gray-50 text-gray-500 uppercase text-[11px] font-bold">
                   <tr>
                     <th className="px-4 py-3 text-left">Item</th>
+                    <th className="px-4 py-3 text-center">Batch / Expiry / MRP</th>
                     <th className="px-4 py-3 text-center">Package</th>
                     <th className="px-4 py-3 text-center">Qty Ordered</th>
                     <th className="px-4 py-3 text-right">Rate</th>
@@ -1291,6 +1361,17 @@ const InventoryPurchaseOrderEntry = ({
                         <div className="text-[10px] text-gray-400">
                           HSN: {item.hsn}
                         </div>
+                      </td>
+                      <td className="px-4 py-3 text-center text-xs">
+                        <div className="font-bold bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full inline-block mb-1">Batch {item.batch || "1"}</div>
+                        {item.expiryDate && (
+                          <div className="text-red-500 font-semibold">
+                            Exp: {new Date(item.expiryDate).toLocaleDateString("en-IN", { day: '2-digit', month: 'short', year: 'numeric' })}
+                          </div>
+                        )}
+                        {item.mrp > 0 && (
+                          <div className="text-gray-500 font-medium">MRP: ₹{item.mrp}</div>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-center text-sm">
                         {item.perQty} {item.units}

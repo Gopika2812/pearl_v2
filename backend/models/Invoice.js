@@ -83,6 +83,9 @@ const invoiceSchema = new mongoose.Schema(
         sgst: Number,
         igst: Number,
         total: Number,
+        batch: { type: String, enum: ["1", "2"], default: "1" },
+        expiryDate: { type: Date, default: null },
+        mrp: { type: Number, default: 0 },
       },
     ],
 
@@ -101,6 +104,9 @@ const invoiceSchema = new mongoose.Schema(
         altUnit: { type: String, default: "" },
         sellingPrice: Number,
         gst: Number,
+        batch: { type: String, enum: ["1", "2"], default: "1" },
+        expiryDate: { type: Date, default: null },
+        mrp: { type: Number, default: 0 },
       },
     ],
 

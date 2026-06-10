@@ -246,7 +246,14 @@ const BranchPurchaseInvoices = () => {
                                   <tbody className="divide-y divide-gray-50">
                                     {inv.items.map((item, idx) => (
                                       <tr key={idx} className="hover:bg-gray-50/50 transition">
-                                        <td className="py-2.5 px-2 font-medium text-gray-700">{item.name}</td>
+                                        <td className="py-2.5 px-2 font-medium text-gray-700">
+                                          <div>{item.name}</div>
+                                          {item.batch && (
+                                            <div className="text-[10px] text-green-600 font-bold mt-1">
+                                              Batch {item.batch} | Exp: {item.expiryDate ? new Date(item.expiryDate).toLocaleDateString("en-IN") : "No Expiry"} | MRP: ₹{item.mrp || 0}
+                                            </div>
+                                          )}
+                                        </td>
                                         <td className="py-2.5 px-2 text-center font-black text-gray-900">{item.qty}</td>
                                         <td className="py-2.5 px-2 text-right text-gray-500">₹{item.purchasePrice?.toLocaleString()}</td>
                                         <td className="py-2.5 px-2 text-right font-black text-green-700">₹{item.total?.toLocaleString()}</td>

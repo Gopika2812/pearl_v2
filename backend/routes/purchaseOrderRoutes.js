@@ -298,8 +298,13 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
 
       // 1. UPDATE STOCK & SYNC PRICES (DELTA CALCULATION)
       const oldQtyMap = {};
+      const oldBatchMap = {};
       for (const item of order.lastInvoicedItems || []) {
-        if (item.productId) oldQtyMap[item.productId.toString()] = item.qty;
+        if (item.productId) {
+          const pid = item.productId.toString();
+          oldQtyMap[pid] = item.qty;
+          oldBatchMap[pid] = item.batch || "1";
+        }
       }
 
       for (const item of newItems) {
@@ -308,9 +313,29 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
           // A. Delta Stock Update
           const pid = item.productId.toString();
           const oldQty = oldQtyMap[pid] || 0;
-          const deltaQty = item.qty - oldQty;
-          if (deltaQty !== 0) {
-            product.totalQty = (product.totalQty || 0) + deltaQty;
+          const oldBatch = oldBatchMap[pid] || "1";
+          const newQty = item.qty;
+          const newBatch = item.batch || "1";
+
+          if (oldBatch === newBatch) {
+            const deltaQty = newQty - oldQty;
+            if (deltaQty !== 0) {
+              const batchKey = newBatch === "2" ? "batch2" : "batch1";
+              product[batchKey].qty = (product[batchKey].qty || 0) + deltaQty;
+            }
+          } else {
+            const oldBatchKey = oldBatch === "2" ? "batch2" : "batch1";
+            const newBatchKey = newBatch === "2" ? "batch2" : "batch1";
+            product[oldBatchKey].qty = (product[oldBatchKey].qty || 0) - oldQty;
+            product[newBatchKey].qty = (product[newBatchKey].qty || 0) + newQty;
+          }
+
+          const activeBatchKey = newBatch === "2" ? "batch2" : "batch1";
+          if (item.expiryDate) {
+            product[activeBatchKey].expiryDate = new Date(item.expiryDate);
+          }
+          if (item.mrp) {
+            product[activeBatchKey].mrp = Number(item.mrp);
           }
           await product.save();
         }
@@ -322,7 +347,12 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
       const newPids = new Set(newItems.map(i => i.productId.toString()));
       for (const oldItem of order.lastInvoicedItems || []) {
         if (oldItem.productId && !newPids.has(oldItem.productId.toString())) {
-          await Product.findByIdAndUpdate(oldItem.productId, { $inc: { totalQty: -oldItem.qty } });
+          const product = await Product.findById(oldItem.productId);
+          if (product) {
+            const batchKey = oldItem.batch === "2" ? "batch2" : "batch1";
+            product[batchKey].qty = (product[batchKey].qty || 0) - oldItem.qty;
+            await product.save();
+          }
         }
       }
 
@@ -480,8 +510,15 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
     for (const item of invoiceItems) {
       const product = await Product.findById(item.productId);
       if (product) {
-        // B. Stock Update
-        product.totalQty = (product.totalQty || 0) + (Number(item.qty) || 0);
+        // B. Stock Update (Batch specific)
+        const batchKey = item.batch === "2" ? "batch2" : "batch1";
+        product[batchKey].qty = (product[batchKey].qty || 0) + (Number(item.qty) || 0);
+        if (item.expiryDate) {
+          product[batchKey].expiryDate = new Date(item.expiryDate);
+        }
+        if (item.mrp) {
+          product[batchKey].mrp = Number(item.mrp);
+        }
         await product.save();
       }
     }
@@ -945,10 +982,15 @@ router.delete("/:id", auth, async (req, res) => {
 const revertPOEffects = async (order) => {
   console.log(`🔄 Reverting PO Effects: ${order.invoiceId}`);
 
-  // 1. Decrease product qty
+  // 1. Decrease product qty (Batch specific)
   for (const item of order.items) {
-    await Product.findByIdAndUpdate(item.productId, { $inc: { totalQty: -item.qty } });
-    console.log(`📉 Reverted stock for ${item.name}: -${item.qty}`);
+    const product = await Product.findById(item.productId);
+    if (product) {
+      const batchKey = item.batch === "2" ? "batch2" : "batch1";
+      product[batchKey].qty = (product[batchKey].qty || 0) - item.qty;
+      await product.save();
+    }
+    console.log(`📉 Reverted stock for ${item.name}: -${item.qty} from batch ${item.batch || "1"}`);
   }
 
   // 2. Decrease vendor credit balance
@@ -1101,12 +1143,17 @@ router.patch("/:id/approve-cancel", async (req, res) => {
 
       const totalToRevert = order.lastInvoicedGrandTotal || order.grandTotal;
 
-      // 2. Revert Stock
+      // 2. Revert Stock (Batch specific)
       console.log(`📦 Reverting stock for ${itemsToRevert.length} items...`);
       for (const item of itemsToRevert) {
         if (item.productId && item.qty) {
-          await Product.findByIdAndUpdate(item.productId, { $inc: { totalQty: -item.qty } });
-          console.log(`📉 Cancel revert stock: ${item.name || item.productId} -${item.qty}`);
+          const product = await Product.findById(item.productId);
+          if (product) {
+            const batchKey = item.batch === "2" ? "batch2" : "batch1";
+            product[batchKey].qty = (product[batchKey].qty || 0) - item.qty;
+            await product.save();
+          }
+          console.log(`📉 Cancel revert stock: ${item.name || item.productId} -${item.qty} from batch ${item.batch || "1"}`);
         }
       }
 
