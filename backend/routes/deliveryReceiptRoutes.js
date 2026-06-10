@@ -128,7 +128,9 @@ router.post("/", auth, async (req, res) => {
       return res.status(400).json({ success: false, message: "Missing required fields (branchId or deliveryPerson)" });
     }
 
-    const totalCollected = (collections || []).reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+    const totalCollected = (collections || [])
+      .filter(item => item.paymentMode === "CASH")
+      .reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
     const totalExpense = (expenses || []).reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
     const netAmount = totalCollected - totalExpense;
 
