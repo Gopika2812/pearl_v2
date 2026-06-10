@@ -786,6 +786,8 @@ router.post("/bulk-fix-hsn", auth, async (req, res) => {
       return res.status(400).json({ message: "Missing required fields" });
     }
 
+    const branchObjectId = new mongoose.Types.ObjectId(branchId);
+
     const IST = "Asia/Kolkata";
     const startDate = moment.tz(`${year}-${month}-01`, "YYYY-MM-DD", IST).startOf("month").toDate();
     const endDate = moment.tz(`${year}-${month}-01`, "YYYY-MM-DD", IST).endOf("month").toDate();
