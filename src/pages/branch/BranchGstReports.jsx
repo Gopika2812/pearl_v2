@@ -648,8 +648,9 @@ const BranchGstReports = () => {
       qty: parseFloat(row.totalQty.toFixed(2)), rt: parseFloat(row.rate.toFixed(2))
     }));
 
+    const gstinToUse = (branch?.gstin && branch.gstin.trim() !== "") ? branch.gstin.trim().toUpperCase() : "33DULPS2600Q4Z3";
     const portalJson = {
-      gstin: branch?.gstin?.trim().toUpperCase() || "33DULPS2600Q4Z3",
+      gstin: gstinToUse,
       fp: `${String(selectedMonth).padStart(2, "0")}${selectedYear}`,
       cur_gt: 0,
       gt: 0,
@@ -683,7 +684,7 @@ const BranchGstReports = () => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `${branch?.gstin || "NO_GSTIN"}_GSTR1_${months[selectedMonth - 1]}_${selectedYear}.json`;
+    link.download = `${gstinToUse}_GSTR1_${months[selectedMonth - 1]}_${selectedYear}.json`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -773,8 +774,9 @@ const BranchGstReports = () => {
       csamt: parseFloat((row.cess || 0).toFixed(2))
     }));
 
+    const gstinToUse = (dataToUse.branchGstin && dataToUse.branchGstin.trim() !== "") ? dataToUse.branchGstin.trim().toUpperCase() : ((branch?.gstin && branch.gstin.trim() !== "") ? branch.gstin.trim().toUpperCase() : "33DULPS2600Q4Z3");
     const portalJson = {
-      gstin: branch?.gstin?.trim().toUpperCase() || "33DULPS2600Q4Z3",
+      gstin: gstinToUse,
       fp: `${String(selectedMonth).padStart(2, "0")}${selectedYear}`,
       cur_gt: 0,
       gt: 0,
@@ -810,7 +812,7 @@ const BranchGstReports = () => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = customName ? `${customName}.json` : `${dataToUse.branchGstin || branch?.gstin || "33DULPS2600Q4Z3"}_GSTR1_DIRECT_${months[selectedMonth - 1]}_${selectedYear}.json`;
+    link.download = customName ? `${customName}.json` : `${gstinToUse}_GSTR1_DIRECT_${months[selectedMonth - 1]}_${selectedYear}.json`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -862,7 +864,7 @@ const BranchGstReports = () => {
       });
       reportData.hsnSummary = Object.values(mergedHsn);
 
-      const displayGstin = reportData.branchGstin || branch?.gstin || "NO_GSTIN";
+      const displayGstin = (reportData.branchGstin && reportData.branchGstin.trim() !== "") ? reportData.branchGstin.trim().toUpperCase() : ((branch?.gstin && branch.gstin.trim() !== "") ? branch.gstin.trim().toUpperCase() : "33DULPS2600Q4Z3");
       const customName = `${displayGstin}_GSTR1_MISSING_ONLY_${months[selectedMonth - 1]}_${selectedYear}`;
 
       if (format === 'excel') {
@@ -988,8 +990,9 @@ const BranchGstReports = () => {
 
     if (!sectionData) return;
 
+    const gstinToUse = (branch?.gstin && branch.gstin.trim() !== "") ? branch.gstin.trim().toUpperCase() : "33DULPS2600Q4Z3";
     const portalJson = {
-      gstin: branch?.gstin?.trim().toUpperCase() || "33DULPS2600Q4Z3",
+      gstin: gstinToUse,
       fp: `${String(selectedMonth).padStart(2, "0")}${selectedYear}`,
       cur_gt: 0,
       gt: 0,
@@ -1000,7 +1003,7 @@ const BranchGstReports = () => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `${branch?.gstin || "33DULPS2600Q4Z3"}_GSTR1_${fileNamePart}_${months[selectedMonth - 1]}_${selectedYear}.json`;
+    link.download = `${gstinToUse}_GSTR1_${fileNamePart}_${months[selectedMonth - 1]}_${selectedYear}.json`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
