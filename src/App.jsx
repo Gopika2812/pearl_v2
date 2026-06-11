@@ -117,18 +117,17 @@ function AppContent() {
   const location = useLocation();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { 
-    superAdminViewBranch, 
-    user, 
-    currentBranch, 
-    blockingTokens, 
+  const {
+    superAdminViewBranch,
+    user,
+    currentBranch,
+    blockingTokens,
     reminderTokens,
-    isCheckingTokens, 
+    isCheckingTokens,
     refreshBlockingTokens,
     isSalesOrderLocked
   } = useBranch();
 
-  // Security: Prevent Copy/Select on Branch Routes
   useEffect(() => {
     if (location.pathname.startsWith("/branch/")) {
       document.body.classList.add("no-copy");
@@ -265,7 +264,7 @@ function AppContent() {
     return (
       <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 animate-in fade-in duration-300">
         <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden border border-slate-100 flex flex-col">
-          
+
           <div className="bg-gradient-to-br from-rose-500 to-amber-600 px-8 py-8 text-white text-center relative shrink-0 overflow-hidden">
             <div className="absolute top-0 right-0 -translate-y-1/4 translate-x-1/4 w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
             <div className="relative z-10">
@@ -329,7 +328,7 @@ function AppContent() {
                     <p className="text-[11px] font-bold text-slate-600 leading-relaxed italic">"{reminder.remarks}"</p>
                   </div>
                 )}
-                
+
                 <div className="mt-3 flex justify-between items-center text-[8px] font-bold text-slate-400">
                   <span className="uppercase">Scheduled By:</span>
                   <span className="text-slate-600 uppercase font-black">{reminder.followUpBy}</span>
@@ -355,13 +354,13 @@ function AppContent() {
   // Check if we're on a branch-specific page
   const isBranchRoute = location.pathname.startsWith("/branch/") || location.pathname === "/branch-home";
   const isInsightsRoute = location.pathname.startsWith("/branch/insights");
-  
+
   // Check if we're on a super admin page
   const isSuperAdminRoute = location.pathname.startsWith("/super-admin/");
 
   // Super admin viewing a branch → treat as branch route for layout purposes
   const isSuperAdminViewingBranch = !!superAdminViewBranch && isBranchRoute;
-  
+
   // Hide layout on login pages
   const hideLayout =
     location.pathname === "/" ||
@@ -401,12 +400,12 @@ function AppContent() {
         const res = await fetch(`${API_BASE}/branch-users/${user.id || user._id}`, {
           headers: { "Authorization": `Bearer ${token}` }
         });
-        
+
         if (res.ok) {
           const data = await res.json();
           if (data.success) {
             const latestUser = data.data;
-            
+
             // Check if user or branch is deactivated
             if (latestUser.status !== "ACTIVE" || (latestUser.branch && latestUser.branch.status !== "ACTIVE")) {
               toast.error("🛑 Access revoked. Account or Branch is no longer active.");
@@ -575,10 +574,10 @@ function AppContent() {
 
     // Mobile Screenshot Detection (Best effort: Window blur often occurs during screenshot)
     const handleBlur = () => {
-       // Only trigger if we are on a sensitive branch route
-       if (isBranchRoute) {
-          triggerOverlay();
-       }
+      // Only trigger if we are on a sensitive branch route
+      if (isBranchRoute) {
+        triggerOverlay();
+      }
     };
 
     document.addEventListener("contextmenu", handleContextMenu);
@@ -675,13 +674,13 @@ function AppContent() {
               </div>
               <h2 className="text-3xl font-black tracking-tight mb-2 uppercase">Action Required!</h2>
               <p className="text-indigo-100 font-bold text-xs uppercase tracking-widest leading-relaxed">
-                {blockingTokens[0]?.blockType === "START_WORK" 
-                  ? `You have a task taken but not started for over ${currentBranch?.tokenBlockTime || 120} minutes.` 
+                {blockingTokens[0]?.blockType === "START_WORK"
+                  ? `You have a task taken but not started for over ${currentBranch?.tokenBlockTime || 120} minutes.`
                   : `You have ${blockingTokens.length} mandatory ${blockingTokens.length === 1 ? 'task' : 'tasks'} assigned to you.`
                 }
-                <br /> 
-                {blockingTokens[0]?.blockType === "START_WORK" 
-                  ? "Click 'Start Work' to continue." 
+                <br />
+                {blockingTokens[0]?.blockType === "START_WORK"
+                  ? "Click 'Start Work' to continue."
                   : "Open a task to acknowledge and continue."
                 }
               </p>
@@ -705,14 +704,14 @@ function AppContent() {
                     </div>
                   </div>
                   {token.blockType === "START_WORK" ? (
-                    <button 
+                    <button
                       onClick={() => handleStartWorkInModal(token._id)}
                       className="self-center px-4 py-2 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-700 transition shadow-lg shadow-emerald-100"
                     >
                       Start Work
                     </button>
                   ) : (
-                    <button 
+                    <button
                       onClick={() => handleTakeToken(token._id)}
                       className="self-center px-4 py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition shadow-lg shadow-indigo-100"
                     >
@@ -725,16 +724,16 @@ function AppContent() {
           </div>
 
           <div className="p-8 bg-white border-t border-slate-100">
-             <div className="text-center text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
-               System Locked Until Task is Acknowledged
-             </div>
+            <div className="text-center text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
+              System Locked Until Task is Acknowledged
+            </div>
           </div>
         </div>
       </div>
     );
   };
-    
-      const dayBookRoute = <Route path="/branch/day-book" element={<ProtectedRoute element={<BranchDayBook />} />} />;
+
+  const dayBookRoute = <Route path="/branch/day-book" element={<ProtectedRoute element={<BranchDayBook />} />} />;
 
   return (
     <>
@@ -761,223 +760,223 @@ function AppContent() {
 
       <SecurityOverlay />
       <FollowUpReminderModal />
-      
-          <div className="flex">
-            {/* Sidebar logic:
+
+      <div className="flex">
+        {/* Sidebar logic:
                 - Super admin viewing a branch → BranchSidebar
                 - Super admin pages normally → SuperAdminSidebar
                 - Branch pages → BranchSidebar
                 - Otherwise → Sidebar (legacy)
             */}
-            {!hideLayout && !isInsightsRoute && (
-              <>
-                {isSuperAdminViewingBranch ? (
-                  <BranchSidebar
-                    isOpen={sidebarOpen}
-                    onClose={() => setSidebarOpen(false)}
-                    isBlocked={blockingTokens.length > 0}
-                  />
-                ) : isSuperAdminRoute ? (
-                  <SuperAdminSidebar
-                    isOpen={sidebarOpen}
-                    onClose={() => setSidebarOpen(false)}
-                  />
-                ) : isBranchRoute ? (
-                  <BranchSidebar
-                    isOpen={sidebarOpen}
-                    onClose={() => setSidebarOpen(false)}
-                    isBlocked={blockingTokens.length > 0}
-                  />
-                ) : (
-                  <Sidebar
-                    isOpen={sidebarOpen}
-                    onClose={() => setSidebarOpen(false)}
-                  />
-                )}
-              </>
+        {!hideLayout && !isInsightsRoute && (
+          <>
+            {isSuperAdminViewingBranch ? (
+              <BranchSidebar
+                isOpen={sidebarOpen}
+                onClose={() => setSidebarOpen(false)}
+                isBlocked={blockingTokens.length > 0}
+              />
+            ) : isSuperAdminRoute ? (
+              <SuperAdminSidebar
+                isOpen={sidebarOpen}
+                onClose={() => setSidebarOpen(false)}
+              />
+            ) : isBranchRoute ? (
+              <BranchSidebar
+                isOpen={sidebarOpen}
+                onClose={() => setSidebarOpen(false)}
+                isBlocked={blockingTokens.length > 0}
+              />
+            ) : (
+              <Sidebar
+                isOpen={sidebarOpen}
+                onClose={() => setSidebarOpen(false)}
+              />
             )}
+          </>
+        )}
 
-            {/* Main Content Area: Offset by sidebar width (20 units = 80px) on desktop */}
-            <div className={`flex-1 min-h-screen flex flex-col transition-all duration-300 w-full overflow-hidden ${(!hideLayout && !isInsightsRoute) || isSuperAdminRoute ? "md:ml-20" : ""}`}>
-              {!hideLayout && (
-                <>
-                  {user?.role === "SUPER_ADMIN" ? (
-                    <SuperAdminTopbar onMenuClick={() => setSidebarOpen(true)} />
-                  ) : isBranchRoute && !isInsightsRoute ? (
-                    <BranchTopbar onMenuClick={() => setSidebarOpen(true)} />
-                  ) : (
-                    !isInsightsRoute && <Topbar onMenuClick={() => setSidebarOpen(true)} />
-                  )}
-                </>
+        {/* Main Content Area: Offset by sidebar width (20 units = 80px) on desktop */}
+        <div className={`flex-1 min-h-screen flex flex-col transition-all duration-300 w-full overflow-hidden ${(!hideLayout && !isInsightsRoute) || isSuperAdminRoute ? "md:ml-20" : ""}`}>
+          {!hideLayout && (
+            <>
+              {user?.role === "SUPER_ADMIN" ? (
+                <SuperAdminTopbar onMenuClick={() => setSidebarOpen(true)} />
+              ) : isBranchRoute && !isInsightsRoute ? (
+                <BranchTopbar onMenuClick={() => setSidebarOpen(true)} />
+              ) : (
+                !isInsightsRoute && <Topbar onMenuClick={() => setSidebarOpen(true)} />
               )}
+            </>
+          )}
 
-              <div className={`flex-1 transition-all duration-300 overflow-y-auto ${isInsightsRoute || isSuperAdminRoute ? "p-0" : "p-6"} ${!hideLayout ? (isSalesOrderLocked && user?.role !== "SUPER_ADMIN" && user?.role !== "SUPERADMIN" ? "pt-24" : "pt-16") : ""}`}>
-                <Routes>
-                  <Route path="/" element={<BranchLoginPage />} />
-                  <Route path="/branch/other-payment" element={<BranchOtherPayment />} />
-                  <Route path="/branch/other-receipt" element={<BranchOtherReceipt />} />
-                  <Route path="/branch-login" element={<BranchLoginPage />} />
-                  <Route path="/branch-register" element={<BranchRegisterPage />} />
-                  <Route path="/user-register" element={<UserRegistrationPage />} />
-                  <Route path="/super-admin-login" element={<SuperAdminLoginPage />} />
-                  <Route path="/super-admin/dashboard" element={<ProtectedRoute element={<SuperAdminDashboard />} role={["SUPER_ADMIN"]} />} />
-                  <Route path="/super-admin/branch-management" element={<ProtectedRoute element={<SuperAdminBranchManagement />} role={["SUPER_ADMIN"]} />} />
-                  <Route path="/home" element={<Home />} />
-                  <Route path="/login" element={<HrLogin />} />
-                  <Route path="/customer-login" element={<CustomerLogin />} />
-                  <Route path="/pearls-shopping" element={<PearlsShopping />} />
+          <div className={`flex-1 transition-all duration-300 overflow-y-auto ${isInsightsRoute || isSuperAdminRoute ? "p-0" : "p-6"} ${!hideLayout ? (isSalesOrderLocked && user?.role !== "SUPER_ADMIN" && user?.role !== "SUPERADMIN" ? "pt-24" : "pt-16") : ""}`}>
+            <Routes>
+              <Route path="/" element={<BranchLoginPage />} />
+              <Route path="/branch/other-payment" element={<BranchOtherPayment />} />
+              <Route path="/branch/other-receipt" element={<BranchOtherReceipt />} />
+              <Route path="/branch-login" element={<BranchLoginPage />} />
+              <Route path="/branch-register" element={<BranchRegisterPage />} />
+              <Route path="/user-register" element={<UserRegistrationPage />} />
+              <Route path="/super-admin-login" element={<SuperAdminLoginPage />} />
+              <Route path="/super-admin/dashboard" element={<ProtectedRoute element={<SuperAdminDashboard />} role={["SUPER_ADMIN"]} />} />
+              <Route path="/super-admin/branch-management" element={<ProtectedRoute element={<SuperAdminBranchManagement />} role={["SUPER_ADMIN"]} />} />
+              <Route path="/home" element={<Home />} />
+              <Route path="/login" element={<HrLogin />} />
+              <Route path="/customer-login" element={<CustomerLogin />} />
+              <Route path="/pearls-shopping" element={<PearlsShopping />} />
 
-                  {/* BRANCH-SPECIFIC ROUTES - Protected */}
-                  <Route path="/branch-home" element={<ProtectedRoute element={<BranchHome />} />} />
-                  <Route path="/branch/insights" element={<ProtectedRoute element={<BranchInsights />} />} />
-                  <Route path="/branch/po" element={<ProtectedRoute element={<BranchPO />} />} />
-                  <Route path="/branch/purchase-orders" element={<ProtectedRoute element={<BranchPurchaseOrders />} />} />
-                  <Route path="/branch/purchase-invoices" element={<ProtectedRoute element={<BranchPurchaseInvoices />} />} />
-                  <Route path="/branch/recycling" element={<ProtectedRoute element={<BranchRecycling />} />} />
-                  <Route path="/branch/debit-note" element={<ProtectedRoute element={<BranchDebitNote />} />} />
-                  <Route path="/branch/po-payment" element={<ProtectedRoute element={<BranchPOPayment />} />} />
-                  <Route path="/branch/sales-order" element={<ProtectedRoute element={<BranchSalesOrder />} />} />
-                  <Route path="/branch/sales-orders" element={<ProtectedRoute element={<BranchInvoicedOrders />} />} />
-                  <Route path="/branch/sales-invoices" element={<ProtectedRoute element={<BranchSalesInvoices />} />} />
-                  <Route path="/branch/credit-note" element={<ProtectedRoute element={<BranchCreditNote />} />} />
-                  <Route path="/branch/claims" element={<ProtectedRoute element={<BranchClaims />} />} />
-                  <Route path="/branch/dispatch" element={<ProtectedRoute element={<BranchDispatch />} />} />
-                  <Route path="/branch/suppliers" element={<ProtectedRoute element={<BranchSuppliers />} />} />
-                  <Route path="/branch/supplier-transactions" element={<ProtectedRoute element={<BranchSupplierTransactions />} />} />
-                  <Route path="/branch/customers" element={<ProtectedRoute element={<BranchCustomers />} />} />
-                  <Route path="/branch/journals" element={<ProtectedRoute element={<BranchJournalEntries />} />} />
-                  <Route path="/branch/stock-journal" element={<ProtectedRoute element={<BranchStockJournal />} />} />
-                  <Route path="/branch/quick-links" element={<ProtectedRoute element={<BranchQuickLinks />} />} />
-                  <Route path="/branch/receipt" element={<ProtectedRoute element={<BranchReceipt />} />} />
-                  <Route path="/branch/receipt-records" element={<ProtectedRoute element={<BranchReceiptRecords />} />} />
-                  <Route path="/branch/payment-records" element={<ProtectedRoute element={<BranchPaymentRecords />} />} />
-                  <Route path="/branch/summary" element={<ProtectedRoute element={<BranchSummary />} />} />
-                  <Route path="/branch/product-records" element={<ProtectedRoute element={<BranchProductRecords />} />} />
-                  <Route path="/branch/stock-summary" element={<ProtectedRoute element={<BranchStockSummary />} />} />
-                  <Route path="/branch/batch-inventory" element={<ProtectedRoute element={<BranchInventoryAging />} />} />
-                  <Route path="/branch/locked-prices" element={<ProtectedRoute element={<BranchLockedPrices />} />} />
-                  <Route path="/branch/day-book" element={<ProtectedRoute element={<BranchDayBook />} />} />
-                  <Route path="/branch/admin-requests" element={<ProtectedRoute element={<BranchAdminRequests />} role={["ADMIN"]} />} />
-                  <Route path="/branch/extra-expense-ledger" element={<ProtectedRoute element={<BranchExtraExpenseLedger />} />} />
-                  <Route path="/branch/product-config" element={<ProtectedRoute element={<BranchProductConfig />} />} />
-                  <Route path="/branch/ledger" element={<ProtectedRoute element={<BranchLedger />} />} />
-                  <Route path="/branch/customer-ledger/:customerId" element={<ProtectedRoute element={<BranchCustomerLedger />} />} />
-                  <Route path="/branch/gst-reports" element={<ProtectedRoute element={<BranchGstReports />} />} />
-                  <Route path="/branch/spotted-customer-ledger" element={<ProtectedRoute element={<BranchSpottedCustomerLedger />} />} />
+              {/* BRANCH-SPECIFIC ROUTES - Protected */}
+              <Route path="/branch-home" element={<ProtectedRoute element={<BranchHome />} />} />
+              <Route path="/branch/insights" element={<ProtectedRoute element={<BranchInsights />} />} />
+              <Route path="/branch/po" element={<ProtectedRoute element={<BranchPO />} />} />
+              <Route path="/branch/purchase-orders" element={<ProtectedRoute element={<BranchPurchaseOrders />} />} />
+              <Route path="/branch/purchase-invoices" element={<ProtectedRoute element={<BranchPurchaseInvoices />} />} />
+              <Route path="/branch/recycling" element={<ProtectedRoute element={<BranchRecycling />} />} />
+              <Route path="/branch/debit-note" element={<ProtectedRoute element={<BranchDebitNote />} />} />
+              <Route path="/branch/po-payment" element={<ProtectedRoute element={<BranchPOPayment />} />} />
+              <Route path="/branch/sales-order" element={<ProtectedRoute element={<BranchSalesOrder />} />} />
+              <Route path="/branch/sales-orders" element={<ProtectedRoute element={<BranchInvoicedOrders />} />} />
+              <Route path="/branch/sales-invoices" element={<ProtectedRoute element={<BranchSalesInvoices />} />} />
+              <Route path="/branch/credit-note" element={<ProtectedRoute element={<BranchCreditNote />} />} />
+              <Route path="/branch/claims" element={<ProtectedRoute element={<BranchClaims />} />} />
+              <Route path="/branch/dispatch" element={<ProtectedRoute element={<BranchDispatch />} />} />
+              <Route path="/branch/suppliers" element={<ProtectedRoute element={<BranchSuppliers />} />} />
+              <Route path="/branch/supplier-transactions" element={<ProtectedRoute element={<BranchSupplierTransactions />} />} />
+              <Route path="/branch/customers" element={<ProtectedRoute element={<BranchCustomers />} />} />
+              <Route path="/branch/journals" element={<ProtectedRoute element={<BranchJournalEntries />} />} />
+              <Route path="/branch/stock-journal" element={<ProtectedRoute element={<BranchStockJournal />} />} />
+              <Route path="/branch/quick-links" element={<ProtectedRoute element={<BranchQuickLinks />} />} />
+              <Route path="/branch/receipt" element={<ProtectedRoute element={<BranchReceipt />} />} />
+              <Route path="/branch/receipt-records" element={<ProtectedRoute element={<BranchReceiptRecords />} />} />
+              <Route path="/branch/payment-records" element={<ProtectedRoute element={<BranchPaymentRecords />} />} />
+              <Route path="/branch/summary" element={<ProtectedRoute element={<BranchSummary />} />} />
+              <Route path="/branch/product-records" element={<ProtectedRoute element={<BranchProductRecords />} />} />
+              <Route path="/branch/stock-summary" element={<ProtectedRoute element={<BranchStockSummary />} />} />
+              <Route path="/branch/batch-inventory" element={<ProtectedRoute element={<BranchInventoryAging />} />} />
+              <Route path="/branch/locked-prices" element={<ProtectedRoute element={<BranchLockedPrices />} />} />
+              <Route path="/branch/day-book" element={<ProtectedRoute element={<BranchDayBook />} />} />
+              <Route path="/branch/admin-requests" element={<ProtectedRoute element={<BranchAdminRequests />} role={["ADMIN"]} />} />
+              <Route path="/branch/extra-expense-ledger" element={<ProtectedRoute element={<BranchExtraExpenseLedger />} />} />
+              <Route path="/branch/product-config" element={<ProtectedRoute element={<BranchProductConfig />} />} />
+              <Route path="/branch/ledger" element={<ProtectedRoute element={<BranchLedger />} />} />
+              <Route path="/branch/customer-ledger/:customerId" element={<ProtectedRoute element={<BranchCustomerLedger />} />} />
+              <Route path="/branch/gst-reports" element={<ProtectedRoute element={<BranchGstReports />} />} />
+              <Route path="/branch/spotted-customer-ledger" element={<ProtectedRoute element={<BranchSpottedCustomerLedger />} />} />
 
-                  <Route path="/branch/follow-up" element={<ProtectedRoute element={<BranchFollowUp />} />} />
-                  <Route path="/branch/follow-up-records" element={<ProtectedRoute element={<BranchFollowUpRecords />} />} />
-                  <Route path="/branch/physical-stock" element={<ProtectedRoute element={<BranchPhysicalStock />} />} />
-                  <Route path="/branch/physical-stock-records" element={<ProtectedRoute element={<BranchPhysicalStockRecords />} />} />
-                  <Route path="/branch/tokenization" element={<ProtectedRoute element={<Tokenization />} />} />
-                  <Route path="/branch/delivery-flow" element={<ProtectedRoute element={<BranchDeliveryFlow />} />} />
-                  <Route path="/branch/delivery-records" element={<ProtectedRoute element={<BranchDeliveryRecords />} />} />
-                  <Route path="/branch/delivery-receipt" element={<ProtectedRoute element={<BranchDeliveryReceipt />} />} />
-                  <Route path="/branch/transferred-receipts" element={<ProtectedRoute element={<BranchTransferredReceipts />} />} />
-                  
-                  {/* HR PAYROLL ROUTES */}
-                  <Route path="/branch/hr/attendance" element={<ProtectedRoute element={<AttendancePage />} />} />
-                  <Route path="/branch/hr/attendance-logs" element={<ProtectedRoute element={<AttendanceRecordPage />} />} />
-                  <Route path="/branch/hr/payroll" element={<ProtectedRoute element={<PayrollPage />} />} />
-                  <Route path="/branch/hr/salary-structure" element={<ProtectedRoute element={<SalaryStructurePage />} />} />
-                  <Route path="/branch/hr/salary-records" element={<ProtectedRoute element={<SalaryRecordsPage />} role={["SUPER_ADMIN"]} />} />
-                  <Route path="/branch/hr/reports" element={<ProtectedRoute element={<HRReportsPage />} />} />
-                  <Route path="/branch/smart-orders" element={<ProtectedRoute element={<SmartOrdersDashboard />} />} />
-                  <Route path="/branch/tasks" element={<ProtectedRoute element={<TaskBoardPage />} />} />
-                  <Route path="/branch/online-orders" element={<ProtectedRoute element={<OnlineOrdersPage />} />} />
-                  <Route path="/shared-order/:token" element={<SharedLinkCustomerPage />} />
+              <Route path="/branch/follow-up" element={<ProtectedRoute element={<BranchFollowUp />} />} />
+              <Route path="/branch/follow-up-records" element={<ProtectedRoute element={<BranchFollowUpRecords />} />} />
+              <Route path="/branch/physical-stock" element={<ProtectedRoute element={<BranchPhysicalStock />} />} />
+              <Route path="/branch/physical-stock-records" element={<ProtectedRoute element={<BranchPhysicalStockRecords />} />} />
+              <Route path="/branch/tokenization" element={<ProtectedRoute element={<Tokenization />} />} />
+              <Route path="/branch/delivery-flow" element={<ProtectedRoute element={<BranchDeliveryFlow />} />} />
+              <Route path="/branch/delivery-records" element={<ProtectedRoute element={<BranchDeliveryRecords />} />} />
+              <Route path="/branch/delivery-receipt" element={<ProtectedRoute element={<BranchDeliveryReceipt />} />} />
+              <Route path="/branch/transferred-receipts" element={<ProtectedRoute element={<BranchTransferredReceipts />} />} />
 
-                  {/* LEGACY ROUTES */}
-                  <Route
-                    path="/purchase-order"
-                    element={<InventoryPurchaseOrder />}
-                  />
-                  <Route
-                    path="/sales-order"
-                    element={<InventorySalesOrder />}
-                  />
-                  <Route path="/pearls-book" element={<PearlsBookPage />} />
-                  <Route path="/crm" element={<CRMPage />} />
-                  <Route path="/dispatch" element={<DispatchSheetPage />} />
-                  <Route path="/employees" element={<EmployeesBookPage />} />
-                  <Route
-                    path="/employeepage"
-                    element={<EmployeeDashboardPage />}
-                  />
-                  <Route path="/hr-control" element={<HRControlPanel />} />
-                  <Route
-                    path="/summary/products"
-                    element={<ProductSummary />}
-                  />
-                  <Route
-                    path="/summary/customers"
-                    element={<CustomerSummary />}
-                  />
-                  <Route
-                    path="/summary/vendors"
-                    element={<VendorSummary />}
-                  />
-                  <Route
-                    path="/summary/others"
-                    element={<OthersSummary />}
-                  />
-                  <Route
-                    path="/reports/trial-balance"
-                    element={<TrialBalancePage />}
-                  />
-                  <Route
-                    path="/reports/balance-sheet"
-                    element={<BalanceSheetPage />}
-                  />
-                  <Route
-                    path="/reports/profit-loss"
-                    element={<ProfitLossPage />}
-                  />
-                  <Route
-                    path="/reports/ar-aging"
-                    element={<ARAgingPage />}
-                  />
-                  <Route
-                    path="/reports/ap-aging"
-                    element={<APAgingPage />}
-                  />
-                  <Route
-                    path="/reordering"
-                    element={<ReorderingDashboard />}
-                  />
-                  <Route
-                    path="/admin/attendance-report"
-                    element={<ProtectedRoute element={<AttendanceReportPage />} role={["ADMIN", "SUPER_ADMIN", "SUPERADMIN"]} />}
-                  />
-                  <Route
-                    path="/admin/branches"
-                    element={<ProtectedRoute element={<AdminBranchManagement />} role={["ADMIN"]} />}
-                  />
-                  <Route
-                    path="/super-admin/control-system"
-                    element={<ProtectedRoute element={<SuperAdminControlSystem />} role={["SUPER_ADMIN"]} />}
-                  />
-                  <Route
-                    path="/super-admin/audit-logs"
-                    element={<ProtectedRoute element={<SuperAdminAuditLogs />} role={["SUPER_ADMIN"]} />}
-                  />
-                  <Route 
-                    path="/super-admin/user-management" 
-                    element={<ProtectedRoute element={<SuperAdminUserManagement />} role={["SUPER_ADMIN"]} />} 
-                  />
-                  <Route 
-                    path="/super-admin/credit-requests" 
-                    element={<ProtectedRoute element={<SuperAdminCreditRequests />} role={["SUPER_ADMIN"]} />} 
-                  />
-                  <Route 
-                    path="/super-admin/ai-procurement-assistant" 
-                    element={<ProtectedRoute element={<AIProcurementAssistantPage />} role={["SUPER_ADMIN"]} />} 
-                  />
-                </Routes>
-            </div>
+              {/* HR PAYROLL ROUTES */}
+              <Route path="/branch/hr/attendance" element={<ProtectedRoute element={<AttendancePage />} />} />
+              <Route path="/branch/hr/attendance-logs" element={<ProtectedRoute element={<AttendanceRecordPage />} />} />
+              <Route path="/branch/hr/payroll" element={<ProtectedRoute element={<PayrollPage />} />} />
+              <Route path="/branch/hr/salary-structure" element={<ProtectedRoute element={<SalaryStructurePage />} />} />
+              <Route path="/branch/hr/salary-records" element={<ProtectedRoute element={<SalaryRecordsPage />} role={["SUPER_ADMIN"]} />} />
+              <Route path="/branch/hr/reports" element={<ProtectedRoute element={<HRReportsPage />} />} />
+              <Route path="/branch/smart-orders" element={<ProtectedRoute element={<SmartOrdersDashboard />} />} />
+              <Route path="/branch/tasks" element={<ProtectedRoute element={<TaskBoardPage />} />} />
+              <Route path="/branch/online-orders" element={<ProtectedRoute element={<OnlineOrdersPage />} />} />
+              <Route path="/shared-order/:token" element={<SharedLinkCustomerPage />} />
+
+              {/* LEGACY ROUTES */}
+              <Route
+                path="/purchase-order"
+                element={<InventoryPurchaseOrder />}
+              />
+              <Route
+                path="/sales-order"
+                element={<InventorySalesOrder />}
+              />
+              <Route path="/pearls-book" element={<PearlsBookPage />} />
+              <Route path="/crm" element={<CRMPage />} />
+              <Route path="/dispatch" element={<DispatchSheetPage />} />
+              <Route path="/employees" element={<EmployeesBookPage />} />
+              <Route
+                path="/employeepage"
+                element={<EmployeeDashboardPage />}
+              />
+              <Route path="/hr-control" element={<HRControlPanel />} />
+              <Route
+                path="/summary/products"
+                element={<ProductSummary />}
+              />
+              <Route
+                path="/summary/customers"
+                element={<CustomerSummary />}
+              />
+              <Route
+                path="/summary/vendors"
+                element={<VendorSummary />}
+              />
+              <Route
+                path="/summary/others"
+                element={<OthersSummary />}
+              />
+              <Route
+                path="/reports/trial-balance"
+                element={<TrialBalancePage />}
+              />
+              <Route
+                path="/reports/balance-sheet"
+                element={<BalanceSheetPage />}
+              />
+              <Route
+                path="/reports/profit-loss"
+                element={<ProfitLossPage />}
+              />
+              <Route
+                path="/reports/ar-aging"
+                element={<ARAgingPage />}
+              />
+              <Route
+                path="/reports/ap-aging"
+                element={<APAgingPage />}
+              />
+              <Route
+                path="/reordering"
+                element={<ReorderingDashboard />}
+              />
+              <Route
+                path="/admin/attendance-report"
+                element={<ProtectedRoute element={<AttendanceReportPage />} role={["ADMIN", "SUPER_ADMIN", "SUPERADMIN"]} />}
+              />
+              <Route
+                path="/admin/branches"
+                element={<ProtectedRoute element={<AdminBranchManagement />} role={["ADMIN"]} />}
+              />
+              <Route
+                path="/super-admin/control-system"
+                element={<ProtectedRoute element={<SuperAdminControlSystem />} role={["SUPER_ADMIN"]} />}
+              />
+              <Route
+                path="/super-admin/audit-logs"
+                element={<ProtectedRoute element={<SuperAdminAuditLogs />} role={["SUPER_ADMIN"]} />}
+              />
+              <Route
+                path="/super-admin/user-management"
+                element={<ProtectedRoute element={<SuperAdminUserManagement />} role={["SUPER_ADMIN"]} />}
+              />
+              <Route
+                path="/super-admin/credit-requests"
+                element={<ProtectedRoute element={<SuperAdminCreditRequests />} role={["SUPER_ADMIN"]} />}
+              />
+              <Route
+                path="/super-admin/ai-procurement-assistant"
+                element={<ProtectedRoute element={<AIProcurementAssistantPage />} role={["SUPER_ADMIN"]} />}
+              />
+            </Routes>
           </div>
         </div>
-      </>
+      </div>
+    </>
   );
 }
 
