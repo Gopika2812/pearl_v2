@@ -980,12 +980,12 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
                     .map((item, idx) => `
                     <tr>
                       <td style="text-align: center; color: #64748b; font-size: 11px; font-weight: bold;">${idx + 1}</td>
-                      <td style="font-weight: 900; color: #000; font-size: 8px; text-transform: uppercase;">${item.name} (Req: ${item.originalQty || item.qty}, Confirm: ${item.confirmedQty || item.qty})</td>
+                      <td style="font-weight: 900; color: #000; font-size: 10px; text-transform: uppercase;">${item.name} (Req: ${item.originalQty || item.qty}, Confirm: ${item.confirmedQty || item.qty})</td>
                       ${!isDummy ? `
                         <td style="text-align: center; color: #000; font-weight: bold;">${item.hsn || "-"}</td>
                         <td style="text-align: center; color: #000; font-weight: bold;">${item.gst || 0}%</td>
                       ` : ''}
-                      <td style="text-align: center; font-weight: 900; color: #000; font-size: 8px;">${item.qty || item.confirmedQty} ${item.unit || ""}</td>
+                      <td style="text-align: center; font-weight: 900; color: #000; font-size: 10px;">${item.qty || item.confirmedQty} ${item.unit || ""}</td>
                       ${!isDummy ? `
                         <td style="text-align: right;">₹${item.sellingPrice?.toFixed(2) || 0}</td>
                         <td style="text-align: right; font-weight: bold; color: #000;">₹${((item.qty || item.confirmedQty) * (item.sellingPrice || 0)).toFixed(2)}</td>

@@ -55,11 +55,9 @@ export default function BranchLoginPage() {
       
       // Store currentBranch with _id for consistency
       const normalizedBranch = {
+        ...userBranch,
         _id: branchId,
         id: branchId, // Keep both for compatibility
-        name: userBranch.name,
-        code: userBranch.code,
-        location: userBranch.location,
       };
       localStorage.setItem("currentBranch", JSON.stringify(normalizedBranch));
       
