@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import * as XLSX from "xlsx";
 import {
-  FaCalendarAlt, FaSearch, FaFilter, FaSync, FaDownload, FaTags, FaBoxOpen, FaCalculator, FaTimes
+  FaCalendarAlt, FaSearch, FaFilter, FaSync, FaDownload, FaTags, FaBoxOpen, FaCalculator, FaTimes, FaEdit
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { API_BASE, fetchWithAuth } from "../../api";
@@ -23,6 +23,52 @@ const BranchInventoryAging = () => {
   // Data State
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
+
+  // Edit State
+  const [editingRowKey, setEditingRowKey] = useState(null);
+  const [editForm, setEditForm] = useState({ mrp: "", manufacturingDate: "", expiryDate: "" });
+
+  const handleEditClick = (row) => {
+    setEditForm({
+      mrp: row.mrp || "",
+      manufacturingDate: row.manufacturingDate ? new Date(row.manufacturingDate).toISOString().split("T")[0] : "",
+      expiryDate: row.expiryDate ? new Date(row.expiryDate).toISOString().split("T")[0] : ""
+    });
+    setEditingRowKey(`${row.productId}_${row.batchNo}`);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingRowKey(null);
+  };
+
+  const handleSaveBatchEdit = async (row) => {
+    try {
+      const url = `${API_BASE}/products/${row.productId}/batches/${row.batchNo}`;
+      const payload = {
+        mrp: editForm.mrp,
+        manufacturingDate: editForm.manufacturingDate || null,
+        expiryDate: editForm.expiryDate || null
+      };
+      
+      const res = await fetchWithAuth(url, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      
+      if (data.success) {
+        toast.success(data.message || "Batch updated successfully");
+        setEditingRowKey(null);
+        fetchBatchInventory();
+      } else {
+        toast.error(data.message || "Failed to update batch");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Error updating batch details");
+    }
+  };
 
   // Sorting State
   const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
@@ -615,10 +661,16 @@ const BranchInventoryAging = () => {
                     <th className="px-6 py-4 text-center cursor-pointer select-none hover:bg-slate-100 transition duration-150" onClick={() => handleSort("age")}>
                       Batch Aging Status {renderSortIndicator("age")}
                     </th>
+                    <th className="px-4 py-4 text-center select-none">
+                      Action
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {sortedRows.map((row, index) => (
+                  {sortedRows.map((row, index) => {
+                    const rowKey = `${row.productId}_${row.batchNo}`;
+                    const isEditing = editingRowKey === rowKey;
+                    return (
                     <tr key={index} className="hover:bg-slate-50/50 transition">
                       {/* Product details */}
                       <td className="px-6 py-4">
@@ -637,27 +689,48 @@ const BranchInventoryAging = () => {
 
                       {/* Mfg Date */}
                       <td className="px-4 py-4 text-center font-bold text-slate-600">
-                        {row.batchNo === "0" 
-                          ? "-" 
-                          : (row.manufacturingDate 
-                              ? new Date(row.manufacturingDate).toLocaleDateString("en-IN", { day: '2-digit', month: 'short', year: 'numeric' })
-                              : "-")
-                        }
+                        {isEditing ? (
+                          <input
+                            type="date"
+                            value={editForm.manufacturingDate}
+                            onChange={(e) => setEditForm({ ...editForm, manufacturingDate: e.target.value })}
+                            className="w-full bg-white border border-slate-200 rounded-lg py-1.5 px-2 text-xs font-bold text-slate-700 shadow-sm focus:outline-none focus:ring-1 focus:ring-[#319bab] transition-all"
+                          />
+                        ) : (
+                          row.manufacturingDate 
+                            ? new Date(row.manufacturingDate).toLocaleDateString("en-IN", { day: '2-digit', month: 'short', year: 'numeric' })
+                            : "-"
+                        )}
                       </td>
 
                       {/* Expiry Date */}
                       <td className="px-4 py-4 text-center font-bold text-slate-600">
-                        {row.batchNo === "0" 
-                          ? "-" 
-                          : (row.expiryDate 
-                              ? new Date(row.expiryDate).toLocaleDateString("en-IN", { day: '2-digit', month: 'short', year: 'numeric' })
-                              : "No Expiry")
-                        }
+                        {isEditing ? (
+                          <input
+                            type="date"
+                            value={editForm.expiryDate}
+                            onChange={(e) => setEditForm({ ...editForm, expiryDate: e.target.value })}
+                            className="w-full bg-white border border-slate-200 rounded-lg py-1.5 px-2 text-xs font-bold text-slate-700 shadow-sm focus:outline-none focus:ring-1 focus:ring-[#319bab] transition-all"
+                          />
+                        ) : (
+                          row.expiryDate 
+                            ? new Date(row.expiryDate).toLocaleDateString("en-IN", { day: '2-digit', month: 'short', year: 'numeric' })
+                            : "No Expiry"
+                        )}
                       </td>
 
                       {/* MRP */}
                       <td className="px-4 py-4 text-right font-bold text-slate-700">
-                        {row.batchNo === "0" ? "-" : `₹${Number(row.mrp || 0).toFixed(2)}`}
+                        {isEditing ? (
+                          <input
+                            type="number"
+                            value={editForm.mrp}
+                            onChange={(e) => setEditForm({ ...editForm, mrp: e.target.value })}
+                            className="w-20 bg-white border border-slate-200 rounded-lg py-1.5 px-2 text-xs font-bold text-slate-700 shadow-sm focus:outline-none focus:ring-1 focus:ring-[#319bab] transition-all text-right ml-auto"
+                          />
+                        ) : (
+                          row.mrp ? `₹${Number(row.mrp).toFixed(2)}` : "-"
+                        )}
                       </td>
 
                       {/* Purchased qty */}
@@ -677,15 +750,48 @@ const BranchInventoryAging = () => {
 
                       {/* Expiry age status */}
                       <td className="px-6 py-4 text-center">
-                        {row.batchNo === "0" ? "-" : getAgeBadge(row.age)}
+                        {getAgeBadge(row.age)}
+                      </td>
+
+                      {/* Action */}
+                      <td className="px-4 py-4 text-center">
+                        {isEditing ? (
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => handleSaveBatchEdit(row)}
+                              className="bg-emerald-100 hover:bg-emerald-500 text-emerald-600 hover:text-white p-1.5 rounded-lg transition-colors shadow-sm"
+                              title="Save"
+                            >
+                              <FaSync size={12} className={loading ? "animate-spin" : ""} />
+                            </button>
+                            <button
+                              onClick={handleCancelEdit}
+                              className="bg-rose-100 hover:bg-rose-500 text-rose-600 hover:text-white p-1.5 rounded-lg transition-colors shadow-sm"
+                              title="Cancel"
+                            >
+                              <FaTimes size={12} />
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => handleEditClick(row)}
+                            className="bg-slate-100 hover:bg-[#319bab] text-slate-500 hover:text-white p-2 rounded-lg transition-colors shadow-sm"
+                            title="Edit Batch"
+                          >
+                            <FaEdit size={14} />
+                          </button>
+                        )}
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           )}
         </div>
+
+
 
       </div>
     </div>

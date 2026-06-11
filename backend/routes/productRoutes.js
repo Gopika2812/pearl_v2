@@ -1338,7 +1338,33 @@ router.put("/:id", auth, async (req, res) => {
 });
 
 /**
+ * PUT: Update Product Batch details
+ */
+router.put("/:id/batches/:batchNo", auth, async (req, res) => {
+  try {
+    const { id, batchNo } = req.params;
+    const { expiryDate, mrp, manufacturingDate } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: "Invalid product ID" });
+    }
+
+    const product = await Product.findById(id);
+    if (!product) return res.status(404).json({ success: false, message: "Product not found" });
+
+    product.updateBatchStock(batchNo, 0, expiryDate, mrp, manufacturingDate);
+    await product.save();
+
+    res.json({ success: true, message: "Batch updated successfully" });
+  } catch (error) {
+    console.error("Update Batch Error:", error);
+    res.status(500).json({ success: false, message: "Failed to update batch", error: error.message });
+  }
+});
+
+/**
  * DELETE: Delete Product
+
  */
 router.delete("/:id", async (req, res) => {
   try {
