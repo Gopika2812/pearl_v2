@@ -3,6 +3,7 @@ import Invoice from "../models/Invoice.js";
 import gstzenService from "../utils/gstzenService.js";
 import { createAuditLog } from "../utils/logUtil.js";
 import { PDFDocument } from 'pdf-lib';
+import mongoose from "mongoose";
 
 const router = express.Router();
 

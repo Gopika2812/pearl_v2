@@ -547,10 +547,10 @@ router.get("/gstr1", auth, async (req, res) => {
       data: {
         branchGstin: finalGstin,
         branchName: branchInfo?.name || "N/A",
-        b2b: b2b.filter(row => row.taxableValue > 0 || row.status === "CANCELLED"), 
+        b2b: b2b.filter(row => row.taxableValue > 0), 
         b2cl: finalB2CL, 
         b2cs: finalB2CS, 
-        b2cRaw, cdnr, cdnur,
+        b2cRaw: b2cRaw.filter(row => row.status !== "CANCELLED"), cdnr, cdnur,
         nilRated: [
           { description: "Inter-State supplies to registered persons", nilRated: Math.max(0, nilRated.interReg), exempt: 0, nonGst: 0 },
           { description: "Intra-State supplies to registered persons", nilRated: Math.max(0, nilRated.intraReg), exempt: 0, nonGst: 0 },
