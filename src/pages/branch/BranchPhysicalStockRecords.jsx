@@ -229,6 +229,7 @@ export default function BranchPhysicalStockRecords() {
       const matchSearch = !searchTerm ||
         r.productName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         r.sjId?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        r.voucherId?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         r.approvedBy?.username?.toLowerCase().includes(searchTerm.toLowerCase());
       const matchGroup = groupFilter === "ALL" || r.productGroupId === groupFilter ||
         (r.productGroupId?._id || r.productGroupId) === groupFilter;
@@ -355,7 +356,7 @@ export default function BranchPhysicalStockRecords() {
           <div className="w-px h-6 bg-gray-200 hidden md:block" />
           <div className="relative w-full md:flex-1">
             <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={12} />
-            <input type="text" placeholder="Search SJ ID, product..."
+            <input type="text" placeholder="Search Voucher ID, SJ ID, product..."
               value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
               className="w-full bg-gray-50 border border-gray-200 rounded-lg pl-8 pr-3 py-2.5 text-sm font-semibold text-gray-800 outline-none focus:border-violet-400 transition" />
           </div>
