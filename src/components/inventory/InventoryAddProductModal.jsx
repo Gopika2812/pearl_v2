@@ -1,9 +1,13 @@
 import { useEffect, useState } from "react";
 import { API_BASE, fetchWithAuth } from "../../api";
+import { useBranch } from "../../context/BranchContext";
 import FilterableCheckboxList from "../FilterableCheckboxList";
 import FilterableSelect from "../FilterableSelect";
 
-const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCategories = [], warehouses = [], branchId, onSave, editingItem }) => {
+const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCategories = [], warehouses = [], branchId, onSave, editingItem, isInline = false }) => {
+  const { user } = useBranch();
+  const isSuperAdmin = user?.role === "SUPER_ADMIN" || user?.role === "SUPERADMIN";
+
   useEffect(() => {
     if (isOpen) {
       console.log("📦 ProductModal opened with props:", {
@@ -456,13 +460,33 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
   const labelClass = "block text-sm font-medium text-gray-700 mb-1";
   const inputClass = "w-full p-2 border rounded-lg outline-primary focus:ring-1 focus:ring-primary transition-all";
 
-  return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[110] p-4">
-      <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+  const modalWrapperClass = isInline 
+    ? "w-full bg-white overflow-hidden flex flex-col border border-gray-200 rounded-xl mt-2" 
+    : "fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[110] p-4";
+  
+  const modalInnerClass = isInline
+    ? "w-full flex flex-col"
+    : "bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col";
 
-        <div className="bg-primary p-4 text-white flex justify-between items-center">
-          <h3 className="text-xl font-bold">Add New Product</h3>
-          <button onClick={handleModalClose} className="text-white hover:text-gray-200 font-bold text-xl">&times;</button>
+  const headerClass = isInline
+    ? "bg-primary/10 p-3 text-primary flex justify-between items-center border-b border-primary/20"
+    : "bg-primary p-4 text-white flex justify-between items-center";
+
+  const headerTextClass = isInline
+    ? "text-sm font-bold uppercase tracking-wider"
+    : "text-xl font-bold";
+
+  const closeButtonClass = isInline
+    ? "text-primary hover:text-primary/70 font-bold text-xl leading-none"
+    : "text-white hover:text-gray-200 font-bold text-xl leading-none";
+
+  return (
+    <div className={modalWrapperClass}>
+      <div className={modalInnerClass}>
+
+        <div className={headerClass}>
+          <h3 className={headerTextClass}>{editingItem ? "Edit Product" : "Add New Product"}</h3>
+          <button type="button" onClick={handleModalClose} className={closeButtonClass}>&times;</button>
         </div>
 
         <input
@@ -473,7 +497,7 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
           onChange={handleBulkUpload}
         />
 
-        {!uploadResult && (
+        {!uploadResult && !isInline && (
           <div className="p-4 bg-blue-50 border-b flex flex-col gap-3">
             <div className="flex items-center gap-2 px-1">
               <input
@@ -834,23 +858,25 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
               />
             </div>
 
-            {/* Admin Margin */}
-            <div>
-              <label className={labelClass}>Admin Margin (%) (Override)</label>
-              <input
-                type="number"
-                step="0.01"
-                className={inputClass}
-                placeholder="e.g. -10"
-                value={product.adminMargin}
-                onChange={(e) => setProduct({ ...product, adminMargin: e.target.value })}
-              />
-              {product.adminMargin && product.sellingPrice && (
-                <p className="text-[10px] text-primary font-bold mt-1">
-                  Net Rate: ₹{(Number(product.sellingPrice) + (Number(product.sellingPrice) * Number(product.adminMargin) / 100)).toFixed(2)}
-                </p>
-              )}
-            </div>
+            {/* Admin Margin - ONLY SHOW TO SUPER ADMIN */}
+            {isSuperAdmin && (
+              <div>
+                <label className={labelClass}>Admin Margin (%) (Override)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  className={inputClass}
+                  placeholder="e.g. -10"
+                  value={product.adminMargin}
+                  onChange={(e) => setProduct({ ...product, adminMargin: e.target.value })}
+                />
+                {product.adminMargin && product.sellingPrice && (
+                  <p className="text-[10px] text-primary font-bold mt-1">
+                    Net Rate: ₹{(Number(product.sellingPrice) + (Number(product.sellingPrice) * Number(product.adminMargin) / 100)).toFixed(2)}
+                  </p>
+                )}
+              </div>
+            )}
           </div>
 
 
@@ -884,60 +910,7 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
             </div>
           </div>
 
-          {/* INVENTORY OPTIMIZATION - NEW SECTION */}
-          <div className="border-t pt-4 mb-4">
-             <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">Inventory Alerts & Thresholds</h4>
-             <div className="grid grid-cols-3 gap-3">
-                <div>
-                   <label className="text-[9px] font-bold text-gray-500 uppercase">Reorder Level</label>
-                   <input 
-                     type="number" 
-                     className={inputClass}
-                     value={product.reorderLevel}
-                     onChange={(e) => setProduct({...product, reorderLevel: e.target.value})}
-                   />
-                </div>
-                <div>
-                   <label className="text-[9px] font-bold text-gray-500 uppercase">Reorder Qty</label>
-                   <input 
-                     type="number" 
-                     className={inputClass}
-                     value={product.reorderQty}
-                     onChange={(e) => setProduct({...product, reorderQty: e.target.value})}
-                   />
-                </div>
-                <div>
-                   <label className="text-[9px] font-bold text-gray-500 uppercase">Lead Time (Days)</label>
-                   <input 
-                     type="number" 
-                     className={inputClass}
-                     value={product.leadTime}
-                     onChange={(e) => setProduct({...product, leadTime: e.target.value})}
-                   />
-                </div>
-             </div>
-          </div>
 
-          <div className="grid grid-cols-2 gap-4 mb-4 border-t pt-4">
-              <div>
-                <label className="text-[9px] font-bold text-gray-500 uppercase">Min Stock Qty</label>
-                <input 
-                  type="number" 
-                  className={inputClass}
-                  value={product.minStockQty}
-                  onChange={(e) => setProduct({...product, minStockQty: e.target.value})}
-                />
-              </div>
-              <div>
-                <label className="text-[9px] font-bold text-gray-500 uppercase">Max Stock Qty</label>
-                <input 
-                  type="number" 
-                  className={inputClass}
-                  value={product.maxStockQty}
-                  onChange={(e) => setProduct({...product, maxStockQty: e.target.value})}
-                />
-              </div>
-          </div>
 
           {/* UNIT CONVERSION - NEW SECTION */}
           <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 mb-4">

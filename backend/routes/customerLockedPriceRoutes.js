@@ -216,16 +216,24 @@ router.post("/", auth, async (req, res) => {
     );
 
     // Audit Log
+    const newMarginPct = Math.round(marginPercentage * 100) / 100;
+    
     await createAuditLog({
       userId: req.user.id || req.user._id,
       userModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser",
       username: req.user.username || req.user.name,
       branchId,
       action: "LOCKED_PRICE_SAVE",
-      description: `Locked price set for ${product.name} at ₹${lockedPrice} (Customer: ${customer?.name || 'Unknown'}).`,
+      description: `Locked price set for ${product.name} at ₹${lockedPrice} (${newMarginPct}%) (Customer: ${customer?.name || 'Unknown'}).`,
       targetId: result._id,
       targetModel: "CustomerLockedPrice",
-      changes: { after: { lockedPrice, customerId, productId } }
+      changes: { 
+        after: { 
+          cost: Number(pPrice), 
+          lockedPrice: Number(lockedPrice), 
+          marginPercentage: newMarginPct 
+        } 
+      }
     });
 
     res.status(200).json({
@@ -292,18 +300,30 @@ router.put("/:id", auth, async (req, res) => {
     }
 
     // Audit Log
+    const oldMarginPct = oldEntry?.marginPercentage || 0;
+    const oldCost = oldEntry?.purchasingPrice || 0;
+    const newMarginPct = Math.round(marginPercentage * 100) / 100;
+    
     await createAuditLog({
       userId: req.user.id || req.user._id,
       userModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser",
       username: req.user.username || req.user.name,
       branchId: updated.branchId,
       action: "LOCKED_PRICE_UPDATE",
-      description: `Price Change for ${product.name}: ₹${oldEntry?.lockedPrice || 0} → ₹${lockedPrice} (Customer: ${customer?.name || 'Unknown'}).`,
+      description: `Locked Price Change for ${product.name} (Customer: ${customer?.name || 'Unknown'}): ₹${oldEntry?.lockedPrice || 0} → ₹${lockedPrice}.`,
       targetId: updated._id,
       targetModel: "CustomerLockedPrice",
       changes: { 
-        before: { lockedPrice: oldEntry?.lockedPrice },
-        after: { lockedPrice }
+        before: { 
+          cost: Number(oldCost),
+          lockedPrice: oldEntry?.lockedPrice, 
+          marginPercentage: oldMarginPct 
+        },
+        after: { 
+          cost: Number(pPrice),
+          lockedPrice: Number(lockedPrice), 
+          marginPercentage: newMarginPct 
+        }
       }
     });
 

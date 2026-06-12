@@ -140,6 +140,18 @@ export default function BranchQuickLinks() {
                 setEditingItem(item);
                 setActiveModal(viewingData);
               }}
+              renderInlineEdit={viewingData === "product" ? (item, onClose) => (
+                <InventoryAddProductModal
+                  isOpen={true}
+                  onClose={onClose}
+                  productGroups={productGroups}
+                  productCategories={productCategories}
+                  warehouses={warehouses}
+                  editingItem={item}
+                  branchId={branchId}
+                  isInline={true}
+                />
+              ) : undefined}
             />
           </div>
         ) : (

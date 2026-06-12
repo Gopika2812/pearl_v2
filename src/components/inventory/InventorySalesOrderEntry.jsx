@@ -104,6 +104,7 @@ export default function InventorySalesOrderEntry({
   const [discountAmountInput, setDiscountAmountInput] = useState("");
   const [customerId, setCustomerId] = useState("");
   const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [ledgerBalance, setLedgerBalance] = useState(null);
   const [recentOrders, setRecentOrders] = useState([]);
   const [showRecentPanel, setShowRecentPanel] = useState(true);
   const [creditStatus, setCreditStatus] = useState({
@@ -174,6 +175,27 @@ export default function InventorySalesOrderEntry({
   const customerDropdownRef = useRef(null);
   const productGroupDropdownRef = useRef(null);
   const sampleItemDropdownRef = useRef(null);
+
+  useEffect(() => {
+    if (selectedCustomer && selectedCustomer._id) {
+      setLedgerBalance(null);
+      fetchWithAuth(`${API_BASE}/customers/${selectedCustomer._id}/ledger`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && data.data && typeof data.data.closingBalance === "number") {
+          setLedgerBalance(data.data.closingBalance);
+        } else {
+          setLedgerBalance((selectedCustomer.debit || 0) - (selectedCustomer.credit || 0));
+        }
+      })
+      .catch(err => {
+        console.error("Failed to fetch ledger balance", err);
+        setLedgerBalance((selectedCustomer.debit || 0) - (selectedCustomer.credit || 0));
+      });
+    } else {
+      setLedgerBalance(null);
+    }
+  }, [selectedCustomer]);
 
   useEffect(() => {
     function handleClickOutside(event) {
@@ -1692,14 +1714,18 @@ export default function InventorySalesOrderEntry({
             <div>
               <label className={labelClass}>Closing Balance</label>
               <input
-                className={`${inputClass} font-bold ${selectedCustomer &&
-                  ((selectedCustomer.debit || 0) - (selectedCustomer.credit || 0)) < 0
-                  ? "text-red-500"
-                  : "text-blue-600"
-                  }`}
+                className={`${inputClass} font-bold ${
+                  selectedCustomer
+                    ? (ledgerBalance !== null ? ledgerBalance < 0 : ((selectedCustomer.debit || 0) - (selectedCustomer.credit || 0)) < 0)
+                      ? "text-red-500"
+                      : "text-blue-600"
+                    : ""
+                }`}
                 value={
                   selectedCustomer
-                    ? `₹${((selectedCustomer.debit || 0) - (selectedCustomer.credit || 0)).toFixed(2)}`
+                    ? ledgerBalance !== null
+                      ? `₹${ledgerBalance.toFixed(2)}`
+                      : "Loading..."
                     : ""
                 }
                 readOnly

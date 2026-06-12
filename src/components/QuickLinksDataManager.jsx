@@ -10,7 +10,7 @@ import { QUICK_LINKS_CONFIG } from "../utils/quickLinksConfig";
 import { useBranch } from "../context/BranchContext";
 import FilterableSelect from "./FilterableSelect";
 
-const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
+const QuickLinksDataManager = ({ type, onCancel, onEdit, renderInlineEdit }) => {
   const { currentBranch, user } = useBranch();
   const fieldPermissions = user?.fieldPermissions || {};
   const actionPermissions = user?.actionPermissions || {};
@@ -18,7 +18,9 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
   // Permission helper
   const isFieldAllowed = (fieldId) => {
     if (!user) return false;
-    if (user.role === "SUPER_ADMIN" || user.role === "ADMIN") return true;
+    const isSuperAdmin = user.role === "SUPER_ADMIN" || user.role === "SUPERADMIN";
+    if (fieldId === "adminMargin" && !isSuperAdmin) return false;
+    if (isSuperAdmin || user.role === "ADMIN") return true;
     const granularKey = `${type}_${fieldId}`;
     return user.fieldPermissions?.[granularKey] !== false;
   };
@@ -26,6 +28,7 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [expandedId, setExpandedId] = useState(null);
+  const [inlineEditingId, setInlineEditingId] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
 
@@ -228,7 +231,12 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
   };
 
   const handleEdit = (item) => {
-    onEdit(item);
+    if (renderInlineEdit) {
+      setExpandedId(item._id);
+      setInlineEditingId(item._id);
+    } else {
+      onEdit(item);
+    }
   };
 
   const handleSort = (key) => {
@@ -732,14 +740,16 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
               onChange={(e) => setBulkMarginData({ ...bulkMarginData, marginPercentage: e.target.value })}
               disabled={selectedProductIds.length === 0}
             />
-            <input
-              type="number"
-              placeholder="Admin Margin %"
-              className="px-3 py-2 border border-purple-300 rounded-lg w-36 focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
-              value={bulkMarginData.adminMargin}
-              onChange={(e) => setBulkMarginData({ ...bulkMarginData, adminMargin: e.target.value })}
-              disabled={selectedProductIds.length === 0}
-            />
+            {(user?.role === "SUPER_ADMIN" || user?.role === "SUPERADMIN") && (
+              <input
+                type="number"
+                placeholder="Admin Margin %"
+                className="px-3 py-2 border border-purple-300 rounded-lg w-36 focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
+                value={bulkMarginData.adminMargin}
+                onChange={(e) => setBulkMarginData({ ...bulkMarginData, adminMargin: e.target.value })}
+                disabled={selectedProductIds.length === 0}
+              />
+            )}
             <button
               onClick={applyBulkMargin}
               disabled={selectedProductIds.length === 0 || applyingMargin}
@@ -824,7 +834,12 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
                           if (type === "product") {
                             handleSelectProduct(item._id);
                           } else {
-                            setExpandedId(expandedId === item._id ? null : item._id);
+                            if (expandedId === item._id) {
+                              setExpandedId(null);
+                              setInlineEditingId(null);
+                            } else {
+                              setExpandedId(item._id);
+                            }
                           }
                         }}
                         className={`hover:bg-blue-50/50 transition cursor-pointer group ${expandedId === item._id ? 'bg-blue-50/80' : ''} ${selectedProductIds.includes(item._id) ? 'bg-purple-50/50' : ''}`}
@@ -893,7 +908,12 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
                                     className="text-gray-400 hover:text-gray-600 transition"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      setExpandedId(expandedId === item._id ? null : item._id);
+                                      if (expandedId === item._id) {
+                                        setExpandedId(null);
+                                        setInlineEditingId(null);
+                                      } else {
+                                        setExpandedId(item._id);
+                                      }
                                     }}
                                   >
                                     {expandedId === item._id ? <FaChevronUp size={10} /> : <FaChevronDown size={10} />}
@@ -938,7 +958,15 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
                       {expandedId === item._id && (
                         <tr className="bg-gray-50/80 animate-in fade-in duration-300">
                           <td colSpan={config.displayFields.length + ((actionPermissions.edit !== false || actionPermissions.delete !== false || isFieldAllowed("action_edit") || isFieldAllowed("action_delete")) ? 1 : 0) + (type === "product" ? 1 : 0)} className="p-6">
-                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                            {inlineEditingId === item._id && renderInlineEdit ? (
+                              renderInlineEdit(item, () => {
+                                setInlineEditingId(null);
+                                setExpandedId(null);
+                                fetchData();
+                              })
+                            ) : (
+                              <>
+                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
                               {config.detailedFields ? (
                                 config.detailedFields.map((key) => {
                                   const value = item[key];
@@ -1046,6 +1074,8 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
                                   </table>
                                 </div>
                               </div>
+                            )}
+                            </>
                             )}
                           </td>
                         </tr>

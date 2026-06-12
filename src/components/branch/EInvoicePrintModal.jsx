@@ -1,8 +1,26 @@
 import { FaPrint, FaTimes, FaSpinner, FaDownload } from "react-icons/fa";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 const EInvoicePrintModal = ({ invoice, onClose }) => {
   const [loading] = useState(false);
+  const [dynamicBalance, setDynamicBalance] = useState(null);
+
+  useEffect(() => {
+    if (invoice?.customer?.customerId) {
+      const token = localStorage.getItem("token");
+      const apiBaseUrl = import.meta.env.VITE_API_URL || "http://localhost:5000";
+      fetch(`${apiBaseUrl}/api/customers/${invoice.customer.customerId}/ledger`, {
+        headers: { "Authorization": `Bearer ${token}` }
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && data.data && typeof data.data.closingBalance === "number") {
+          setDynamicBalance(data.data.closingBalance);
+        }
+      })
+      .catch(err => console.error("Failed to fetch ledger balance for print", err));
+    }
+  }, [invoice]);
 
   if (!invoice) return null;
 
@@ -245,7 +263,7 @@ const EInvoicePrintModal = ({ invoice, onClose }) => {
                  </div>
                  <div style="background: #f1f5f9; border-left: 4px solid #0f172a; padding: 2mm 4mm; border-radius: 4px; flex: 1;">
                     <span style="font-size: 8px; font-weight: 800; color: #64748b; text-transform: uppercase; display: block;">Closing Balance</span>
-                    <span style="font-size: 12px; font-weight: 900; color: #0f172a;">${formatBalance(invoice.closingBalance || 0)}</span>
+                    <span style="font-size: 12px; font-weight: 900; color: #0f172a;">${formatBalance(dynamicBalance !== null ? dynamicBalance : (invoice.closingBalance || 0))}</span>
                  </div>
                  ${seller.gpayNo ? `
                    <div style="text-align: center; margin-left: 2mm;">
@@ -376,7 +394,7 @@ const EInvoicePrintModal = ({ invoice, onClose }) => {
                    </div>
                    <div className="bg-indigo-50 border-l-4 border-indigo-600 p-3 rounded-r-lg flex-1">
                       <span className="text-[8px] font-black text-indigo-400 uppercase tracking-widest block mb-0.5">Closing Balance</span>
-                      <span className="text-xs font-black text-indigo-900">{formatBalance(invoice.closingBalance || 0)}</span>
+                      <span className="text-xs font-black text-indigo-900">{formatBalance(dynamicBalance !== null ? dynamicBalance : (invoice.closingBalance || 0))}</span>
                    </div>
                    {seller.gpayNo && (
                       <div className="flex flex-col items-center gap-1 pl-2">

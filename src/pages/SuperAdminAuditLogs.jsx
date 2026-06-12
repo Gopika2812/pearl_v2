@@ -42,6 +42,12 @@ const ACTION_META = {
   UPDATE_PRODUCT_PRICE: { label: "Price Change",  color: "text-orange-700 bg-orange-100 border-orange-200" },
   CREATE_PRICE_REQUEST: { label: "Unlock Request", color: "text-purple-700 bg-purple-100 border-purple-200" },
   UPDATE_PRICE_REQUEST_STATUS: { label: "Unlock Approval", color: "text-indigo-700 bg-indigo-100 border-indigo-200" },
+  // Locked Prices
+  LOCKED_PRICE_SAVE: { label: "Create Lock Price", color: "text-green-700 bg-green-100 border-green-200" },
+  LOCKED_PRICE_UPDATE: { label: "Update Lock Price", color: "text-blue-700 bg-blue-100 border-blue-200" },
+  LOCKED_PRICE_DELETE: { label: "Delete Lock Price", color: "text-red-700 bg-red-100 border-red-200" },
+  LOCKED_PRICE_BULK_UPLOAD: { label: "Bulk Lock Prices", color: "text-indigo-700 bg-indigo-100 border-indigo-200" },
+  LOCKED_PRICE_BULK_DELETE: { label: "Bulk Delete Lock Prices", color: "text-rose-700 bg-rose-100 border-rose-200" },
   // Users
   UPDATE_USER:      { label: "Update User",       color: "text-blue-700 bg-blue-100 border-blue-200" },
   DELETE_USER:      { label: "Delete User",       color: "text-red-700 bg-red-100 border-red-200" },

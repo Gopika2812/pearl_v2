@@ -785,6 +785,15 @@ router.post("/", auth, clearCachePrefix("/api/sales-orders"), async (req, res) =
       console.log(`✅ Voucher counter incremented to ${voucher.counter}`);
     }
 
+    // 🛡️ Consume Credit Bypass if it was used
+    if (!isDummy && customerIdToUse) {
+      await Customer.findByIdAndUpdate(customerIdToUse, {
+        isCreditBypassed: false,
+        creditLimitRequestStatus: "NONE"
+      });
+      console.log(`✅ Credit Bypass consumed and reset for customer ${customerIdToUse}`);
+    }
+
     // Log Sales Order creation
     await createAuditLog({
       userId: req.user.id,
