@@ -26,6 +26,13 @@ export default function BranchPhysicalStockRecords() {
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [adjFilter, setAdjFilter] = useState("ALL"); // ALL | INWARD | OUTWARD
   const [viewMode, setViewMode] = useState("LIST"); // LIST | VOUCHER
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 50; // for Detailed List
+  const vouchersPerPage = 15; // for Grouped VCH
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, groupFilter, statusFilter, adjFilter, viewMode, fromDate, toDate]);
 
   // Group search & dropdown refs
   const [isGroupDropdownOpen, setIsGroupDropdownOpen] = useState(false);
@@ -71,7 +78,7 @@ export default function BranchPhysicalStockRecords() {
     setLoading(true);
     setSelectedRecords([]);
     try {
-      const url = `${API_BASE}/physical-stock?branchId=${currentBranch._id}&fromDate=${fromDate}&toDate=${toDate}&limit=500`;
+      const url = `${API_BASE}/physical-stock?branchId=${currentBranch._id}&fromDate=${fromDate}&toDate=${toDate}&limit=10000`;
       const res = await fetchWithAuth(url);
       const data = await res.json();
       if (data.success) setRecords(data.data || []);
@@ -251,6 +258,20 @@ export default function BranchPhysicalStockRecords() {
       if (va > vb) return sortConfig.direction === "asc" ? 1 : -1;
       return 0;
     });
+
+  const groupedVouchers = Object.values(filteredSorted.reduce((acc, r) => {
+    const vchId = r.voucherId || `NO_VCH_${r._id}`;
+    if (!acc[vchId]) acc[vchId] = { id: vchId, date: r.entryDate, items: [], status: r.status, approvedBy: r.approvedBy, isIndividual: !r.voucherId };
+    acc[acc[vchId].id ? vchId : vchId].items.push(r);
+    return acc;
+  }, {}));
+
+  const paginatedList = filteredSorted.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  const paginatedVouchers = groupedVouchers.slice((currentPage - 1) * vouchersPerPage, currentPage * vouchersPerPage);
+
+  const totalPages = viewMode === "LIST" 
+    ? Math.ceil(filteredSorted.length / itemsPerPage) 
+    : Math.ceil(groupedVouchers.length / vouchersPerPage);
 
   const SortIcon = ({ col }) => {
     if (sortConfig.key !== col) return <FaSort className="inline ml-1 opacity-20" size={8} />;
@@ -436,7 +457,7 @@ export default function BranchPhysicalStockRecords() {
                       {loading ? (
                         <tr><td colSpan="15" className="px-6 py-20 text-center"><div className="w-8 h-8 border-4 border-violet-500/20 border-t-violet-500 rounded-full animate-spin mx-auto" /></td></tr>
                       ) : (
-                        filteredSorted.map(r => (
+                        paginatedList.map(r => (
                           <tr key={r._id} className={`hover:bg-gray-50/80 transition-colors group ${selectedRecords.includes(r._id) ? "bg-violet-50/50" : ""}`}>
                             <td className="px-4 py-4">
                               {r.status !== "APPROVED" && (
@@ -492,11 +513,7 @@ export default function BranchPhysicalStockRecords() {
                       <tr className="bg-gray-50/80 border-b border-gray-100">
                         <th className="px-6 py-4 w-10">
                           <input type="checkbox" 
-                            checked={selectedRecords.length > 0 && Object.values(filteredSorted.reduce((acc, r) => {
-                              const vchId = r.voucherId || `NO_VCH_${r._id}`;
-                              if (!acc[vchId]) acc[vchId] = { id: vchId, items: r.status !== "APPROVED" ? [r] : [] };
-                              return acc;
-                            }, {})).every(vch => vch.items.every(item => selectedRecords.includes(item._id)))}
+                            checked={selectedRecords.length > 0 && groupedVouchers.every(vch => vch.items.every(item => selectedRecords.includes(item._id)))}
                             onChange={() => {
                               const allIds = filteredSorted.map(r => r._id);
                               if (selectedRecords.length === allIds.length) setSelectedRecords([]);
@@ -517,12 +534,7 @@ export default function BranchPhysicalStockRecords() {
                       {loading ? (
                         <tr><td colSpan="7" className="px-6 py-20 text-center"><div className="w-8 h-8 border-4 border-violet-500/20 border-t-violet-500 rounded-full animate-spin mx-auto" /></td></tr>
                       ) : (
-                        Object.values(filteredSorted.reduce((acc, r) => {
-                          const vchId = r.voucherId || `NO_VCH_${r._id}`;
-                          if (!acc[vchId]) acc[vchId] = { id: vchId, date: r.entryDate, items: [], status: r.status, approvedBy: r.approvedBy, isIndividual: !r.voucherId };
-                          acc[vchId].items.push(r);
-                          return acc;
-                        }, {})).map(vch => (
+                        paginatedVouchers.map(vch => (
                           <React.Fragment key={vch.id}>
                             <tr className="hover:bg-violet-50/50 cursor-pointer transition-colors group">
                               <td className="px-6 py-4">
@@ -621,7 +633,7 @@ export default function BranchPhysicalStockRecords() {
             ) : filteredSorted.length === 0 ? (
               <div className="p-10 text-center text-[10px] font-black text-gray-300 uppercase italic">No records found</div>
             ) : viewMode === "LIST" ? (
-              filteredSorted.map(r => (
+              paginatedList.map(r => (
                 <div key={r._id} className={`bg-white p-4 rounded-2xl border ${selectedRecords.includes(r._id) ? "border-violet-500 bg-violet-50/20" : "border-gray-200"} shadow-sm`}>
                   <div className="flex justify-between items-start mb-3">
                     <div className="flex items-center gap-3">
@@ -649,16 +661,11 @@ export default function BranchPhysicalStockRecords() {
                 </div>
               ))
             ) : (
-              Object.values(filteredSorted.reduce((acc, r) => {
-                const vchId = r.voucherId || `IND_${r._id}`;
-                if (!acc[vchId]) acc[vchId] = { id: vchId, date: r.entryDate, items: [], status: r.status };
-                acc[vchId].items.push(r);
-                return acc;
-              }, {})).map(vch => (
+              paginatedVouchers.map(vch => (
                 <div key={vch.id} className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
                   <div className="p-4 flex justify-between items-center" onClick={() => setExpandedRow(expandedRow === vch.id ? null : vch.id)}>
                     <div>
-                      <p className="text-[11px] font-black text-violet-600 uppercase">{vch.id.startsWith("IND_") ? "Single Adjustment" : vch.id}</p>
+                      <p className="text-[11px] font-black text-violet-600 uppercase">{vch.isIndividual ? "Single Adjustment" : vch.id}</p>
                       <p className="text-[9px] font-bold text-gray-400 uppercase">{new Date(vch.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</p>
                     </div>
                     <div className="flex items-center gap-3">
@@ -686,6 +693,81 @@ export default function BranchPhysicalStockRecords() {
               ))
             )}
           </div>
+
+          {/* PAGINATION CONTROLS */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between border-t border-gray-200 bg-white px-4 py-3 sm:px-6 rounded-2xl shadow-sm mt-4">
+              <div className="flex flex-1 justify-between sm:hidden">
+                <button
+                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                  disabled={currentPage === 1}
+                  className="relative inline-flex items-center rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-xs font-bold text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                >
+                  Previous
+                </button>
+                <button
+                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                  disabled={currentPage === totalPages}
+                  className="relative ml-3 inline-flex items-center rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-xs font-bold text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                >
+                  Next
+                </button>
+              </div>
+              <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">
+                    Showing <span className="font-black text-gray-700">{((currentPage - 1) * (viewMode === "LIST" ? itemsPerPage : vouchersPerPage)) + 1}</span> to{' '}
+                    <span className="font-black text-gray-700">
+                      {Math.min(currentPage * (viewMode === "LIST" ? itemsPerPage : vouchersPerPage), viewMode === "LIST" ? filteredSorted.length : groupedVouchers.length)}
+                    </span> of{' '}
+                    <span className="font-black text-gray-700">{viewMode === "LIST" ? filteredSorted.length : groupedVouchers.length}</span> results
+                  </p>
+                </div>
+                <div>
+                  <nav className="isolate inline-flex -space-x-px rounded-xl shadow-sm gap-1" aria-label="Pagination">
+                    <button
+                      onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                      disabled={currentPage === 1}
+                      className="relative inline-flex items-center rounded-lg bg-white px-3 py-2 text-gray-400 ring-1 ring-inset ring-gray-200 hover:bg-violet-50 hover:text-violet-600 transition disabled:opacity-40"
+                    >
+                      <span className="text-xs font-bold">Prev</span>
+                    </button>
+                    {Array.from({ length: totalPages }, (_, i) => i + 1)
+                      .filter(page => page === 1 || page === totalPages || Math.abs(page - currentPage) <= 2)
+                      .map((page, idx, arr) => {
+                        const showEllipsisBefore = idx > 0 && page - arr[idx - 1] > 1;
+                        return (
+                          <React.Fragment key={page}>
+                            {showEllipsisBefore && (
+                              <span className="relative inline-flex items-center px-2 py-2 text-xs font-semibold text-gray-500">
+                                ...
+                              </span>
+                            )}
+                            <button
+                              onClick={() => setCurrentPage(page)}
+                              className={`relative inline-flex items-center rounded-lg px-3.5 py-2 text-xs font-black transition ${
+                                currentPage === page
+                                  ? 'z-10 bg-violet-600 text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-600'
+                                  : 'text-gray-900 ring-1 ring-inset ring-gray-200 hover:bg-violet-50 hover:text-violet-600'
+                              }`}
+                            >
+                              {page}
+                            </button>
+                          </React.Fragment>
+                        );
+                      })}
+                    <button
+                      onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                      disabled={currentPage === totalPages}
+                      className="relative inline-flex items-center rounded-lg bg-white px-3 py-2 text-gray-400 ring-1 ring-inset ring-gray-200 hover:bg-violet-50 hover:text-violet-600 transition disabled:opacity-40"
+                    >
+                      <span className="text-xs font-bold">Next</span>
+                    </button>
+                  </nav>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

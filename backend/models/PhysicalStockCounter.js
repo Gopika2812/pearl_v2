@@ -4,7 +4,8 @@ import mongoose from "mongoose";
 // branch1 → SJ001, SJ002...   branch2 → SJ001, SJ002...  (completely independent)
 const physicalStockCounterSchema = new mongoose.Schema({
   branchId: { type: mongoose.Schema.Types.ObjectId, ref: "Branch", unique: true, required: true },
-  seq:      { type: Number, default: 0 }
+  seq:      { type: Number, default: 0 },
+  vchSeq:   { type: Number, default: 0 }
 });
 
 const PhysicalStockCounter = mongoose.model("PhysicalStockCounter", physicalStockCounterSchema);
