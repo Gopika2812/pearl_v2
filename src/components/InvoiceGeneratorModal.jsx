@@ -10,6 +10,7 @@ import {
   FaTimes,
   FaTrash,
   FaWhatsapp,
+  FaExclamationTriangle,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { API_BASE, fetchWithAuth } from "../api";
