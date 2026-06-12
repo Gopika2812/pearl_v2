@@ -10,7 +10,12 @@ export const updateProductCostsFromInvoice = async (items, sourceVoucher, isReIn
   if (!items || !Array.isArray(items)) return;
 
   console.log(`📡 [PRICE_SYNC] Triggering cost sync for voucher: ${sourceVoucher} | User: ${user?.username || "System"}`);
-  const isPO = sourceVoucher.startsWith("PO");
+  const PurchaseOrder = mongoose.models.PurchaseOrder || mongoose.model("PurchaseOrder");
+  const isPO = sourceVoucher.startsWith("PO") || sourceVoucher.includes("PO") || !!(await PurchaseOrder.exists({ invoiceId: sourceVoucher }));
+  if (isPO) {
+    console.log(`📡 [PRICE_SYNC] Skipping cost sync for PO voucher: ${sourceVoucher}`);
+    return;
+  }
 
   for (const item of items) {
     if (!item.productId) continue;

@@ -1234,129 +1234,138 @@ router.post("/confirm-invoice/:id", async (req, res) => {
 
     const newGrandTotal = newSubtotal + newTotalTax + (sale.transportCharge || 0);
 
-    // ✅ 2. REDUCE STOCK (WAREHOUSE + FIFO) - using invoiced items
-    const lowStockAlerts = await reduceStockFIFO(invoicedItems, sale.warehouse);
+    const isAlreadyGenerated = sale.invoiceGenerated || sale.status === "INVOICED";
+    let lowStockAlerts = [];
+    let invoiceOpeningBalance = sale.invoiceOpeningBalance || 0;
+    let invoiceClosingBalance = sale.invoiceClosingBalance || 0;
 
-    // ✅ 3. REDUCE STOCK FOR SAMPLE ITEMS
-    if (sale.sampleItems && Array.isArray(sale.sampleItems) && sale.sampleItems.length > 0) {
-      console.log(`\n📦 Processing ${sale.sampleItems.length} sample items for stock reduction...`);
-      await reduceStockFIFO(sale.sampleItems, sale.warehouse);
-    }
+    if (!isAlreadyGenerated) {
+      // ✅ 2. REDUCE STOCK (WAREHOUSE + FIFO) - using invoiced items
+      const alerts = await reduceStockFIFO(invoicedItems, sale.warehouse);
+      if (alerts && Array.isArray(alerts)) lowStockAlerts = alerts;
 
-    // ✅ 4. UPDATE CUSTOMER BALANCE
-    const invoiceAmount = newGrandTotal;
-    const customer = await Customer.findById(sale.customer.customerId);
-
-    if (!customer) {
-      throw new Error("Customer not found");
-    }
-
-    // Invoice opening balance is the current customer closing balance
-    const invoiceOpeningBalance = customer.closingBalance;
-    const invoiceClosingBalance = invoiceOpeningBalance + invoiceAmount;
-
-    // Update customer's actual closing balance
-    await Customer.findByIdAndUpdate(sale.customer.customerId, {
-      closingBalance: invoiceClosingBalance,
-      totalBalance: invoiceClosingBalance,
-    });
-
-    // ✅ 5. UPDATE ORIGINAL SALES ORDER WITH INVOICE DETAILS (KEEP ORIGINAL ITEMS)
-    // Save adjusted items in invoiceItems field, keep original items unchanged
-    const updatedSale = await SalesOrder.findByIdAndUpdate(req.params.id, {
-      invoiceItems: invoicedItems,
-      invoiceSampleItems: invoicedSampleItems,
-      invoiceSubtotal: newSubtotal,
-      invoiceTotalTax: newTotalTax,
-      invoiceGrandTotal: newGrandTotal,
-      invoiceTransportCharge: sale.transportCharge || 0,
-      invoiceOpeningBalance: invoiceOpeningBalance,
-      invoiceClosingBalance: invoiceClosingBalance,
-      invoiceNotes: invoiceNotes,
-      backOrderSummary: backOrderSummary,
-      invoiceGenerated: true,
-    }, { new: true });
-
-    console.log(`✅ SALES INVOICE updated: ${updatedSale._id}`);
-
-    console.log(`✅ Customer balance updated: ₹${invoiceOpeningBalance} → ₹${invoiceClosingBalance}`);
-
-    // ✅ 6. CREATE COMMISSIONS
-    try {
-      const salesOwnerDoc = sale.salesOwner ? await SalesOwner.findById(sale.salesOwner) : null;
-      const salesManDoc = sale.salesMan ? await SalesMan.findById(sale.salesMan) : null;
-      const deliveryManDoc = sale.deliveryMan ? await DeliveryMan.findById(sale.deliveryMan) : null;
-
-      const getCommission = async (personId, roleType) => {
-        if (!personId) return { percentage: 0, amount: 0 };
-
-        const rule = await CommissionRule.findOne({
-          personId: personId,
-          roleType: roleType,
-          minimumOrderValue: { $lte: invoiceAmount },
-          isActive: true,
-        }).sort({ minimumOrderValue: -1 });
-
-        if (!rule) return { percentage: 0, amount: 0 };
-
-        const commissionAmount = (invoiceAmount * rule.commissionPercentage) / 100;
-        return { percentage: rule.commissionPercentage, amount: commissionAmount };
-      };
-
-      const soCommission = await getCommission(sale.salesOwner, "SalesOwner");
-      const smCommission = await getCommission(sale.salesMan, "SalesMan");
-      const dmCommission = await getCommission(sale.deliveryMan, "DeliveryMan");
-
-      const commissionData = {
-        salesOrderId: req.params.id,
-        orderValue: invoiceAmount,
-        invoiceId: sale.invoiceId,
-        salesOwnerId: salesOwnerDoc?._id,
-        salesOwnerName: salesOwnerDoc?.name,
-        salesOwnerCommissionPercentage: soCommission.percentage,
-        salesOwnerCommissionAmount: soCommission.amount,
-        salesManId: salesManDoc?._id,
-        salesManName: salesManDoc?.name,
-        salesManCommissionPercentage: smCommission.percentage,
-        salesManCommissionAmount: smCommission.amount,
-        deliveryManId: deliveryManDoc?._id,
-        deliveryManName: deliveryManDoc?.name,
-        deliveryManCommissionPercentage: dmCommission.percentage,
-        deliveryManCommissionAmount: dmCommission.amount,
-      };
-
-      commissionData.totalCommission =
-        commissionData.salesOwnerCommissionAmount +
-        commissionData.salesManCommissionAmount +
-        commissionData.deliveryManCommissionAmount;
-
-      const commission = new Commission(commissionData);
-      await commission.save();
-
-      if (commission.salesOwnerId && commission.salesOwnerCommissionAmount > 0) {
-        await SalesOwner.findByIdAndUpdate(commission.salesOwnerId, {
-          $inc: { commissionAmount: commission.salesOwnerCommissionAmount }
-        });
-        console.log(`✅ Sales Owner commission added: ₹${commission.salesOwnerCommissionAmount}`);
+      // ✅ 3. REDUCE STOCK FOR SAMPLE ITEMS
+      if (sale.sampleItems && Array.isArray(sale.sampleItems) && sale.sampleItems.length > 0) {
+        console.log(`\n📦 Processing ${sale.sampleItems.length} sample items for stock reduction...`);
+        await reduceStockFIFO(sale.sampleItems, sale.warehouse);
       }
 
-      if (commission.salesManId && commission.salesManCommissionAmount > 0) {
-        await SalesMan.findByIdAndUpdate(commission.salesManId, {
-          $inc: { commissionAmount: commission.salesManCommissionAmount }
-        });
-        console.log(`✅ Sales Man commission added: ₹${commission.salesManCommissionAmount}`);
+      // ✅ 4. UPDATE CUSTOMER BALANCE
+      const invoiceAmount = newGrandTotal;
+      const customer = await Customer.findById(sale.customer.customerId);
+
+      if (!customer) {
+        throw new Error("Customer not found");
       }
 
-      if (commission.deliveryManId && commission.deliveryManCommissionAmount > 0) {
-        await DeliveryMan.findByIdAndUpdate(commission.deliveryManId, {
-          $inc: { commissionAmount: commission.deliveryManCommissionAmount }
-        });
-        console.log(`✅ Delivery Man commission added: ₹${commission.deliveryManCommissionAmount}`);
-      }
+      // Invoice opening balance is the current customer closing balance
+      invoiceOpeningBalance = customer.closingBalance;
+      invoiceClosingBalance = invoiceOpeningBalance + invoiceAmount;
 
-      console.log("✅ Commission record created:", commission._id);
-    } catch (commissionError) {
-      console.error("⚠️ Commission creation failed:", commissionError.message);
+      // Update customer's actual closing balance
+      await Customer.findByIdAndUpdate(sale.customer.customerId, {
+        closingBalance: invoiceClosingBalance,
+        totalBalance: invoiceClosingBalance,
+      });
+
+      // ✅ 5. UPDATE ORIGINAL SALES ORDER WITH INVOICE DETAILS (KEEP ORIGINAL ITEMS)
+      // Save adjusted items in invoiceItems field, keep original items unchanged
+      const updatedSale = await SalesOrder.findByIdAndUpdate(req.params.id, {
+        invoiceItems: invoicedItems,
+        invoiceSampleItems: invoicedSampleItems,
+        invoiceSubtotal: newSubtotal,
+        invoiceTotalTax: newTotalTax,
+        invoiceGrandTotal: newGrandTotal,
+        invoiceTransportCharge: sale.transportCharge || 0,
+        invoiceOpeningBalance: invoiceOpeningBalance,
+        invoiceClosingBalance: invoiceClosingBalance,
+        invoiceNotes: invoiceNotes,
+        backOrderSummary: backOrderSummary,
+        invoiceGenerated: true,
+      }, { new: true });
+
+      console.log(`✅ SALES INVOICE updated: ${updatedSale._id}`);
+      console.log(`✅ Customer balance updated: ₹${invoiceOpeningBalance} → ₹${invoiceClosingBalance}`);
+
+      // ✅ 6. CREATE COMMISSIONS
+      try {
+        const salesOwnerDoc = sale.salesOwner ? await SalesOwner.findById(sale.salesOwner) : null;
+        const salesManDoc = sale.salesMan ? await SalesMan.findById(sale.salesMan) : null;
+        const deliveryManDoc = sale.deliveryMan ? await DeliveryMan.findById(sale.deliveryMan) : null;
+
+        const getCommission = async (personId, roleType) => {
+          if (!personId) return { percentage: 0, amount: 0 };
+
+          const rule = await CommissionRule.findOne({
+            personId: personId,
+            roleType: roleType,
+            minimumOrderValue: { $lte: invoiceAmount },
+            isActive: true,
+          }).sort({ minimumOrderValue: -1 });
+
+          if (!rule) return { percentage: 0, amount: 0 };
+
+          const commissionAmount = (invoiceAmount * rule.commissionPercentage) / 100;
+          return { percentage: rule.commissionPercentage, amount: commissionAmount };
+        };
+
+        const soCommission = await getCommission(sale.salesOwner, "SalesOwner");
+        const smCommission = await getCommission(sale.salesMan, "SalesMan");
+        const dmCommission = await getCommission(sale.deliveryMan, "DeliveryMan");
+
+        const commissionData = {
+          salesOrderId: req.params.id,
+          orderValue: invoiceAmount,
+          invoiceId: sale.invoiceId,
+          salesOwnerId: salesOwnerDoc?._id,
+          salesOwnerName: salesOwnerDoc?.name,
+          salesOwnerCommissionPercentage: soCommission.percentage,
+          salesOwnerCommissionAmount: soCommission.amount,
+          salesManId: salesManDoc?._id,
+          salesManName: salesManDoc?.name,
+          salesManCommissionPercentage: smCommission.percentage,
+          salesManCommissionAmount: smCommission.amount,
+          deliveryManId: deliveryManDoc?._id,
+          deliveryManName: deliveryManDoc?.name,
+          deliveryManCommissionPercentage: dmCommission.percentage,
+          deliveryManCommissionAmount: dmCommission.amount,
+        };
+
+        commissionData.totalCommission =
+          commissionData.salesOwnerCommissionAmount +
+          commissionData.salesManCommissionAmount +
+          commissionData.deliveryManCommissionAmount;
+
+        const commission = new Commission(commissionData);
+        await commission.save();
+
+        if (commission.salesOwnerId && commission.salesOwnerCommissionAmount > 0) {
+          await SalesOwner.findByIdAndUpdate(commission.salesOwnerId, {
+            $inc: { commissionAmount: commission.salesOwnerCommissionAmount }
+          });
+          console.log(`✅ Sales Owner commission added: ₹${commission.salesOwnerCommissionAmount}`);
+        }
+
+        if (commission.salesManId && commission.salesManCommissionAmount > 0) {
+          await SalesMan.findByIdAndUpdate(commission.salesManId, {
+            $inc: { commissionAmount: commission.salesManCommissionAmount }
+          });
+          console.log(`✅ Sales Man commission added: ₹${commission.salesManCommissionAmount}`);
+        }
+
+        if (commission.deliveryManId && commission.deliveryManCommissionAmount > 0) {
+          await DeliveryMan.findByIdAndUpdate(commission.deliveryManId, {
+            $inc: { commissionAmount: commission.deliveryManCommissionAmount }
+          });
+          console.log(`✅ Delivery Man commission added: ₹${commission.deliveryManCommissionAmount}`);
+        }
+
+        console.log("✅ Commission record created:", commission._id);
+      } catch (commissionError) {
+        console.error("⚠️ Commission creation failed:", commissionError.message);
+      }
+    } else {
+      console.log(`ℹ️ [CONFIRM_INVOICE] Skipping DB writes (stock/balance/commission) as invoice has already been confirmed/generated.`);
     }
 
     // ✅ 7. GENERATE INVOICE AND BACK ORDER IMAGES

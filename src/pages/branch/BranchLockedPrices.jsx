@@ -402,8 +402,10 @@ const BranchLockedPrices = () => {
     
     // Calculate initial margin % for editing
     const purchasingPrice = lp.productId?.purchasingPrice || 0;
-    if (purchasingPrice > 0) {
-      const mp = ((lp.lockedPrice - purchasingPrice) / purchasingPrice) * 100;
+    const mcp = lp.productId?.marketCapPrice || 0;
+    const effectiveCost = mcp > 0 ? mcp : purchasingPrice;
+    if (effectiveCost > 0) {
+      const mp = ((lp.lockedPrice - effectiveCost) / effectiveCost) * 100;
       setEditMarginPercent(mp.toFixed(1));
     } else {
       setEditMarginPercent("0");
@@ -504,12 +506,12 @@ const BranchLockedPrices = () => {
         "Product Name": lp.productId?.name || "N/A",
         "SKU/Code": lp.productId?.sku || lp.productId?.productCode || "N/A",
         "Customer Name": lp.customerId?.name || "N/A",
-        "Current Cost": lp.productId?.purchasingPrice || 0,
+        "Current Cost": lp.productId?.marketCapPrice > 0 ? lp.productId?.marketCapPrice : (lp.productId?.purchasingPrice || 0),
         "Std. Selling Price": lp.productId?.sellingPrice || 0,
         "Locked Price": lp.lockedPrice || 0,
-        "Margin Amount": (lp.lockedPrice || 0) - (lp.productId?.purchasingPrice || 0),
-        "Margin %": lp.productId?.purchasingPrice > 0 
-          ? (((lp.lockedPrice - lp.productId.purchasingPrice) / lp.productId.purchasingPrice) * 100).toFixed(2) + "%"
+        "Margin Amount": (lp.lockedPrice || 0) - (lp.productId?.marketCapPrice > 0 ? lp.productId?.marketCapPrice : (lp.productId?.purchasingPrice || 0)),
+        "Margin %": (lp.productId?.marketCapPrice > 0 ? lp.productId?.marketCapPrice : (lp.productId?.purchasingPrice || 0)) > 0 
+          ? (((lp.lockedPrice - (lp.productId?.marketCapPrice > 0 ? lp.productId?.marketCapPrice : (lp.productId?.purchasingPrice || 0))) / (lp.productId?.marketCapPrice > 0 ? lp.productId?.marketCapPrice : (lp.productId?.purchasingPrice || 0))) * 100).toFixed(2) + "%"
           : "0%"
       }));
 
@@ -574,9 +576,10 @@ const BranchLockedPrices = () => {
   const displayProducts = prodSearch.trim() && prodResults.length > 0 ? prodResults : products.slice(0, 50);
 
   // Auto-calculate margin
-  const margin = selectedProduct ? (Number(lockedPrice || selectedProduct.sellingPrice) - selectedProduct.purchasingPrice) : 0;
-  const marginPercent = selectedProduct && selectedProduct.purchasingPrice > 0 
-    ? (margin / selectedProduct.purchasingPrice) * 100 : 0;
+  const effectiveCost = selectedProduct ? (selectedProduct.marketCapPrice > 0 ? selectedProduct.marketCapPrice : selectedProduct.purchasingPrice) : 0;
+  const margin = selectedProduct ? (Number(lockedPrice || selectedProduct.sellingPrice) - effectiveCost) : 0;
+  const marginPercent = effectiveCost > 0 
+    ? (margin / effectiveCost) * 100 : 0;
 
   return (
     <div className="min-h-screen bg-gray-50 pt-20 md:pt-4 md:pl-20">
@@ -938,9 +941,11 @@ const BranchLockedPrices = () => {
                         const productName = isEditing ? (editProduct?.name || "") : (lp.productId?.name || "Unknown Product");
                         const customerName = isEditing ? (editCustomer?.name || "") : (lp.customerId?.name || "Unknown Customer");
                         const purchasingPrice = isEditing ? (editProduct?.purchasingPrice || 0) : (lp.productId?.purchasingPrice || 0);
+                        const mcp = isEditing ? (editProduct?.marketCapPrice || 0) : (lp.productId?.marketCapPrice || 0);
+                        const effectiveCost = mcp > 0 ? mcp : purchasingPrice;
                         const sellingPrice = isEditing ? (editProduct?.sellingPrice || 0) : (lp.productId?.sellingPrice || 0);
                         const currentLockedPrice = isEditing ? Number(editLockedPrice) : (lp.lockedPrice || 0);
-                        const mp = purchasingPrice > 0 ? ((currentLockedPrice - purchasingPrice) / purchasingPrice) * 100 : 0;
+                        const mp = effectiveCost > 0 ? ((currentLockedPrice - effectiveCost) / effectiveCost) * 100 : 0;
 
                         return (
                           <tr key={lp._id} className={`hover:bg-slate-50 transition-colors group ${selectedIds.includes(lp._id) ? 'bg-indigo-50/50' : ''} ${isEditing ? 'bg-amber-50/50' : ''}`}>
@@ -1060,7 +1065,10 @@ const BranchLockedPrices = () => {
                             )}
                             {isFieldAllowed("cost") && (
                               <td className="px-6 py-5 text-right font-bold text-slate-400 text-xs">
-                                ₹{purchasingPrice.toFixed(2)}
+                                <div>₹{purchasingPrice.toFixed(2)}</div>
+                                {mcp > 0 && (
+                                  <div className="text-[10px] text-blue-500 font-black mt-1 uppercase tracking-widest bg-blue-50 inline-block px-1.5 py-0.5 rounded">MCP: ₹{mcp.toFixed(2)}</div>
+                                )}
                               </td>
                             )}
                             {isFieldAllowed("stdPrice") && (
@@ -1077,7 +1085,7 @@ const BranchLockedPrices = () => {
                                     value={editLockedPrice}
                                     onChange={(e) => {
                                       const val = e.target.value;
-                                      const pPrice = purchasingPrice || 0;
+                                      const pPrice = effectiveCost || 0;
                                       if (pPrice > 0) {
                                         setEditMarginPercent((((Number(val) - pPrice) / pPrice) * 100).toFixed(1));
                                       }
@@ -1089,7 +1097,7 @@ const BranchLockedPrices = () => {
                                     <div className="bg-orange-50 text-orange-700 font-black px-3 py-1.5 rounded-lg border border-orange-100 inline-block text-sm shadow-sm">
                                       ₹{lp.lockedPrice?.toFixed(2)}
                                     </div>
-                                    <span className={`text-[8px] font-black ${lp.lockedPrice < purchasingPrice ? 'text-red-600 bg-red-50 animate-pulse' : 'text-emerald-600 bg-emerald-50'} uppercase tracking-widest px-1.5 rounded`}>{lp.lockedPrice < purchasingPrice ? "Below Cost!" : "Linked to Cost"}</span>
+                                    <span className={`text-[8px] font-black ${lp.lockedPrice < effectiveCost ? 'text-red-600 bg-red-50 animate-pulse' : 'text-emerald-600 bg-emerald-50'} uppercase tracking-widest px-1.5 rounded`}>{lp.lockedPrice < effectiveCost ? "Below Cost!" : "Linked to Cost"}</span>
                                   </div>
                                 )}
                               </td>
@@ -1104,8 +1112,8 @@ const BranchLockedPrices = () => {
                                       value={editMarginPercent}
                                       onChange={(e) => {
                                         const val = e.target.value;
-                                        const pPrice = purchasingPrice || 0;
-                                        if (val !== "" && pPrice > 0) {
+                                        const pPrice = effectiveCost || 0;
+                                        if (val !== "" && pPrice > 0 && !isNaN(Number(val))) {
                                           setEditLockedPrice((pPrice + (pPrice * Number(val) / 100)).toFixed(2));
                                         }
                                         setEditMarginPercent(val);

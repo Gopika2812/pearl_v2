@@ -310,13 +310,7 @@ export default function PearlsBookPage() {
 
     setIsGenerating(true);
     try {
-      // 1. Generate preview (backend now returns exactly 2 pages)
-      const genRes = await axios.post(`${API}/generate-invoice-preview/${orderId}`, {
-        stockAdjustments: defaultAdjustments,
-        invoiceNotes: "",
-      });
-
-      // 2. Automatically confirm and trigger print
+      // 1. Automatically confirm and trigger print directly
       const confirmRes = await axios.post(`${API}/confirm-invoice/${orderId}`, {
         stockAdjustments: defaultAdjustments,
         invoiceNotes: "",

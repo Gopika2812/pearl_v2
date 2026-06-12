@@ -190,13 +190,13 @@ router.post("/", auth, async (req, res) => {
     }
 
     // Get current product cost for margin calculation
-    const product = await Product.findById(productId).select("name purchasingPrice");
+    const product = await Product.findById(productId).select("name purchasingPrice marketCapPrice");
     const customer = await Customer.findById(customerId).select("name");
     
     if (!product) {
        return res.status(404).json({ success: false, message: "Product not found" });
     }
-    const pPrice = product.purchasingPrice || 0;
+    const pPrice = product.marketCapPrice > 0 ? product.marketCapPrice : (product.purchasingPrice || 0);
     const margin = Math.round((Number(lockedPrice) - pPrice) * 100) / 100;
     const marginPercentage = pPrice > 0 ? (margin / pPrice) * 100 : 0;
 
@@ -267,7 +267,7 @@ router.put("/:id", auth, async (req, res) => {
     }
 
     // Get current product cost for margin calculation
-    const product = await Product.findById(productId).select("name purchasingPrice");
+    const product = await Product.findById(productId).select("name purchasingPrice marketCapPrice");
     const customer = await Customer.findById(customerId).select("name");
 
     if (!product) {
@@ -275,7 +275,7 @@ router.put("/:id", auth, async (req, res) => {
     }
 
     const oldEntry = await CustomerLockedPrice.findById(id);
-    const pPrice = product.purchasingPrice || 0;
+    const pPrice = product.marketCapPrice > 0 ? product.marketCapPrice : (product.purchasingPrice || 0);
     const margin = Math.round((Number(lockedPrice) - pPrice) * 100) / 100;
     const marginPercentage = pPrice > 0 ? (margin / pPrice) * 100 : 0;
 
@@ -398,16 +398,27 @@ router.get("/branch/:branchId", auth, async (req, res) => {
           "product.name": { $regex: filterProduct, $options: "i" },
         },
       },
-      // Calculate Margin %
+      // Calculate Margin % using MCP if it exists
       {
         $addFields: {
-          margin: { $subtract: ["$lockedPrice", "$product.purchasingPrice"] },
+          effectiveCost: {
+            $cond: [
+              { $gt: ["$product.marketCapPrice", 0] },
+              "$product.marketCapPrice",
+              "$product.purchasingPrice"
+            ]
+          }
+        }
+      },
+      {
+        $addFields: {
+          margin: { $subtract: ["$lockedPrice", "$effectiveCost"] },
           marginPercent: {
             $cond: [
-              { $gt: ["$product.purchasingPrice", 0] },
+              { $gt: ["$effectiveCost", 0] },
               {
                 $multiply: [
-                  { $divide: [{ $subtract: ["$lockedPrice", "$product.purchasingPrice"] }, "$product.purchasingPrice"] },
+                  { $divide: [{ $subtract: ["$lockedPrice", "$effectiveCost"] }, "$effectiveCost"] },
                   100,
                 ],
               },
@@ -418,6 +429,7 @@ router.get("/branch/:branchId", auth, async (req, res) => {
           productName: "$product.name",
           customerName: "$customer.name",
           purchasingPrice: "$product.purchasingPrice",
+          marketCapPrice: "$product.marketCapPrice",
           sellingPrice: "$product.sellingPrice"
         },
       },
@@ -450,6 +462,7 @@ router.get("/branch/:branchId", auth, async (req, res) => {
           _id: "$product._id", 
           name: "$product.name", 
           purchasingPrice: "$product.purchasingPrice",
+          marketCapPrice: "$product.marketCapPrice",
           sellingPrice: "$product.sellingPrice"
         }
       }
