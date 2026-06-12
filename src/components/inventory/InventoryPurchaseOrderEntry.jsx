@@ -1068,7 +1068,7 @@ const InventoryPurchaseOrderEntry = ({
             </div>
 
             {/* ROW 2: Prices, Qty, HSN */}
-            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+            <div className="grid grid-cols-2 gap-3">
               <div>
                 <div className="flex justify-between items-center mb-1">
                   <label className={labelClass}>Purchase ₹</label>
@@ -1213,7 +1213,7 @@ const InventoryPurchaseOrderEntry = ({
             </div>
 
             {/* ROW 2.5: Batch, Mfg Date, Expiry, MRP */}
-            <div className="grid grid-cols-4 gap-3 border-t border-gray-100 pt-3">
+            <div className="grid grid-cols-2 gap-3 border-t border-gray-100 pt-3">
               <div>
                 <label className={labelClass}>Batch Number</label>
                 <input
@@ -1259,7 +1259,7 @@ const InventoryPurchaseOrderEntry = ({
             </div>
 
             {/* ROW 3: Taxes and Add Button */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 items-end">
+            <div className="grid grid-cols-2 gap-3 items-end">
               <div>
                 <label className={labelClass}>GST %</label>
                 <input
@@ -1299,7 +1299,7 @@ const InventoryPurchaseOrderEntry = ({
                 <span className="text-xs font-bold text-gray-600">IGST</span>
               </div>
 
-              <div className="lg:col-span-4 mt-2">
+              <div className="col-span-2 mt-2">
                 <button
                   onClick={addItem}
                   className="w-full bg-[#319bab] text-white h-[42px] rounded-xl font-bold flex items-center justify-center hover:bg-[#257f87] transition shadow-lg"

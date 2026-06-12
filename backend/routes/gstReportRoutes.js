@@ -146,6 +146,10 @@ router.get("/gstr1", auth, async (req, res) => {
       }
     }
 
+    // Add status filters to completely ignore cancelled bills as requested
+    invoiceQuery.status = { $ne: "CANCELLED" };
+    creditNoteQuery.status = { $nin: ["CANCELLED", "Cancelled"] };
+
     // 1. Fetch Invoices and Credit Notes - Optimized with field selection
     const [invoices, creditNotes] = await Promise.all([
       Invoice.find(invoiceQuery)
@@ -642,7 +646,7 @@ router.get("/gstr3b", auth, async (req, res) => {
           {
             branchId: branchObjectId,
             date: { $gte: startDate, $lte: endDate },
-            status: { $ne: "Cancelled" }
+            status: { $nin: ["CANCELLED", "Cancelled"] }
           }
         ]
       };

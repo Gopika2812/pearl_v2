@@ -191,7 +191,7 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const params = { branchId, limit: 1000 };
+      const params = { branchId, limit: 10000 };
       
       if (debouncedSearchQuery.trim()) {
         params.search = debouncedSearchQuery.trim();
@@ -588,6 +588,27 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
     }
   };
 
+  // Calculate group counts for the filter dropdown
+  const groupCounts = {};
+  if (type === "product") {
+    data.forEach(item => {
+      if (item.productGroup) {
+        const id = typeof item.productGroup === 'object' ? item.productGroup._id : item.productGroup;
+        if (id) {
+          groupCounts[id] = (groupCounts[id] || 0) + 1;
+        }
+      }
+    });
+  }
+
+  const groupOptions = type === "product" ? [
+    { _id: "All", name: `All Groups (${data.length})` },
+    ...productGroups.map(g => ({
+      _id: g._id,
+      name: `${g.name} (${groupCounts[g._id] || 0})`
+    }))
+  ] : [];
+
   return (
     <div className="mt-6">
       <div className="flex items-center gap-3 mb-6 pb-6 border-b-2 border-gray-200">
@@ -658,19 +679,17 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
 
         {type === "product" && (
           <div className="flex items-center gap-3">
-            <div className="relative min-w-[200px]">
-              <select
-                className="w-full appearance-none bg-white border-2 border-gray-300 focus:border-primary rounded-lg pl-10 pr-10 py-3 text-sm font-bold text-gray-700 outline-none cursor-pointer transition-all shadow-sm"
+            <div className="relative min-w-[240px]">
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 z-10 text-gray-400 pointer-events-none">
+                <FaLayerGroup size={14} />
+              </div>
+              <FilterableSelect
+                options={groupOptions}
                 value={selectedGroup}
-                onChange={(e) => setSelectedGroup(e.target.value)}
-              >
-                <option value="All">All Groups</option>
-                {productGroups.map(g => (
-                  <option key={g._id} value={g._id}>{g.name}</option>
-                ))}
-              </select>
-              <FaLayerGroup className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={14} />
-              <FaChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={12} />
+                onChange={(val) => setSelectedGroup(val)}
+                placeholder="All Groups"
+                className="w-full bg-white border-2 border-gray-300 rounded-lg pl-10 pr-2 py-2 text-sm font-bold text-gray-700 shadow-sm hover:bg-gray-50 focus:border-primary"
+              />
             </div>
 
             <div className="relative min-w-[200px]">
