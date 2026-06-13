@@ -71,6 +71,85 @@ export default function InventorySalesOrderEntry({
   const [localProducts, setLocalProducts] = useState(products || []);
 
   const [sellingPrice, setSellingPrice] = useState(0);
+  const [purchasingPrice, setPurchasingPrice] = useState(0);
+  const [usePurchaseAsSelling, setUsePurchaseAsSelling] = useState(false);
+
+  const handleUsePurchasePriceToggle = (checked) => {
+    setUsePurchaseAsSelling(checked);
+    if (checked) {
+      setSellingPrice(purchasingPrice);
+    } else if (selectedProductData) {
+      updateSellingPrice(selectedProductData, customerMargin);
+    }
+  };
+
+  const [billAtPurchasePrice, setBillAtPurchasePrice] = useState(false);
+
+  const recalculateItemTotals = (item, newSellingPrice) => {
+    const baseAmount = newSellingPrice * item.qty;
+    const discountAmount = item.discountType === "PERCENT"
+      ? (baseAmount * (item.discountPercent || 0)) / 100
+      : (item.discountAmount || 0);
+    const safeDiscount = Math.min(discountAmount, baseAmount);
+    const taxableAmount = baseAmount - safeDiscount;
+    const taxAmount = (taxableAmount * (item.gst || 0)) / 100;
+    const totalAmount = taxableAmount + taxAmount;
+    return {
+      ...item,
+      sellingPrice: newSellingPrice,
+      baseAmount,
+      discountAmount: safeDiscount,
+      taxableAmount,
+      taxAmount,
+      total: totalAmount,
+    };
+  };
+
+  const handleBillAtPurchasePriceChange = (checked) => {
+    setBillAtPurchasePrice(checked);
+    
+    // Update already entered items
+    setItems((prevItems) => 
+      prevItems.map((item) => {
+        const product = productsWithStock.find(p => p._id === item.productId);
+        const pPrice = product ? (product.purchasingPrice || 0) : (item.purchasingPrice || item.sellingPrice);
+        
+        let targetPrice = pPrice;
+        if (!checked) {
+          // Calculate default selling price
+          if (product) {
+            const purchasingPriceVal = Number(product.purchasingPrice || 0);
+            const normalMargin = Number(product.marginPercentage || 0);
+            let relativeMargin = Number(customerMargin || 0);
+            if (product.adminMargin !== undefined && product.adminMargin !== null && product.adminMargin !== "" && Number(product.adminMargin) !== 0) {
+              relativeMargin = Number(product.adminMargin);
+            }
+            const totalMargin = normalMargin + relativeMargin;
+            if (purchasingPriceVal > 0) {
+              targetPrice = purchasingPriceVal + (purchasingPriceVal * totalMargin / 100);
+            } else {
+              const baseSellingPrice = Number(product.sellingPrice || 0);
+              targetPrice = baseSellingPrice + (baseSellingPrice * relativeMargin / 100);
+            }
+            targetPrice = Math.round(targetPrice * 100) / 100;
+          }
+        }
+        
+        return recalculateItemTotals({ ...item, purchasingPrice: pPrice }, targetPrice);
+      })
+    );
+
+    // Also update current active selection price
+    if (selectedProductData) {
+      if (checked) {
+        setSellingPrice(purchasingPrice);
+        setUsePurchaseAsSelling(true);
+      } else {
+        updateSellingPrice(selectedProductData, customerMargin);
+        setUsePurchaseAsSelling(false);
+      }
+    }
+  };
   const [qty, setQty] = useState("");
   const [gst, setGst] = useState(0);
   const [cgst, setCgst] = useState(0);
@@ -689,7 +768,14 @@ export default function InventorySalesOrderEntry({
     }
 
     // 🛡️ Calculate and set price
-    updateSellingPrice(product, customerMargin);
+    if (billAtPurchasePrice) {
+      setSellingPrice(product.purchasingPrice || 0);
+      setUsePurchaseAsSelling(true);
+    } else {
+      updateSellingPrice(product, customerMargin);
+      setUsePurchaseAsSelling(false);
+    }
+    setPurchasingPrice(product.purchasingPrice || 0);
 
     setGst(product.gst);
     setGst(product.gst);
@@ -816,6 +902,7 @@ export default function InventorySalesOrderEntry({
     setSalesOwner(ownerName);
     setSalesOwnerId(ownerId);
     setCustomerMargin(customer?.margin || 0);
+    handleBillAtPurchasePriceChange(customer?.billAtPurchasePrice === true);
 
     // 🛡️ SECURITY CHECK: Fetch live credit status (Limit + Days)
     const checkCreditStatus = async () => {
@@ -968,6 +1055,7 @@ export default function InventorySalesOrderEntry({
         batch: selectedBatch,
         expiryDate: expiryDate || null,
         mrp: Number(mrp) || 0,
+        purchasingPrice: p.purchasingPrice || 0,
       },
     ]);
 
@@ -995,6 +1083,8 @@ export default function InventorySalesOrderEntry({
     setSelectedProductData(null);
     setItemSearch("");
     setSellingPrice(0);
+    setPurchasingPrice(0);
+    setUsePurchaseAsSelling(false);
     setQty("");
     setDiscountPercent("");
     setDiscountAmountInput("");
@@ -1290,6 +1380,9 @@ export default function InventorySalesOrderEntry({
     setItemSearch("");
     setQty("");
     setSellingPrice(0);
+    setPurchasingPrice(0);
+    setUsePurchaseAsSelling(false);
+    setBillAtPurchasePrice(false);
     setDiscountType("PERCENT");
     setDiscountPercent("");
     setDiscountAmountInput("");
@@ -2035,8 +2128,9 @@ export default function InventorySalesOrderEntry({
                 )}
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-3">
                 <div>
+                  <label className={labelClass}>HSN Code</label>
                   <input 
                     className={`${inputClass} ${hsn && !/^\d{4}$|^\d{6}$|^\d{8}$/.test(String(hsn).trim()) ? 'border-red-500 bg-red-50' : ''}`} 
                     value={hsn} 
@@ -2066,11 +2160,24 @@ export default function InventorySalesOrderEntry({
                     className={`${inputClass} ${!canEditSellingPrice ? 'bg-gray-100 cursor-not-allowed text-gray-500' : ''}`}
                     value={sellingPrice === 0 ? "" : sellingPrice}
                     onChange={(e) => {
-                      if (canEditSellingPrice) setSellingPrice(e.target.value === "" ? "" : Number(e.target.value));
+                      if (canEditSellingPrice) {
+                        setSellingPrice(e.target.value === "" ? "" : Number(e.target.value));
+                        setUsePurchaseAsSelling(false);
+                      }
                     }}
                     placeholder="Price"
                     readOnly={!canEditSellingPrice}
                     title={!canEditSellingPrice ? "You do not have permission to edit the selling price." : ""}
+                  />
+                </div>
+                <div>
+                  <label className={labelClass}>Purchase ₹</label>
+                  <input
+                    type="number"
+                    className={`${inputClass} bg-gray-100 cursor-not-allowed text-gray-500 font-medium`}
+                    value={purchasingPrice === 0 ? "" : purchasingPrice}
+                    readOnly
+                    placeholder="Purchase Price"
                   />
                 </div>
               </div>

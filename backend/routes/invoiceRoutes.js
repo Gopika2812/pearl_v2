@@ -134,6 +134,31 @@ router.get("/by-number/:invoiceNumber", async (req, res) => {
     res.status(500).json({ success: false, message: "Server error" });
   }
 });
+
+// GET - Retrieve all invoices containing backorders for a branch
+router.get("/backorders/list", auth, async (req, res) => {
+  try {
+    const { branchId } = req.query;
+    if (!branchId) {
+      return res.status(400).json({ success: false, message: "branchId is required" });
+    }
+
+    // Find finalized invoices for the branch where backOrderItems array is not empty
+    const query = {
+      branchId: new mongoose.Types.ObjectId(branchId),
+      status: { $in: ["FINALIZED", "PRINTED", "SENT"] },
+      backOrderItems: { $exists: true, $not: { $size: 0 } }
+    };
+
+    const invoices = await Invoice.find(query).sort({ invoiceDate: -1 }).lean();
+
+    res.json({ success: true, data: invoices });
+  } catch (error) {
+    console.error("Error fetching backorders list:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
+
 const upload = multer({ storage: multer.memoryStorage() });
 
 // GET invoice history (for Product Records)
@@ -1074,6 +1099,26 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
           }
         });
 
+        const backOrderItemsForInvoice = items
+          .filter((item) => Number(item.backOrderQty) > 0)
+          .map((item) => {
+            const originalItem = salesOrder.items.find(so => so._id.toString() === item._id);
+            return {
+              productId: item.productId?._id || item.productId,
+              name: item.name || (originalItem ? originalItem.name : "Unknown Product"),
+              hsn: item.hsn || item.hsnCode || (originalItem ? (originalItem.hsn || originalItem.hsnCode) : ""),
+              qty: Number(item.backOrderQty),
+              unit: item.unit || (originalItem ? originalItem.unit : ""),
+              altQty: item.altQty ? Number(item.altQty) : 0,
+              altUnit: item.altUnit || (originalItem ? originalItem.altUnit : ""),
+              sellingPrice: Number(item.sellingPrice || (originalItem ? originalItem.sellingPrice : 0)),
+              gst: Number(item.gst || (originalItem ? originalItem.gst : 0)),
+              batch: item.batch || (originalItem ? originalItem.batch : "1"),
+              expiryDate: item.expiryDate || (originalItem ? originalItem.expiryDate : null),
+              mrp: item.mrp ? Number(item.mrp) : (originalItem ? (originalItem.mrp || 0) : 0)
+            };
+          });
+
         // 🧮 Calculate Totals
         let grossSubtotal = 0;
         let cgstTotal = 0, sgstTotal = 0, igstTotal = 0;
@@ -1291,6 +1336,7 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
             invoice.customer = customerSnapshot;
             invoice.seller = sellerSnapshot;
             invoice.items = processedItems;
+            invoice.backOrderItems = backOrderItemsForInvoice;
             invoice.subtotal = grossSubtotal;
             invoice.totalTax = totalTax;
             invoice.transportCharge = tCharge;
@@ -1330,6 +1376,7 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
               seller: sellerSnapshot,
               customer: customerSnapshot,
               items: processedItems,
+              backOrderItems: backOrderItemsForInvoice,
               sampleItems: salesOrder.sampleItems || [],
               subtotal: grossSubtotal,
               totalTax,

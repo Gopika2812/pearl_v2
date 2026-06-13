@@ -11,7 +11,7 @@ const BranchSalesOrder = () => {
   const [items, setItems] = useState([]);
   const [isDummyMode, setIsDummyMode] = useState(false);
 
-  let soVoucherTypes = voucherTypes.filter((v) => v.orderType === "SO");
+  let soVoucherTypes = Array.isArray(voucherTypes) ? voucherTypes.filter((v) => v.orderType === "SO") : [];
   
   // Apply granular voucher authorization (skip for Admins)
   const isAdmin = user?.role === "ADMIN" || user?.role === "SUPER_ADMIN";

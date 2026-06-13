@@ -10,18 +10,6 @@ const FALLBACK_API = `${DEFAULT_BACKEND}/api`;
 
 export const API_BASE = API_BASE_URL ? `${API_BASE_URL}/api` : FALLBACK_API;
 
-// Log API configuration (for debugging)
-if (typeof window !== "undefined") {
-  console.log("🔧 API Configuration:");
-  console.log(`   Environment: ${APP_ENV}`);
-  console.log(`   Backend URL: ${API_BASE}`);
-  if (!API_BASE_URL) {
-    console.warn(
-      "⚠️  VITE_API_BASE_URL not configured. Using default: " + DEFAULT_BACKEND
-    );
-  }
-}
-
 
 export const getAPIEndpoint = (path) => {
   return `${API_BASE}${path}`;
@@ -93,7 +81,6 @@ export const fetchWithAuth = async (url, options = {}) => {
     headers["Authorization"] = `Bearer ${token}`;
   }
 
-  console.log(`🌐 API Request: ${url}`);
   const response = await fetch(url, {
     ...options,
     headers,

@@ -24,6 +24,7 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
     margin: 0,
     credit: 0,
     debit: 0,
+    billAtPurchasePrice: false,
     accountHolder: "",
     accountNumber: "",
     ifsc: "",
@@ -67,6 +68,7 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
         margin: editingItem.margin || 0,
         credit: editingItem.credit || 0,
         debit: editingItem.debit || 0,
+        billAtPurchasePrice: editingItem.billAtPurchasePrice || false,
         accountHolder: editingItem.accountHolder || "",
         accountNumber: editingItem.accountNumber || "",
         ifsc: editingItem.ifsc || "",
@@ -97,6 +99,7 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
         margin: 0,
         credit: 0,
         debit: 0,
+        billAtPurchasePrice: false,
         accountHolder: "",
         accountNumber: "",
         ifsc: "",
@@ -620,6 +623,20 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
                         {isFetchingGst ? "..." : "🔍 Auto-Fill"}
                       </button>
                     </div>
+                  </div>
+
+                  <div className="flex items-center justify-between p-4 bg-gray-50 border-2 border-gray-100 rounded-xl">
+                    <div>
+                      <label className="text-xs font-black text-gray-800 uppercase tracking-wider block">Bill at Purchase Price</label>
+                      <p className="text-[10px] text-gray-400 font-bold uppercase mt-0.5">Always bill this customer at purchase price</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setCustomer({ ...customer, billAtPurchasePrice: !customer.billAtPurchasePrice })}
+                      className={`w-12 h-6 rounded-full transition-all relative ${customer.billAtPurchasePrice ? 'bg-primary' : 'bg-gray-300'}`}
+                    >
+                      <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${customer.billAtPurchasePrice ? 'left-7' : 'left-1'}`}></div>
+                    </button>
                   </div>
                 </div>
 

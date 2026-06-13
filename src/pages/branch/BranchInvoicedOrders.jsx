@@ -60,6 +60,85 @@ const BranchInvoicedOrders = () => {
   const [currentSpottedOrder, setCurrentSpottedOrder] = useState(null);
   const [triggerSpottedOnSuccess, setTriggerSpottedOnSuccess] = useState(false);
 
+  // Back Order Sidebar state
+  const [showBackOrdersSidebar, setShowBackOrdersSidebar] = useState(false);
+  const [backOrdersList, setBackOrdersList] = useState([]);
+  const [backOrdersLoading, setBackOrdersLoading] = useState(false);
+  const [backOrdersSearch, setBackOrdersSearch] = useState("");
+
+  const fetchBackOrders = async () => {
+    if (!currentBranch?._id) return;
+    setBackOrdersLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/invoices/backorders/list?branchId=${currentBranch._id}`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+      });
+      const data = await res.json();
+      if (data.success) {
+        setBackOrdersList(data.data || []);
+      } else {
+        toast.error(data.message || "Failed to fetch back orders");
+      }
+    } catch (err) {
+      console.error("Error fetching back orders:", err);
+      toast.error("Error fetching back orders");
+    } finally {
+      setBackOrdersLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (showBackOrdersSidebar) {
+      fetchBackOrders();
+    }
+  }, [showBackOrdersSidebar, currentBranch?._id]);
+
+  const getParsedBackOrders = () => {
+    const rows = [];
+    backOrdersList.forEach((invoice) => {
+      const invoiceId = invoice.invoiceNumber || invoice.salesOrderId?.salesInvoiceId || "N/A";
+      const customerName = invoice.customer?.name || "N/A";
+      const backOrderItems = invoice.backOrderItems || [];
+      const invoiceItems = invoice.invoiceItems || invoice.items || [];
+
+      backOrderItems.forEach((boItem) => {
+        // Match in invoiceItems to get confirmed qty
+        const confirmedItem = invoiceItems.find(
+          (ii) => (ii.productId?._id || ii.productId)?.toString() === (boItem.productId?._id || boItem.productId)?.toString()
+        );
+        const confirmedQty = confirmedItem ? (confirmedItem.qty || 0) : 0;
+        const pendingQty = boItem.qty || 0;
+        const requestedQty = confirmedQty + pendingQty;
+        const price = boItem.sellingPrice || 0;
+        const value = pendingQty * price;
+
+        rows.push({
+          invoiceId,
+          customerName,
+          productName: boItem.name || "N/A",
+          requestedQty,
+          confirmedQty,
+          pendingQty,
+          price,
+          value,
+          unit: boItem.unit || "",
+        });
+      });
+    });
+
+    if (!backOrdersSearch.trim()) return rows;
+
+    const searchLower = backOrdersSearch.toLowerCase();
+    return rows.filter(
+      (r) =>
+        r.invoiceId.toLowerCase().includes(searchLower) ||
+        r.customerName.toLowerCase().includes(searchLower) ||
+        r.productName.toLowerCase().includes(searchLower)
+    );
+  };
+
   const isSpottedCustomer = (customer) => {
     if (!customer) return false;
     const groupName = customer.customerGroups?.[0]?.name ||
@@ -905,6 +984,12 @@ const BranchInvoicedOrders = () => {
                   Generate Consolidated Slip ({selectedOrderIds.length})
                 </button>
               )}
+              <button
+                onClick={() => setShowBackOrdersSidebar(true)}
+                className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition shadow-sm text-sm font-bold"
+              >
+                📦 Back Orders
+              </button>
               <button
                 onClick={fetchSalesOrders}
                 disabled={loading}
@@ -2207,6 +2292,130 @@ const BranchInvoicedOrders = () => {
                   )}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══ BACK ORDERS SIDEBAR DRAWER ══ */}
+      {showBackOrdersSidebar && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[999] flex justify-end animate-in fade-in duration-200" onClick={() => setShowBackOrdersSidebar(false)}>
+          <div 
+            className="w-full max-w-4xl bg-white h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="bg-gradient-to-r from-blue-600 to-sky-500 px-6 py-5 text-white flex justify-between items-center shadow-md">
+              <div>
+                <h3 className="text-xl font-black uppercase tracking-tight flex items-center gap-2">
+                  <span>📦 Back Order Records</span>
+                  <span className="bg-white/20 text-xs px-2 py-0.5 rounded-full border border-white/30 font-bold">
+                    {getParsedBackOrders().length} items
+                  </span>
+                </h3>
+                <p className="text-xs text-blue-100 font-medium mt-0.5">
+                  Showing pending quantities that could not be confirmed during invoicing
+                </p>
+              </div>
+              <button
+                onClick={() => setShowBackOrdersSidebar(false)}
+                className="text-white hover:bg-white/10 px-3 py-1.5 rounded-xl transition font-black text-sm border border-white/20"
+              >
+                ✕ Close
+              </button>
+            </div>
+
+            {/* Search and Filter */}
+            <div className="p-4 border-b border-gray-150 bg-gray-50 flex items-center gap-3">
+              <input
+                type="text"
+                placeholder="Search by Inv ID, Customer, or Product..."
+                value={backOrdersSearch}
+                onChange={(e) => setBackOrdersSearch(e.target.value)}
+                className="flex-1 border border-gray-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm font-semibold shadow-inner"
+              />
+              <button
+                onClick={fetchBackOrders}
+                disabled={backOrdersLoading}
+                className="bg-white border border-gray-200 text-gray-700 px-4 py-2.5 rounded-xl hover:bg-gray-50 transition text-sm font-bold flex items-center gap-2 shadow-sm disabled:opacity-50"
+              >
+                <FaSync className={backOrdersLoading ? "animate-spin text-xs" : "text-xs"} />
+                Refresh
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="flex-1 overflow-y-auto p-6 bg-slate-50/50">
+              {backOrdersLoading ? (
+                <div className="flex flex-col items-center justify-center h-64 text-gray-500 gap-2">
+                  <div className="animate-spin text-3xl">⏳</div>
+                  <div className="text-sm font-bold uppercase tracking-wider">Loading back orders...</div>
+                </div>
+              ) : getParsedBackOrders().length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-64 text-gray-400 bg-white rounded-2xl border border-gray-150 shadow-sm p-8">
+                  <p className="text-sm font-bold uppercase tracking-widest text-gray-500">No back orders found</p>
+                  <p className="text-xs mt-1 text-gray-400">Try refining your search or refreshing the data</p>
+                </div>
+              ) : (
+                <div className="border border-gray-150 rounded-2xl overflow-hidden shadow-sm bg-white">
+                  <table className="w-full text-left border-collapse text-sm">
+                    <thead>
+                      <tr className="bg-gray-50 text-gray-500 uppercase text-[11px] font-bold border-b border-gray-150">
+                        <th className="px-5 py-4">Inv ID</th>
+                        <th className="px-5 py-4">Customer Name</th>
+                        <th className="px-5 py-4">Product Name</th>
+                        <th className="px-5 py-4 text-center">Req Qty</th>
+                        <th className="px-5 py-4 text-center">Confirm Qty</th>
+                        <th className="px-5 py-4 text-center">Pending Qty</th>
+                        <th className="px-5 py-4 text-right">Value</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {getParsedBackOrders().map((row, idx) => (
+                        <tr key={idx} className="hover:bg-blue-50/30 transition">
+                          <td className="px-5 py-4 font-bold text-blue-600 text-xs whitespace-nowrap">
+                            {row.invoiceId}
+                          </td>
+                          <td className="px-5 py-4 font-bold text-gray-800">
+                            {row.customerName}
+                          </td>
+                          <td className="px-5 py-4 font-semibold text-gray-700">
+                            {row.productName}
+                          </td>
+                          <td className="px-5 py-4 text-center font-bold text-gray-600">
+                            {row.requestedQty} {row.unit}
+                          </td>
+                          <td className="px-5 py-4 text-center font-bold text-emerald-600">
+                            {row.confirmedQty} {row.unit}
+                          </td>
+                          <td className="px-5 py-4 text-center font-bold text-rose-600 bg-rose-50/30">
+                            {row.pendingQty} {row.unit}
+                          </td>
+                          <td className="px-5 py-4 text-right font-black text-gray-900">
+                            ₹{row.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="bg-gray-50 px-6 py-5 border-t border-gray-150 flex justify-between items-center shadow-lg">
+              <div>
+                <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest block mb-0.5">Total Back Order Value</span>
+                <span className="text-2xl font-black text-rose-600">
+                  ₹{getParsedBackOrders().reduce((sum, r) => sum + r.value, 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+              <button
+                onClick={() => setShowBackOrdersSidebar(false)}
+                className="bg-gray-800 hover:bg-gray-900 text-white px-6 py-3 rounded-xl font-bold transition text-sm shadow-md"
+              >
+                Close Sidebar
+              </button>
             </div>
           </div>
         </div>

@@ -167,7 +167,6 @@ export function BranchProvider({ children }) {
         const updatedUser = { ...data.data, role: role || data.data.role };
         setUser(updatedUser);
         localStorage.setItem("user", JSON.stringify(updatedUser));
-        console.log(`✅ ${role || 'User'} profile synced`);
       }
     } catch (error) {
       console.error("❌ Failed to sync user profile:", error);

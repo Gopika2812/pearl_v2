@@ -1186,7 +1186,8 @@ router.get("/", async (req, res) => {
           lastInvoiceDate: 1,
           lastInvoiceNumber: 1,
           lastReceiptDate: 1,
-          linkedVendorId: 1
+          linkedVendorId: 1,
+          billAtPurchasePrice: 1
         }
       });
     }
@@ -1524,6 +1525,7 @@ router.post("/", async (req, res) => {
       branchId,
       isLockedPriceEnabled,
       linkedVendorId,
+      billAtPurchasePrice,
     } = req.body;
 
     // Basic validation - only name and branchId are required
@@ -1567,6 +1569,7 @@ router.post("/", async (req, res) => {
       branch,
       upi,
       isLockedPriceEnabled: isLockedPriceEnabled === true || isLockedPriceEnabled === "true",
+      billAtPurchasePrice: billAtPurchasePrice === true || billAtPurchasePrice === "true",
       linkedVendorId: linkedVendorId && linkedVendorId !== "" ? linkedVendorId : null,
       openingBalance: (Number(debit) || 0) - (Number(credit) || 0),
       manualOpeningDate: new Date(),

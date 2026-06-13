@@ -380,7 +380,6 @@ function AppContent() {
     const wakeUpServer = async () => {
       try {
         await fetch(`${API_BASE}/health`);
-        console.log("🚀 Server wake-up signal sent");
       } catch (err) {
         console.warn("⚠️ Server wake-up failed:", err.message);
       }

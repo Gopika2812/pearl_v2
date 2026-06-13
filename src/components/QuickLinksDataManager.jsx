@@ -200,10 +200,12 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit, renderInlineEdit }) => 
         params.search = debouncedSearchQuery.trim();
       }
       
-      if (type === "product") {
+      if (type === "product" || type === "customer") {
         params.mini = true; // Use optimized fast-loading mode
-        if (selectedGroup !== "All") params.productGroup = selectedGroup;
-        if (selectedCategory !== "All") params.productCategory = selectedCategory;
+        if (type === "product") {
+          if (selectedGroup !== "All") params.productGroup = selectedGroup;
+          if (selectedCategory !== "All") params.productCategory = selectedCategory;
+        }
       }
 
       const response = await apiWithAuth.get(config.endpoint, { params });

@@ -96,12 +96,8 @@ export const InventoryProvider = ({ children }) => {
   const fetchProductGroups = async () => {
     try {
       const branchId = currentBranch?._id;
-      if (!branchId) {
-        console.log("⚠️ No branchId for fetchProductGroups");
-        return;
-      }
+      if (!branchId) return;
       
-      console.log(`📦 Fetching ProductGroups for branchId: ${branchId}`);
       const res = await fetchWithAuth(`${API_BASE}/product-groups?branchId=${branchId}`);
       
       if (!res.ok) {
@@ -109,12 +105,7 @@ export const InventoryProvider = ({ children }) => {
       }
       
       const data = await res.json();
-      console.log(`📦 ProductGroups raw response:`, data);
-      console.log(`📦 Is array? ${Array.isArray(data)}`);
-      
       const groupsData = Array.isArray(data) ? data : (data.data || []);
-      console.log(`📦 Processed groups: ${groupsData.length} items`, groupsData.map(g => ({ _id: g._id, name: g.name })));
-      
       setProductGroups(groupsData);
     } catch (err) {
       console.error("❌ ProductGroup fetch failed", err);
@@ -125,12 +116,8 @@ export const InventoryProvider = ({ children }) => {
   const fetchProductCategories = async () => {
     try {
       const branchId = currentBranch?._id;
-      if (!branchId) {
-        console.log("⚠️ No branchId for fetchProductCategories");
-        return;
-      }
+      if (!branchId) return;
       
-      console.log(`🏷️ Fetching ProductCategories for branchId: ${branchId}`);
       const res = await fetchWithAuth(`${API_BASE}/product-categories?branchId=${branchId}`);
       
       if (!res.ok) {
@@ -138,12 +125,7 @@ export const InventoryProvider = ({ children }) => {
       }
       
       const data = await res.json();
-      console.log(`🏷️ ProductCategories raw response:`, data);
-      console.log(`🏷️ Is array? ${Array.isArray(data)}`);
-      
       const categoriesData = Array.isArray(data) ? data : (data.data || []);
-      console.log(`🏷️ Processed categories: ${categoriesData.length} items`, categoriesData.map(c => ({ _id: c._id, name: c.name })));
-      
       setProductCategories(categoriesData);
     } catch (err) {
       console.error("❌ ProductCategory fetch failed", err);
@@ -154,12 +136,8 @@ export const InventoryProvider = ({ children }) => {
   const fetchCustomerCategories = async () => {
     try {
       const branchId = currentBranch?._id;
-      if (!branchId) {
-        console.log("⚠️ No branchId for fetchCustomerCategories");
-        return;
-      }
+      if (!branchId) return;
       
-      console.log(`👥 Fetching CustomerCategories for branchId: ${branchId}`);
       const res = await fetchWithAuth(`${API_BASE}/customer-categories?branchId=${branchId}`);
       
       if (!res.ok) {
@@ -167,12 +145,7 @@ export const InventoryProvider = ({ children }) => {
       }
       
       const data = await res.json();
-      console.log(`👥 CustomerCategories raw response:`, data);
-      console.log(`👥 Is array? ${Array.isArray(data)}`);
-      
       const categoriesData = Array.isArray(data) ? data : (data.data || []);
-      console.log(`👥 Processed categories: ${categoriesData.length} items`, categoriesData.map(c => ({ _id: c._id, name: c.name })));
-      
       setCustomerCategories(categoriesData);
     } catch (err) {
       console.error("❌ CustomerCategory fetch failed", err);
@@ -183,12 +156,8 @@ export const InventoryProvider = ({ children }) => {
   const fetchCustomerGroups = async () => {
     try {
       const branchId = currentBranch?._id;
-      if (!branchId) {
-        console.log("⚠️ No branchId for fetchCustomerGroups");
-        return;
-      }
+      if (!branchId) return;
       
-      console.log(`👥 Fetching CustomerGroups for branchId: ${branchId}`);
       const res = await fetchWithAuth(`${API_BASE}/customer-groups?branchId=${branchId}`);
       
       if (!res.ok) {
@@ -196,12 +165,7 @@ export const InventoryProvider = ({ children }) => {
       }
       
       const data = await res.json();
-      console.log(`👥 CustomerGroups raw response:`, data);
-      console.log(`👥 Is array? ${Array.isArray(data)}`);
-      
       const groupsData = Array.isArray(data) ? data : (data.data || []);
-      console.log(`👥 Processed groups: ${groupsData.length} items`, groupsData.map(g => ({ _id: g._id, name: g.name })));
-      
       setCustomerGroups(groupsData);
     } catch (err) {
       console.error("❌ CustomerGroup fetch failed", err);
@@ -212,13 +176,8 @@ export const InventoryProvider = ({ children }) => {
   const fetchProducts = async () => {
     try {
       const branchId = currentBranch?._id;
-      if (!branchId) {
-        console.log("⚠️ No branchId for fetchProducts");
-        return;
-      }
+      if (!branchId) return;
       
-      console.log(`🔌 Fetching initial Products for branchId: ${branchId}`);
-      // ⚡ PERFORMANCE: Load only a small set initially. Use search for full access.
       const res = await fetchWithAuth(`${API_BASE}/products?branchId=${branchId}&limit=10000`);
       
       if (!res.ok) {

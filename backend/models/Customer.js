@@ -43,6 +43,7 @@ const customerSchema = new mongoose.Schema(
     openingBalance: { type: Number, default: 0 },
     manualOpeningDate: { type: Date, default: null },
     isLockedPriceEnabled: { type: Boolean, default: false },
+    billAtPurchasePrice: { type: Boolean, default: false },
     salesOwner: { type: mongoose.Schema.Types.ObjectId, ref: "SalesOwner", default: null, index: true },
     
     // Legacy field - kept for backward compatibility
