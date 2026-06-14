@@ -148,9 +148,9 @@ const BranchProductRecords = () => {
 
       setLoading(true);
       
-      const exportLimit = Math.min(totalRecords, 5000);
-      if (totalRecords > 5000) {
-        toast.warning("For performance reasons, only the first 5,000 records are exported at once. Please use date filters to narrow down.");
+      const exportLimit = Math.min(totalRecords, 10000);
+      if (totalRecords > 10000) {
+        toast.warning("For performance reasons, only the first 10,000 records are exported at once. Please use date filters to narrow down.");
       } else {
         toast.info("Preparing complete export data...");
       }

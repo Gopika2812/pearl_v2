@@ -26,6 +26,158 @@ const isToday = (date) => {
   );
 };
 
+// NEUTRALIZE old pending sales orders for selected products
+router.post("/neutralize", auth, clearCachePrefix("/api/sales-orders"), async (req, res) => {
+  try {
+    const { branchId, productIds, days } = req.body;
+    if (!branchId || !Array.isArray(productIds) || days === undefined) {
+      return res.status(400).json({ success: false, message: "Missing required fields: branchId, productIds, days" });
+    }
+
+    // Cutoff date is exactly `days` ago
+    const cutoffDate = moment().subtract(days, "days").toDate();
+
+    // Find uninvoiced sales orders for this branch older than or equal to cutoff date
+    const salesOrders = await SalesOrder.find({
+      branchId,
+      invoiceGenerated: false,
+      $or: [
+        { orderDate: { $lte: cutoffDate } },
+        { orderDate: { $exists: false }, createdAt: { $lte: cutoffDate } }
+      ]
+    });
+
+    let neutralizedCount = 0;
+
+    for (const order of salesOrders) {
+      let orderModified = false;
+      if (Array.isArray(order.items)) {
+        order.items.forEach(item => {
+          if (item.productId && productIds.includes(item.productId.toString()) && item.isNeutralized !== true) {
+            item.isNeutralized = true;
+            orderModified = true;
+            neutralizedCount++;
+          }
+        });
+      }
+
+      // Also neutralize sample items if they exist
+      if (Array.isArray(order.sampleItems)) {
+        order.sampleItems.forEach(item => {
+          if (item.productId && productIds.includes(item.productId.toString()) && item.isNeutralized !== true) {
+            item.isNeutralized = true;
+            orderModified = true;
+            neutralizedCount++;
+          }
+        });
+      }
+
+      if (orderModified) {
+        await order.save();
+      }
+    }
+
+    // Also neutralize backorders in Invoice collection
+    const backorderInvoices = await Invoice.find({
+      branchId,
+      backOrderItems: { $exists: true, $not: { $size: 0 } },
+      $or: [
+        { invoiceDate: { $lte: cutoffDate } },
+        { invoiceDate: { $exists: false }, createdAt: { $lte: cutoffDate } }
+      ]
+    });
+
+    for (const invoice of backorderInvoices) {
+      let invoiceModified = false;
+      invoice.backOrderItems.forEach(item => {
+        if (item.productId && productIds.includes(item.productId.toString()) && item.isNeutralized !== true) {
+          item.isNeutralized = true;
+          invoiceModified = true;
+          neutralizedCount++;
+        }
+      });
+      if (invoiceModified) {
+        await invoice.save();
+      }
+    }
+
+    res.json({ success: true, neutralizedCount, message: `Successfully neutralized ${neutralizedCount} old pending sales order items.` });
+  } catch (err) {
+    console.error("Error neutralizing sales orders:", err);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+});
+
+// REVERT NEUTRALIZE for selected products
+router.post("/revert-neutralize", auth, clearCachePrefix("/api/sales-orders"), async (req, res) => {
+  try {
+    const { branchId, productIds } = req.body;
+    if (!branchId || !Array.isArray(productIds)) {
+      return res.status(400).json({ success: false, message: "Missing required fields: branchId, productIds" });
+    }
+
+    // Find uninvoiced sales orders for this branch
+    const salesOrders = await SalesOrder.find({
+      branchId,
+      invoiceGenerated: false
+    });
+
+    let revertedCount = 0;
+
+    for (const order of salesOrders) {
+      let orderModified = false;
+      if (Array.isArray(order.items)) {
+        order.items.forEach(item => {
+          if (item.productId && productIds.includes(item.productId.toString()) && item.isNeutralized === true) {
+            item.isNeutralized = false;
+            orderModified = true;
+            revertedCount++;
+          }
+        });
+      }
+
+      if (Array.isArray(order.sampleItems)) {
+        order.sampleItems.forEach(item => {
+          if (item.productId && productIds.includes(item.productId.toString()) && item.isNeutralized === true) {
+            item.isNeutralized = false;
+            orderModified = true;
+            revertedCount++;
+          }
+        });
+      }
+
+      if (orderModified) {
+        await order.save();
+      }
+    }
+
+    // Revert backorders in Invoice collection
+    const backorderInvoices = await Invoice.find({
+      branchId,
+      backOrderItems: { $exists: true, $not: { $size: 0 } }
+    });
+
+    for (const invoice of backorderInvoices) {
+      let invoiceModified = false;
+      invoice.backOrderItems.forEach(item => {
+        if (item.productId && productIds.includes(item.productId.toString()) && item.isNeutralized === true) {
+          item.isNeutralized = false;
+          invoiceModified = true;
+          revertedCount++;
+        }
+      });
+      if (invoiceModified) {
+        await invoice.save();
+      }
+    }
+
+    res.json({ success: true, revertedCount, message: `Successfully reverted ${revertedCount} neutralized items.` });
+  } catch (err) {
+    console.error("Error reverting neutralized sales orders:", err);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+});
+
 // RECORD PAYMENT for sales order
 router.post("/:id/record-payment", clearCachePrefix("/api/sales-orders"), async (req, res) => {
   try {
@@ -138,8 +290,8 @@ router.post("/:id/record-payment", clearCachePrefix("/api/sales-orders"), async 
 // GET all sales orders with filtering and date ranges
 router.get("/", async (req, res) => {
   try {
-    const { branchId, customerName, status, isClaim, fromDate, toDate, customerId, search, voucherType, generated, isDummy, isOnlineOrder } = req.query;
-    console.log("🔍 [DEBUG] Sales Order Fetch Query:", { branchId, isClaim, fromDate, toDate, search, voucherType, isDummy, isOnlineOrder });
+    const { branchId, customerName, status, isClaim, fromDate, toDate, customerId, search, voucherType, generated, isDummy, isOnlineOrder, paginated, page = 1, limit = 50 } = req.query;
+    console.log("🔍 [DEBUG] Sales Order Fetch Query:", { branchId, isClaim, fromDate, toDate, search, voucherType, isDummy, isOnlineOrder, paginated });
     const query = {};
 
     // 1. Branch Filter (Always required)
@@ -267,19 +419,37 @@ router.get("/", async (req, res) => {
     // ⚡ Optimized Fetch
     console.log("📋 [DEBUG] Final MongoDB Query:", JSON.stringify(query, null, 2));
     
-    const salesOrders = await SalesOrder.find(query)
+    let salesOrdersQuery = SalesOrder.find(query)
       .select("invoiceId salesInvoiceId printCount customer items sampleItems grandTotalWithMargin grandTotal commonDiscount invoiceCommonDiscount closingBalance salesOwner createdAt orderDate invoiceGenerated warehouse billingPerson voucherType reEditRequestStatus reEditRequestBy reEditRequestAt isReEdited status editHistory lastInvoicedGrandTotal transportCharge transportGstPercent transportGstAmount invoiceTransportCharge invoiceTransportGstAmount extraExpenses extraExpenseAmount invoiceItems lastInvoicedItems invoiceSubtotal invoiceTotalTax invoiceGrandTotal invoiceOpeningBalance invoiceClosingBalance deliveryMan spottedCustomerName spottedPhoneNumber")
       .populate('salesOwner', 'name')
       .populate('deliveryMan', 'name phone')
-      .populate('items.productId')
-      .populate('invoiceItems.productId')
-      .populate('lastInvoicedItems.productId')
-      .sort({ createdAt: -1 })
-      .limit(search ? 1000 : 200) // Increase limit for searches
-      .lean();
+      .sort({ createdAt: -1 });
 
-    console.log(`✅ [DEBUG] Found ${salesOrders.length} sales orders for branch ${branchId}`);
-    res.json(salesOrders);
+    if (paginated === "true") {
+      const pageNum = parseInt(page);
+      const limitNum = parseInt(limit);
+      const totalCount = await SalesOrder.countDocuments(query);
+      const salesOrders = await salesOrdersQuery
+        .skip((pageNum - 1) * limitNum)
+        .limit(limitNum)
+        .lean();
+      
+      console.log(`✅ [DEBUG] Found ${salesOrders.length} sales orders for branch ${branchId} (Page ${pageNum}/${Math.ceil(totalCount/limitNum)})`);
+      return res.json({
+        paginated: true,
+        data: salesOrders,
+        totalCount,
+        totalPages: Math.ceil(totalCount / limitNum) || 1,
+        currentPage: pageNum
+      });
+    } else {
+      const salesOrders = await salesOrdersQuery
+        .limit(search ? 1000 : 200) // Legacy limit
+        .lean();
+      
+      console.log(`✅ [DEBUG] Found ${salesOrders.length} sales orders for branch ${branchId}`);
+      return res.json(salesOrders);
+    }
   } catch (error) {
     console.error("Fetch error:", error);
     res.status(500).json({ message: "Failed to fetch sales orders" });

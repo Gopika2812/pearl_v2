@@ -60,17 +60,30 @@ const BranchInvoicedOrders = () => {
   const [currentSpottedOrder, setCurrentSpottedOrder] = useState(null);
   const [triggerSpottedOnSuccess, setTriggerSpottedOnSuccess] = useState(false);
 
+  // Filter states
+  const [filterVoucherType, setFilterVoucherType] = useState("");
+  const [filterGenerated, setFilterGenerated] = useState(""); // ALL, GENERATED, NOT_GENERATED
+  const [filterInvoiceId, setFilterInvoiceId] = useState("");
+  const [filterCustomerName, setFilterCustomerName] = useState("");
+  const [filterFromDate, setFilterFromDate] = useState(new Date().toLocaleDateString('en-CA'));
+  const [filterToDate, setFilterToDate] = useState(new Date().toLocaleDateString('en-CA'));
+  const [filterFromTime, setFilterFromTime] = useState("");
+  const [filterToTime, setFilterToTime] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
   // Back Order Sidebar state
   const [showBackOrdersSidebar, setShowBackOrdersSidebar] = useState(false);
   const [backOrdersList, setBackOrdersList] = useState([]);
   const [backOrdersLoading, setBackOrdersLoading] = useState(false);
   const [backOrdersSearch, setBackOrdersSearch] = useState("");
+  const [backOrderPage, setBackOrderPage] = useState(1);
 
   const fetchBackOrders = async () => {
     if (!currentBranch?._id) return;
     setBackOrdersLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/invoices/backorders/list?branchId=${currentBranch._id}`, {
+      const voucherParam = filterVoucherType ? `&voucherType=${encodeURIComponent(filterVoucherType)}` : "";
+      const res = await fetch(`${API_BASE}/invoices/backorders/list?branchId=${currentBranch._id}&fromDate=${filterFromDate}&toDate=${filterToDate}${voucherParam}`, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("token")}`,
         },
@@ -93,13 +106,16 @@ const BranchInvoicedOrders = () => {
     if (showBackOrdersSidebar) {
       fetchBackOrders();
     }
-  }, [showBackOrdersSidebar, currentBranch?._id]);
+  }, [showBackOrdersSidebar, currentBranch?._id, filterFromDate, filterToDate, filterVoucherType]);
 
   const getParsedBackOrders = () => {
     const rows = [];
     backOrdersList.forEach((invoice) => {
       const invoiceId = invoice.invoiceNumber || invoice.salesOrderId?.salesInvoiceId || "N/A";
       const customerName = invoice.customer?.name || "N/A";
+      const invoiceDate = invoice.invoiceDate || invoice.createdAt;
+      const exactTime = invoice.createdAt || invoice.invoiceDate;
+      const createdBy = invoice.generatedBy || invoice.billingPerson || "System";
       const backOrderItems = invoice.backOrderItems || [];
       const invoiceItems = invoice.invoiceItems || invoice.items || [];
 
@@ -117,6 +133,9 @@ const BranchInvoicedOrders = () => {
         rows.push({
           invoiceId,
           customerName,
+          date: new Date(invoiceDate).toLocaleDateString("en-IN"),
+          time: new Date(exactTime).toLocaleTimeString("en-IN", { hour: '2-digit', minute: '2-digit' }),
+          createdBy,
           productName: boItem.name || "N/A",
           requestedQty,
           confirmedQty,
@@ -139,6 +158,52 @@ const BranchInvoicedOrders = () => {
     );
   };
 
+  const handleExportBackOrdersExcel = () => {
+    try {
+      const dataToExport = getParsedBackOrders();
+      if (dataToExport.length === 0) {
+        toast.warn("No back orders to export.");
+        return;
+      }
+
+      const exportData = dataToExport.map((row) => ({
+        "Date": row.date,
+        "Time": row.time,
+        "Inv ID": row.invoiceId,
+        "Customer Name": row.customerName,
+        "Created By": row.createdBy,
+        "Product Name": row.productName,
+        "Req Qty": `${row.requestedQty} ${row.unit}`,
+        "Confirm Qty": `${row.confirmedQty} ${row.unit}`,
+        "Pending Qty": `${row.pendingQty} ${row.unit}`,
+        "Value": row.value,
+      }));
+
+      const totalValue = exportData.reduce((sum, row) => sum + row["Value"], 0);
+      exportData.push({
+        "Date": "TOTAL",
+        "Time": "",
+        "Inv ID": "",
+        "Customer Name": "",
+        "Created By": "",
+        "Product Name": "",
+        "Req Qty": "",
+        "Confirm Qty": "",
+        "Pending Qty": "",
+        "Value": totalValue,
+      });
+
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Back Orders");
+      XLSX.writeFile(workbook, `BackOrders_${new Date().toISOString().split('T')[0]}.xlsx`);
+      toast.success("Excel exported successfully!");
+    } catch (error) {
+      console.error("Export error:", error);
+      toast.error("Failed to export Excel");
+    }
+  };
+
   const isSpottedCustomer = (customer) => {
     if (!customer) return false;
     const groupName = customer.customerGroups?.[0]?.name ||
@@ -149,16 +214,7 @@ const BranchInvoicedOrders = () => {
       customer.name?.toLowerCase().includes("counter sales");
   };
 
-  // Filter states
-  const [filterVoucherType, setFilterVoucherType] = useState("");
-  const [filterGenerated, setFilterGenerated] = useState(""); // ALL, GENERATED, NOT_GENERATED
-  const [filterInvoiceId, setFilterInvoiceId] = useState("");
-  const [filterCustomerName, setFilterCustomerName] = useState("");
-  const [filterFromDate, setFilterFromDate] = useState(new Date().toLocaleDateString('en-CA'));
-  const [filterToDate, setFilterToDate] = useState(new Date().toLocaleDateString('en-CA'));
-  const [filterFromTime, setFilterFromTime] = useState("");
-  const [filterToTime, setFilterToTime] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
+
 
   // Search debounce logic — Invoice ID and Customer Name debounced separately
   const [debouncedInvoiceId, setDebouncedInvoiceId] = useState("");
@@ -197,6 +253,16 @@ const BranchInvoicedOrders = () => {
   const [selectedOrderIds, setSelectedOrderIds] = useState([]);
   const selectedOrders = salesOrders.filter(so => selectedOrderIds.includes(so._id));
 
+  // Pagination State
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalOrders, setTotalOrders] = useState(0);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setPage(1);
+  }, [currentBranch?._id, filterFromDate, filterToDate, debouncedSearch, filterVoucherType, filterGenerated, showDummyBills]);
+
   // Fetch sales orders for current branch
   const fetchSalesOrders = async () => {
     // Get branch ID from context
@@ -214,9 +280,10 @@ const BranchInvoicedOrders = () => {
       const voucherParam = filterVoucherType ? `&voucherType=${encodeURIComponent(filterVoucherType)}` : "";
       const generatedParam = filterGenerated ? `&generated=${filterGenerated === "GENERATED"}` : "";
       const dummyParam = `&isDummy=${showDummyBills}`;
+      const paginationParam = `&paginated=true&page=${page}&limit=50`;
 
       const res = await fetch(
-        `${API_BASE}/sales-orders?branchId=${currentBranch._id}&fromDate=${filterFromDate}&toDate=${filterToDate}${invoiceIdParam}${customerNameParam}${voucherParam}${generatedParam}${dummyParam}`,
+        `${API_BASE}/sales-orders?branchId=${currentBranch._id}&fromDate=${filterFromDate}&toDate=${filterToDate}${invoiceIdParam}${customerNameParam}${voucherParam}${generatedParam}${dummyParam}${paginationParam}`,
         {
           headers: {
             Authorization: `Bearer ${localStorage.getItem("token")}`,
@@ -228,8 +295,15 @@ const BranchInvoicedOrders = () => {
 
       if (!res.ok) throw new Error(data.message || "Failed to fetch orders");
 
-      setSalesOrders(data || []);
-      toast.success(`Fetched ${data?.length || 0} sales orders`);
+      if (data.paginated) {
+        setSalesOrders(data.data || []);
+        setTotalPages(data.totalPages || 1);
+        setTotalOrders(data.totalCount || 0);
+      } else {
+        setSalesOrders(data || []);
+        setTotalOrders(data?.length || 0);
+        setTotalPages(1);
+      }
     } catch (err) {
       console.error("Error fetching sales orders:", err);
       toast.error(err.message || "Failed to fetch sales orders");
@@ -259,7 +333,7 @@ const BranchInvoicedOrders = () => {
 
   useEffect(() => {
     fetchSalesOrders();
-  }, [currentBranch?._id, filterFromDate, filterToDate, debouncedSearch, filterVoucherType, filterGenerated, showDummyBills]);
+  }, [currentBranch?._id, filterFromDate, filterToDate, debouncedSearch, filterVoucherType, filterGenerated, showDummyBills, page]);
 
   useEffect(() => {
     fetchVoucherTypes();
@@ -291,6 +365,7 @@ const BranchInvoicedOrders = () => {
     setFilterToDate(new Date().toLocaleDateString('en-CA'));
     setFilterVoucherType("");
     setFilterGenerated("");
+    setPage(1);
     toast.info("Filters reset to Today");
   };
 
@@ -1112,8 +1187,8 @@ const BranchInvoicedOrders = () => {
               </button>
             </div>
           </div>
-          <div className="mt-3 text-xs text-gray-500">
-            Showing {filteredSalesOrders.length} of {salesOrders.length} orders
+          <div className="mt-3 text-xs text-gray-500 font-medium">
+            Showing {totalOrders === 0 ? 0 : (page - 1) * 50 + 1}-{Math.min(page * 50, totalOrders)} of {totalOrders} orders
           </div>
         </div>
 
@@ -1954,6 +2029,63 @@ const BranchInvoicedOrders = () => {
             </div>
           </div>
         )}
+
+        {/* PAGINATION CONTROLS */}
+        {totalPages > 1 && (
+          <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-white p-4 rounded-2xl shadow-sm border border-gray-100 mt-4">
+            <button
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className="px-5 py-2.5 bg-gray-100 rounded-xl hover:bg-gray-200 disabled:opacity-50 font-bold text-sm text-gray-700 transition"
+            >
+              ← Prev
+            </button>
+            
+            <div className="flex items-center gap-1.5 overflow-x-auto max-w-full px-2">
+              {(() => {
+                let pages = [];
+                if (totalPages <= 7) {
+                  pages = Array.from({ length: totalPages }, (_, i) => i + 1);
+                } else {
+                  if (page <= 4) {
+                    pages = [1, 2, 3, 4, 5, '...', totalPages];
+                  } else if (page >= totalPages - 3) {
+                    pages = [1, '...', totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
+                  } else {
+                    pages = [1, '...', page - 1, page, page + 1, '...', totalPages];
+                  }
+                }
+                
+                return pages.map((p, idx) => {
+                  if (p === '...') {
+                    return <span key={`ellipsis-${idx}`} className="px-2 text-gray-400 font-bold">...</span>;
+                  }
+                  return (
+                    <button
+                      key={p}
+                      onClick={() => setPage(p)}
+                      className={`min-w-[40px] h-10 flex items-center justify-center rounded-xl text-sm font-black transition ${
+                        page === p
+                          ? "bg-[#319bab] text-white shadow-md shadow-[#319bab]/20"
+                          : "text-gray-600 hover:bg-gray-100 bg-gray-50"
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  );
+                });
+              })()}
+            </div>
+
+            <button
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+              className="px-5 py-2.5 bg-[#319bab] text-white rounded-xl hover:bg-[#257f87] disabled:opacity-50 font-bold text-sm transition shadow-md shadow-[#319bab]/20"
+            >
+              Next →
+            </button>
+          </div>
+        )}
       </div>
 
       {/* INVOICE PREVIEW MODAL */}
@@ -2335,6 +2467,13 @@ const BranchInvoicedOrders = () => {
                 className="flex-1 border border-gray-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm font-semibold shadow-inner"
               />
               <button
+                onClick={handleExportBackOrdersExcel}
+                className="bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-2.5 rounded-xl hover:bg-emerald-100 transition text-sm font-bold flex items-center gap-2 shadow-sm"
+              >
+                <FaFileExcel className="text-emerald-600 text-sm" />
+                Export
+              </button>
+              <button
                 onClick={fetchBackOrders}
                 disabled={backOrdersLoading}
                 className="bg-white border border-gray-200 text-gray-700 px-4 py-2.5 rounded-xl hover:bg-gray-50 transition text-sm font-bold flex items-center gap-2 shadow-sm disabled:opacity-50"
@@ -2357,22 +2496,35 @@ const BranchInvoicedOrders = () => {
                   <p className="text-xs mt-1 text-gray-400">Try refining your search or refreshing the data</p>
                 </div>
               ) : (
-                <div className="border border-gray-150 rounded-2xl overflow-hidden shadow-sm bg-white">
+                <div className="border border-gray-150 rounded-2xl overflow-x-auto shadow-sm bg-white">
                   <table className="w-full text-left border-collapse text-sm">
                     <thead>
                       <tr className="bg-gray-50 text-gray-500 uppercase text-[11px] font-bold border-b border-gray-150">
+                        <th className="px-5 py-4">Date & Time</th>
                         <th className="px-5 py-4">Inv ID</th>
                         <th className="px-5 py-4">Customer Name</th>
                         <th className="px-5 py-4">Product Name</th>
                         <th className="px-5 py-4 text-center">Req Qty</th>
                         <th className="px-5 py-4 text-center">Confirm Qty</th>
                         <th className="px-5 py-4 text-center">Pending Qty</th>
+                        <th className="px-5 py-4 text-right">Price</th>
+                        <th className="px-5 py-4 text-center">Created By</th>
                         <th className="px-5 py-4 text-right">Value</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {getParsedBackOrders().map((row, idx) => (
-                        <tr key={idx} className="hover:bg-blue-50/30 transition">
+                      {(() => {
+                        const allBackOrders = getParsedBackOrders();
+                        const backOrdersPerPage = 50;
+                        const paginatedBackOrders = allBackOrders.slice((backOrderPage - 1) * backOrdersPerPage, backOrderPage * backOrdersPerPage);
+                        return paginatedBackOrders.map((row, idx) => (
+                          <tr key={idx} className="hover:bg-blue-50/30 transition">
+                          <td className="px-5 py-4 font-medium text-gray-600 text-xs">
+                            <div className="flex flex-col">
+                              <span className="font-bold text-gray-800">{row.date}</span>
+                              <span className="text-[10px] text-gray-500">{row.time}</span>
+                            </div>
+                          </td>
                           <td className="px-5 py-4 font-bold text-blue-600 text-xs whitespace-nowrap">
                             {row.invoiceId}
                           </td>
@@ -2391,13 +2543,49 @@ const BranchInvoicedOrders = () => {
                           <td className="px-5 py-4 text-center font-bold text-rose-600 bg-rose-50/30">
                             {row.pendingQty} {row.unit}
                           </td>
+                          <td className="px-5 py-4 text-right font-semibold text-gray-700 text-xs">
+                            ₹{row.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                          <td className="px-5 py-4 text-center font-bold text-gray-600 text-xs">
+                            {row.createdBy}
+                          </td>
                           <td className="px-5 py-4 text-right font-black text-gray-900">
                             ₹{row.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </td>
                         </tr>
-                      ))}
+                      ));
+                      })()}
                     </tbody>
                   </table>
+                  {(() => {
+                    const totalBackOrderPages = Math.ceil(getParsedBackOrders().length / 50) || 1;
+                    if (totalBackOrderPages > 1) {
+                      return (
+                        <div className="flex justify-between items-center bg-gray-50 p-4 border-t border-gray-150">
+                          <button
+                            onClick={() => setBackOrderPage(p => Math.max(1, p - 1))}
+                            disabled={backOrderPage === 1}
+                            className="px-4 py-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 font-bold text-xs text-gray-700 transition"
+                          >
+                            ← Prev
+                          </button>
+                          
+                          <div className="text-xs font-bold text-gray-500">
+                            Page {backOrderPage} of {totalBackOrderPages}
+                          </div>
+
+                          <button
+                            onClick={() => setBackOrderPage(p => Math.min(totalBackOrderPages, p + 1))}
+                            disabled={backOrderPage === totalBackOrderPages}
+                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-bold text-xs transition"
+                          >
+                            Next →
+                          </button>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
                 </div>
               )}
             </div>

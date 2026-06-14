@@ -7,11 +7,7 @@ import {
     generateLink,
     getPublicOrder,
     getBranchProducts,
-    confirmPublicOrder,
-    getTasks,
-    createTask,
-    updateTask,
-    deleteTask
+    confirmPublicOrder
 } from "../controllers/crmOrderController.js";
 
 const router = express.Router();
@@ -21,12 +17,6 @@ router.get("/customers/suggest", auth, getFrequentCustomers);
 router.get("/products/recommend/:customerId", auth, getRecommendedProducts);
 router.post("/sessions", auth, createSession);
 router.post("/links", auth, generateLink);
-
-// Task Board Routes
-router.get("/tasks", auth, getTasks);
-router.post("/tasks", auth, createTask);
-router.patch("/tasks/:taskId", auth, updateTask);
-router.delete("/tasks/:taskId", auth, deleteTask);
 
 // Public Routes (For Customers)
 router.get("/public/order/:token", getPublicOrder);

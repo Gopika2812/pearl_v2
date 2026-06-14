@@ -138,7 +138,7 @@ router.get("/by-number/:invoiceNumber", async (req, res) => {
 // GET - Retrieve all invoices containing backorders for a branch
 router.get("/backorders/list", auth, async (req, res) => {
   try {
-    const { branchId } = req.query;
+    const { branchId, fromDate, toDate, voucherType } = req.query;
     if (!branchId) {
       return res.status(400).json({ success: false, message: "branchId is required" });
     }
@@ -149,6 +149,36 @@ router.get("/backorders/list", auth, async (req, res) => {
       status: { $in: ["FINALIZED", "PRINTED", "SENT"] },
       backOrderItems: { $exists: true, $not: { $size: 0 } }
     };
+
+    if (voucherType && voucherType !== "undefined") {
+      const salesOrders = await SalesOrder.find({
+        branchId: new mongoose.Types.ObjectId(branchId),
+        voucherType: voucherType
+      }).select('_id').lean();
+      
+      query.salesOrderId = { $in: salesOrders.map(so => so._id) };
+    }
+
+    if (fromDate || toDate) {
+      const IST = "Asia/Kolkata";
+      let startStr = fromDate && fromDate !== "undefined" ? fromDate : null;
+      let endStr = toDate && toDate !== "undefined" ? toDate : null;
+
+      if (startStr && endStr && startStr > endStr) {
+        [startStr, endStr] = [endStr, startStr];
+      }
+
+      if (startStr || endStr) {
+        const dateCondition = {};
+        if (startStr) dateCondition.$gte = moment.tz(startStr, IST).startOf("day").toDate();
+        if (endStr) dateCondition.$lte = moment.tz(endStr, IST).endOf("day").toDate();
+        
+        query.$or = [
+          { invoiceDate: dateCondition },
+          { invoiceDate: { $exists: false }, createdAt: dateCondition }
+        ];
+      }
+    }
 
     const invoices = await Invoice.find(query).sort({ invoiceDate: -1 }).lean();
 

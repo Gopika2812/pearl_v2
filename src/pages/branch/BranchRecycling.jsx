@@ -157,14 +157,12 @@ export default function BranchRecycling() {
 
   // Neutralize Pending SO Qty State
   const [isNeutralizing, setIsNeutralizing] = useState(false);
+  const [neutralizeDays, setNeutralizeDays] = useState(3);
 
   const handleNeutralizePending = async () => {
     if (selectedProducts.size === 0) return;
     
-    const daysStr = prompt("Enter number of days (e.g. 3) to neutralize older pending sales order items (Note: items explicitly confirmed in Back Order edits will be preserved):", "3");
-    if (!daysStr) return;
-    
-    const days = parseInt(daysStr, 10);
+    const days = parseInt(neutralizeDays, 10);
     if (isNaN(days) || days < 0) {
       toast.error("Please enter a valid number of days");
       return;
@@ -190,9 +188,55 @@ export default function BranchRecycling() {
       if (data.success || res.ok) {
         toast.success(`Successfully neutralized ${data.neutralizedCount || 0} old pending sales order items.`);
         setSelectedProducts(new Set());
-        fetchAllData(currentPage, searchTerm); // Refresh pending SO qty
+        
+        // Fast refresh: only update pending sales, don't fetch 10,000 products
+        const pendingSalesData = await fetchPendingSales();
+        if (pendingSalesData) {
+          setPendingSalesMap(pendingSalesData.pendingMap || {});
+          setPendingSalesDetailsMap(pendingSalesData.detailsMap || {});
+        }
       } else {
         toast.error(data.message || "Failed to neutralize");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Error connecting to server");
+    } finally {
+      setIsNeutralizing(false);
+    }
+  };
+
+  const handleRevertNeutralizePending = async () => {
+    if (selectedProducts.size === 0) return;
+
+    setIsNeutralizing(true);
+    try {
+      const productIds = Array.from(selectedProducts);
+      const res = await fetch(`${API_BASE}/sales-orders/revert-neutralize`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${localStorage.getItem("token")}`
+        },
+        body: JSON.stringify({
+          branchId: currentBranch._id,
+          productIds
+        })
+      });
+
+      const data = await res.json();
+      if (data.success || res.ok) {
+        toast.success(`Successfully reverted ${data.revertedCount || 0} neutralized items.`);
+        setSelectedProducts(new Set());
+        
+        // Fast refresh: only update pending sales
+        const pendingSalesData = await fetchPendingSales();
+        if (pendingSalesData) {
+          setPendingSalesMap(pendingSalesData.pendingMap || {});
+          setPendingSalesDetailsMap(pendingSalesData.detailsMap || {});
+        }
+      } else {
+        toast.error(data.message || "Failed to revert neutralization");
       }
     } catch (err) {
       console.error(err);
@@ -360,54 +404,91 @@ export default function BranchRecycling() {
     }
   };
 
-  // Fetch pending sales orders (not yet converted to invoice)
+  // Fetch pending sales orders and back orders
   const fetchPendingSales = async () => {
     if (!currentBranch?._id) return null;
 
     try {
       const res = await fetch(`${API_BASE}/sales-orders?branchId=${currentBranch._id}&generated=false&fromDate=2020-01-01&toDate=2030-12-31&limit=5000`);
-      if (!res.ok) return null;
-
-      const data = await res.json();
-      let salesOrders = [];
-
-      if (data?.data && Array.isArray(data.data)) {
-        salesOrders = data.data;
-      } else if (Array.isArray(data)) {
-        salesOrders = data;
-      }
-
-      // Filter only pending (not invoiced) orders
-      const pendingOrders = salesOrders.filter((so) => !so.invoiceGenerated);
-
-      // Create a map of productId -> total pending qty
+      const backOrdersRes = await fetch(`${API_BASE}/invoices/backorders/list?branchId=${currentBranch._id}`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+      });
+      
       const pendingMap = {};
       const detailsMap = {};
-      pendingOrders.forEach((order) => {
-        if (Array.isArray(order.items)) {
-          order.items.forEach((item) => {
-            const prodId = item.productId?._id || item.productId;
-            if (prodId && item.isNeutralized !== true) {
-              pendingMap[prodId] = (pendingMap[prodId] || 0) + (item.qty || 0);
-              
-              if (!detailsMap[prodId]) {
-                detailsMap[prodId] = [];
-              }
-              const dateVal = order.orderDate || order.createdAt;
-              const daysPending = Math.max(0, Math.floor((new Date() - new Date(dateVal)) / (1000 * 60 * 60 * 24)));
-              detailsMap[prodId].push({
-                invoiceId: order.invoiceId,
-                customerName: order.customer?.name || "Unknown",
-                qty: item.qty,
-                date: dateVal,
-                daysPending
-              });
-            }
-          });
-        }
-      });
 
-      console.log("📊 Pending Sales Map:", pendingMap);
+      if (res.ok) {
+        const data = await res.json();
+        let salesOrders = [];
+
+        if (data?.data && Array.isArray(data.data)) {
+          salesOrders = data.data;
+        } else if (Array.isArray(data)) {
+          salesOrders = data;
+        }
+
+        // Filter only pending (not invoiced) orders
+        const pendingOrders = salesOrders.filter((so) => !so.invoiceGenerated);
+
+        pendingOrders.forEach((order) => {
+          if (Array.isArray(order.items)) {
+            order.items.forEach((item) => {
+              const prodId = item.productId?._id || item.productId;
+              if (prodId && item.isNeutralized !== true) {
+                pendingMap[prodId] = (pendingMap[prodId] || 0) + (item.qty || 0);
+                
+                if (!detailsMap[prodId]) {
+                  detailsMap[prodId] = [];
+                }
+                const dateVal = order.orderDate || order.createdAt;
+                const daysPending = Math.max(0, Math.floor((new Date() - new Date(dateVal)) / (1000 * 60 * 60 * 24)));
+                detailsMap[prodId].push({
+                  invoiceId: order.invoiceId,
+                  customerName: order.customer?.name || "Unknown",
+                  qty: item.qty,
+                  date: dateVal,
+                  daysPending,
+                  isBackOrder: false
+                });
+              }
+            });
+          }
+        });
+      }
+
+      if (backOrdersRes.ok) {
+        const boData = await backOrdersRes.json();
+        const backOrders = boData.data || [];
+
+        backOrders.forEach((invoice) => {
+          if (Array.isArray(invoice.backOrderItems)) {
+            invoice.backOrderItems.forEach((boItem) => {
+              const prodId = boItem.productId?._id || boItem.productId;
+              if (prodId) {
+                pendingMap[prodId] = (pendingMap[prodId] || 0) + (boItem.qty || 0);
+
+                if (!detailsMap[prodId]) {
+                  detailsMap[prodId] = [];
+                }
+                const dateVal = invoice.invoiceDate || invoice.createdAt;
+                const daysPending = Math.max(0, Math.floor((new Date() - new Date(dateVal)) / (1000 * 60 * 60 * 24)));
+                detailsMap[prodId].push({
+                  invoiceId: invoice.invoiceNumber || invoice.salesOrderId?.salesInvoiceId || "N/A",
+                  customerName: invoice.customer?.name || "Unknown",
+                  qty: boItem.qty,
+                  date: dateVal,
+                  daysPending,
+                  isBackOrder: true
+                });
+              }
+            });
+          }
+        });
+      }
+
+      console.log("📊 Pending Sales Map (including Back Orders):", pendingMap);
       return { pendingMap, detailsMap };
     } catch (err) {
       console.error("❌ Error fetching pending sales:", err);
@@ -458,14 +539,13 @@ export default function BranchRecycling() {
   const [showPendingSalesPopup, setShowPendingSalesPopup] = useState(false);
   const [pendingPOMap, setPendingPOMap] = useState({});
 
-  // Fetch both products, pending sales, and pending purchase orders concurrently
-  const fetchAllData = async (page = 1, search = "") => {
+  // Fetch only heavy global data
+  const fetchGlobalData = async () => {
     try {
-      const [_, pendingSalesData, pendingPO, __] = await Promise.all([
-        fetchProducts(page, search),
+      const [pendingSalesData, pendingPO] = await Promise.all([
         fetchPendingSales(),
         fetchPendingPurchaseOrders(),
-        fetchAllProductsForGroups() // Keep allProducts in sync for alerts & group filter counts in background
+        fetchAllProductsForGroups()
       ]);
 
       if (pendingSalesData) {
@@ -477,6 +557,18 @@ export default function BranchRecycling() {
       }
 
       setPendingPOMap(pendingPO || {});
+    } catch (err) {
+      console.error("❌ Error loading global data:", err);
+    }
+  };
+
+  // Fetch both products, pending sales, and pending purchase orders concurrently
+  const fetchAllData = async (page = 1, search = "") => {
+    try {
+      await Promise.all([
+        fetchProducts(page, search),
+        fetchGlobalData()
+      ]);
     } catch (err) {
       console.error("❌ Error loading concurrent data:", err);
     }
@@ -494,7 +586,6 @@ export default function BranchRecycling() {
       setBranchLoaded(true);
       fetchAllData(currentPage, searchTerm);
       fetchProductGroupsDirectly(); // Load product groups INSTANTLY
-      fetchAllProductsForGroups(); // Fetch all products for dynamic counts and global search caching
     } else {
       setBranchLoaded(false);
     }
@@ -503,7 +594,7 @@ export default function BranchRecycling() {
   // Handle page and search changes
   useEffect(() => {
     if (currentBranch?._id && branchLoaded) {
-      fetchAllData(currentPage, searchTerm);
+      fetchProducts(currentPage, searchTerm);
     }
   }, [currentPage, searchTerm]);
 
@@ -2454,15 +2545,36 @@ export default function BranchRecycling() {
                 </button>
               )}
 
-              {/* Neutralize Button */}
-              <button
-                onClick={handleNeutralizePending}
-                disabled={isNeutralizing}
-                className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all duration-200 shadow cursor-pointer ml-auto flex items-center gap-2"
-                title="Neutralize old pending Sales Orders for these products"
-              >
-                {isNeutralizing ? "Processing..." : `🧹 Neutralize SO Qty`}
-              </button>
+              {/* Neutralize Actions */}
+              <div className="flex items-center gap-2 ml-auto">
+                <div className="flex items-center gap-2 bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-1.5 shadow-inner">
+                  <span className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">Days:</span>
+                  <input
+                    type="number"
+                    value={neutralizeDays}
+                    onChange={(e) => setNeutralizeDays(e.target.value)}
+                    className="w-14 px-2 py-0.5 rounded bg-slate-950 text-white font-extrabold text-xs text-center focus:outline-none border border-slate-700"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleNeutralizePending}
+                    disabled={isNeutralizing}
+                    className="bg-orange-600 hover:bg-orange-700 text-white px-3 py-1 rounded text-[10px] font-black uppercase tracking-wider transition-all duration-200 cursor-pointer disabled:opacity-50"
+                    title="Neutralize old pending Sales Orders for these products"
+                  >
+                    {isNeutralizing ? "Wait..." : `🧹 Neutralize`}
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleRevertNeutralizePending}
+                  disabled={isNeutralizing}
+                  className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all duration-200 shadow cursor-pointer border border-slate-600"
+                  title="Revert neutralization for these products"
+                >
+                  ↩️ Revert
+                </button>
+              </div>
             </div>
           </div>
         )}
