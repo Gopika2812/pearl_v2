@@ -44,7 +44,7 @@ const AggregateSlipModal = ({ isOpen, onClose, orders, branch }) => {
     });
 
     return {
-      aggregatedItems: Object.values(itemMap).sort((a, b) => a.name.localeCompare(b.name)),
+      aggregatedItems: Object.values(itemMap),
       customerSummary: Object.values(customerMap).sort((a, b) => a.name.localeCompare(b.name))
     };
   }, [orders]);
