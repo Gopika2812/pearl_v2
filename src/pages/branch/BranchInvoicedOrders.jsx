@@ -1,7 +1,7 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import React, { useEffect, useState } from "react";
-import { FaBan, FaChevronDown, FaFileExcel, FaFileInvoice, FaFilePdf, FaSync, FaTruck, FaCalendarAlt } from "react-icons/fa";
+import { FaBan, FaChevronDown, FaFileExcel, FaFileInvoice, FaFilePdf, FaSync, FaTruck, FaCalendarAlt, FaPrint } from "react-icons/fa";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import * as XLSX from "xlsx";
@@ -11,6 +11,7 @@ import InvoiceGeneratorModal from "../../components/InvoiceGeneratorModal";
 import AggregateSlipModal from "../../components/branch/AggregateSlipModal";
 import { useBranch } from "../../context/BranchContext";
 import { getInvoiceHTML } from "../../utils/invoiceUtils";
+import { getOriginalInvoiceHTML } from "../../utils/legacyInvoiceTemplate";
 
 const BranchInvoicedOrders = () => {
   const { currentBranch, user } = useBranch();
@@ -376,8 +377,59 @@ const BranchInvoicedOrders = () => {
     setShowModal(true); // Open the Back Order Workbench / Generator
   };
 
+  const handleInstantPrint = async (order) => {
+    try {
+      setProcessingPrint(true);
+      
+      // 1. Generate Invoice Preview with default items (100% quantity)
+      const defaultItems = (order.items || []).map(item => ({
+        ...item,
+        confirmedQty: item.qty,
+        backOrderQty: 0
+      }));
+
+      const previewRes = await fetch(`${API_BASE}/invoices/preview/${order._id}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${localStorage.getItem("token")}`
+        },
+        body: JSON.stringify({
+          items: defaultItems,
+          notes: order.notes || "",
+          invoiceType: "TAX_INVOICE",
+          commonDiscount: order.commonDiscount || 0
+        })
+      });
+
+      const previewData = await previewRes.json();
+      if (!previewRes.ok) throw new Error(previewData.message || "Preview failed");
+
+      const invoiceHTML = getOriginalInvoiceHTML(previewData, order);
+
+      const printWindow = window.open("", "_blank");
+      if (!printWindow) {
+        toast.warning("Pop-up blocked! Please allow pop-ups for this site to print.");
+        setProcessingPrint(false);
+        return;
+      }
+      printWindow.document.write(invoiceHTML);
+      printWindow.document.close();
+
+      setTimeout(() => {
+        if (printWindow) printWindow.print();
+        setProcessingPrint(false);
+      }, 500);
+
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to print directly.");
+      setProcessingPrint(false);
+    }
+  };
+
   /**
-   * ⚡ DIRECT PRINT: Processes the invoice in the background and prints.
+   * 🖨️ DIRECT PRINT: Processes the invoice in the background and prints.
    */
   const handleDirectPrint = async (numCopies) => {
     if (!selectedOrder) return;
@@ -1421,69 +1473,77 @@ const BranchInvoicedOrders = () => {
                               ) : (
                                 <>
                                   {order.invoiceGenerated && isFieldAllowed("action_si_bill") && (
-                                    <button
-                                      onClick={() => {
-                                        const userRole = (user?.role || "").toUpperCase();
-                                        const isAdmin = userRole === "ADMIN" || userRole === "SUPER_ADMIN";
+                                      <div className="flex gap-1">
+                                        <button
+                                          onClick={() => {
+                                            const userRole = (user?.role || "").toUpperCase();
+                                            const isAdmin = userRole === "ADMIN" || userRole === "SUPER_ADMIN";
 
-                                        // 📅 Date Check: Prevent printing if order date is in the future (unless Admin)
-                                        const today = new Date();
-                                        today.setHours(0, 0, 0, 0);
-                                        const orderDate = new Date(order.orderDate || order.createdAt);
-                                        orderDate.setHours(0, 0, 0, 0);
+                                            // 📅 Date Check: Prevent printing if order date is in the future (unless Admin)
+                                            const today = new Date();
+                                            today.setHours(0, 0, 0, 0);
+                                            const orderDate = new Date(order.orderDate || order.createdAt);
+                                            orderDate.setHours(0, 0, 0, 0);
 
-                                        if (orderDate > today) {
-                                          const dateStr = orderDate.toLocaleDateString("en-IN", { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                          toast.warning(`📅 Print Blocked: This order is dated ${dateStr}. Nobody (including Admins) can take the SI Bill until that date.`);
-                                          return;
-                                        }
+                                            if (orderDate > today) {
+                                              const dateStr = orderDate.toLocaleDateString("en-IN", { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                              toast.warning(`📅 Print Blocked: This order is dated ${dateStr}. Nobody (including Admins) can take the SI Bill until that date.`);
+                                              return;
+                                            }
 
-                                        console.log(`👤 Role: ${userRole}, isAdmin: ${isAdmin}, printCount: ${order.printCount}`);
+                                            if (!isAdmin && order.printCount > 0) {
+                                              toast.error(`⚠️ Printing Restricted: This bill has already been printed ${order.printCount} time(s).`);
+                                              return;
+                                            }
+                                            if (!isAdmin && (order.printCount || 0) === 0) {
+                                              if (window.confirm("🔔 IMPORTANT: You can only print this bill ONCE. Please ensure all items and details are correct before proceeding. Next time this button will be disabled. Do you want to print now?")) {
+                                                // 🎯 Immediately increment print count in backend so it's "spent"
+                                                fetchWithAuth(`${API_BASE}/sales-orders/${order._id}/increment-print-count`, {
+                                                  method: "PUT",
+                                                })
+                                                  .then(async (res) => {
+                                                    if (res.ok) {
+                                                      const data = await res.json();
+                                                      // 🚀 Update local state immediately so button turns grey
+                                                      setSalesOrders(prev => prev.map(o => o._id === order._id ? { ...o, printCount: data.printCount || 1 } : o));
+                                                      toast.success("📝 Print attempt recorded.");
+                                                    }
+                                                  })
+                                                  .catch(err => {
+                                                    console.error("Error incrementing print count:", err);
+                                                    toast.error("Failed to record print attempt.");
+                                                  });
 
-                                        if (!isAdmin && order.printCount > 0) {
-                                          toast.error(`⚠️ Printing Restricted: This bill has already been printed ${order.printCount} time(s).`);
-                                          return;
-                                        }
-                                        if (!isAdmin && (order.printCount || 0) === 0) {
-                                          if (window.confirm("🔔 IMPORTANT: You can only print this bill ONCE. Please ensure all items and details are correct before proceeding. Next time this button will be disabled. Do you want to print now?")) {
-                                            // 🎯 Immediately increment print count in backend so it's "spent"
-                                            fetchWithAuth(`${API_BASE}/sales-orders/${order._id}/increment-print-count`, {
-                                              method: "PUT",
-                                            })
-                                              .then(async (res) => {
-                                                if (res.ok) {
-                                                  const data = await res.json();
-                                                  // 🚀 Update local state immediately so button turns grey
-                                                  setSalesOrders(prev => prev.map(o => o._id === order._id ? { ...o, printCount: data.printCount || 1 } : o));
-                                                  toast.success("📝 Print attempt recorded.");
-                                                }
-                                              })
-                                              .catch(err => {
-                                                console.error("Error incrementing print count:", err);
-                                                toast.error("Failed to record print attempt.");
-                                              });
-
+                                                handleGenerateInvoice(order, false, true);
+                                              }
+                                              return;
+                                            }
                                             handleGenerateInvoice(order, false, true);
-                                          }
-                                          return;
-                                        }
-                                        handleGenerateInvoice(order, false, true);
-                                      }}
-                                      disabled={!(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN") && order.printCount > 0}
-                                      className={`flex items-center gap-2 justify-center px-3 py-2 rounded-lg transition text-xs font-black shadow-md border 
-                                        ${(!(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN") && order.printCount > 0)
-                                          ? "bg-gray-200 text-gray-400 cursor-not-allowed border-gray-300"
-                                          : "bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200 border-blue-700"}`}
-                                      title={(user?.role !== "ADMIN" && user?.role !== "SUPER_ADMIN" && order.printCount > 0) ? "Already Printed - Restricted to Admin" : "Print Sales Invoice Bill"}
-                                    >
-                                      <FaFileInvoice className="text-sm" />
-                                      <span>SI Bill</span>
-                                      {order.printCount > 0 && (
-                                        <span className="ml-1 bg-white/20 px-1.5 py-0.5 rounded text-[9px] border border-white/30">
-                                          P-{order.printCount}
-                                        </span>
-                                      )}
-                                    </button>
+                                          }}
+                                          disabled={!(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN") && order.printCount > 0}
+                                          className={`flex items-center gap-2 justify-center px-3 py-2 rounded-lg transition text-xs font-black shadow-md border 
+                                            ${(!(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN") && order.printCount > 0)
+                                              ? "bg-gray-200 text-gray-400 cursor-not-allowed border-gray-300"
+                                              : "bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200 border-blue-700"}`}
+                                          title={(user?.role !== "ADMIN" && user?.role !== "SUPER_ADMIN" && order.printCount > 0) ? "Already Printed - Restricted to Admin" : "Print Sales Invoice Bill"}
+                                        >
+                                          <FaFileInvoice className="text-sm" />
+                                          <span>SI Bill</span>
+                                          {order.printCount > 0 && (
+                                            <span className="ml-1 bg-white/20 px-1.5 py-0.5 rounded text-[9px] border border-white/30">
+                                              P-{order.printCount}
+                                            </span>
+                                          )}
+                                        </button>
+                                        
+                                        <button
+                                          onClick={() => handleInstantPrint(order)}
+                                          className="flex items-center justify-center p-2 rounded-lg transition text-blue-600 bg-blue-50 hover:bg-blue-100 hover:text-blue-700 shadow-sm border border-blue-200"
+                                          title="Print SI Bill Anytime (No Restrictions)"
+                                        >
+                                          <FaPrint className="text-sm" />
+                                        </button>
+                                      </div>
                                   )}
 
                                   {isFieldAllowed("action_gen_invoice") && (

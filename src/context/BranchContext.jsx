@@ -243,6 +243,7 @@ export function BranchProvider({ children }) {
     localStorage.removeItem("adminViewBranch");
     localStorage.removeItem("superAdminViewBranch");
     localStorage.removeItem("user");
+    localStorage.removeItem("lowStockAlertDismissedAt");
   };
 
   return (

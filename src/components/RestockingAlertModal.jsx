@@ -1,140 +1,211 @@
 import React, { useEffect, useState } from "react";
-import { FaExclamationTriangle, FaTimes, FaBoxOpen } from "react-icons/fa";
+import { toast } from "react-toastify";
 import { API_BASE, fetchWithAuth } from "../api";
 import { useBranch } from "../context/BranchContext";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 
 const RestockingAlertModal = () => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [lowStockProducts, setLowStockProducts] = useState([]);
-  const { currentBranch, superAdminViewBranch, user } = useBranch();
+  const [showFullPageAlert, setShowFullPageAlert] = useState(false);
+  const [alertProducts, setAlertProducts] = useState([]);
+  const { currentBranch, user } = useBranch();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const ALERT_DISMISS_KEY = "lowStockAlertDismissedAt";
+  const ALERT_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+  const isAlertDismissed = () => {
+    try {
+      const storedAt = localStorage.getItem(ALERT_DISMISS_KEY);
+      if (!storedAt) return false;
+      const elapsed = Date.now() - parseInt(storedAt, 10);
+      return elapsed < ALERT_COOLDOWN_MS;
+    } catch {
+      return false;
+    }
+  };
+
+  const dismissAlert = () => {
+    try {
+      localStorage.setItem(ALERT_DISMISS_KEY, String(Date.now()));
+    } catch {}
+    setShowFullPageAlert(false);
+  };
+
+  const getReorderParams = (product) => {
+    const config = product.restockingConfig;
+    const reorderMode = config?.reorderMode || "HIGH";
+    const thresholdMode = config?.thresholdMode || reorderMode;
+    
+    // Auto values
+    const autoThreshold = (config?.sellingQtyInPeriod !== undefined && config?.sellingQtyInPeriod !== null)
+      ? config.sellingQtyInPeriod
+      : (product.reorderLevel || 10);
+    
+    // Manual values
+    const manualThreshold = config?.threshold !== undefined && config?.threshold !== null
+      ? config.threshold
+      : (product.reorderLevel || 10);
+
+    let resolvedThreshold;
+    if (thresholdMode === "LOW") {
+      resolvedThreshold = Math.min(autoThreshold, manualThreshold);
+    } else {
+      resolvedThreshold = Math.max(autoThreshold, manualThreshold);
+    }
+
+    // If calculated sales in period is 0, set resolved levels to manual overrides if available, otherwise 0
+    if ((config?.sellingQtyInPeriod ?? 0) === 0) {
+      resolvedThreshold = manualThreshold || 0;
+    }
+
+    return {
+      reorderLevel: resolvedThreshold,
+    };
+  };
+
+  const getGroupNameOfProduct = (product) => {
+    if (!product || !product.productGroup) return "Uncategorized";
+    if (typeof product.productGroup === 'object') {
+      return product.productGroup.name || "Uncategorized";
+    }
+    return String(product.productGroup);
+  };
 
   useEffect(() => {
-    // Only check once per session per branch
-    const branchId = superAdminViewBranch?._id || currentBranch?._id || currentBranch?.id;
-    if (!branchId) return;
-
-    const sessionKey = `restockingAlertShown_${branchId}`;
-    if (sessionStorage.getItem(sessionKey)) return;
+    const branchId = currentBranch?._id;
+    if (!branchId || isAlertDismissed()) return;
+    
+    // If we are already on the recycling/restocking page, let that page handle its own alert
+    if (location.pathname.includes('/branch/recycling')) return;
 
     const fetchLowStock = async () => {
       try {
-        // Fetch products with their restocking config and current stock
-        const url = `${API_BASE}/products?branchId=${branchId}&limit=1000&includeRestocking=true&mini=true`;
+        const url = `${API_BASE}/products?branchId=${branchId}&limit=10000&includeRestocking=true&mini=true`;
         const res = await fetchWithAuth(url);
         const data = await res.json();
         
-        if (data.success && Array.isArray(data.data)) {
-          // Calculate which products actually need restocking
-          const needsRestock = data.data.filter(product => {
-            const currentStock = product.availableQty ?? product.totalQty ?? 0;
-            const threshold = product.restockingConfig?.threshold !== undefined && product.restockingConfig?.threshold !== null 
-              ? product.restockingConfig.threshold 
-              : (product.reorderLevel || 10);
-            
-            return currentStock < threshold;
+        let sourceProducts = [];
+        if (data?.data && Array.isArray(data.data)) {
+          sourceProducts = data.data;
+        } else if (Array.isArray(data)) {
+          sourceProducts = data;
+        } else if (data?.products && Array.isArray(data.products)) {
+          sourceProducts = data.products;
+        }
+
+        if (sourceProducts.length > 0) {
+          const criticalProducts = sourceProducts.filter((p) => {
+            const { reorderLevel } = getReorderParams(p);
+            const isAlertMarked = p.restockingConfig?.showAlert || false;
+            // ONLY alert if user marked this product for alerts AND stock hits/falls below threshold AND threshold > 0
+            return isAlertMarked && p.totalQty <= reorderLevel && reorderLevel > 0;
           });
 
-          if (needsRestock.length > 0) {
-            setLowStockProducts(needsRestock);
-            setIsOpen(true);
-            sessionStorage.setItem(sessionKey, "true");
+          if (criticalProducts.length > 0 && !isAlertDismissed()) {
+            setAlertProducts(criticalProducts);
+            setShowFullPageAlert(true);
           }
         }
       } catch (err) {
-        console.error("Failed to fetch low stock products:", err);
+        console.error("Failed to fetch low stock products for alert:", err);
       }
     };
 
     fetchLowStock();
-  }, [currentBranch, superAdminViewBranch, user]);
+  }, [currentBranch, location.pathname]);
 
-  if (!isOpen) return null;
+  if (!showFullPageAlert || alertProducts.length === 0) return null;
+
+  const groupedAlerts = alertProducts.reduce((acc, p) => {
+    const groupName = getGroupNameOfProduct(p);
+    if (!acc[groupName]) {
+      acc[groupName] = { products: [], count: 0 };
+    }
+    acc[groupName].products.push(p);
+    acc[groupName].count += 1;
+    return acc;
+  }, {});
+  
+  const alertGroups = Object.keys(groupedAlerts).sort();
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4 animate-in fade-in duration-300">
-      <div className="bg-white w-full max-w-xl rounded-[32px] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
+    <div className="fixed inset-0 bg-red-950/90 backdrop-blur-md flex items-center justify-center z-[9999] p-4 animate-in fade-in duration-300">
+      <div className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full max-h-[85vh] overflow-hidden flex flex-col border-4 border-red-500 transform scale-100 transition-all duration-300">
         
         {/* Header */}
-        <div className="bg-gradient-to-r from-orange-500 to-amber-500 p-6 flex justify-between items-center relative overflow-hidden">
-          <div className="absolute top-0 right-0 p-4 opacity-10 scale-150">
-            <FaBoxOpen size={80} />
-          </div>
-          <div className="relative z-10 flex items-center gap-4">
-            <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-md">
-              <FaExclamationTriangle className="text-white text-2xl" />
+        <div className="bg-gradient-to-r from-red-600 via-red-700 to-rose-600 text-white p-8 text-center relative overflow-hidden">
+          {/* Pulsing light behind icon */}
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.15),transparent)] animate-pulse" />
+          <div className="relative z-10 flex flex-col items-center">
+            <div className="p-4 bg-white/20 rounded-full text-5xl mb-3 animate-bounce">
+              🚨
             </div>
-            <div>
-              <h2 className="text-2xl font-black text-white tracking-tight">Low Stock Alert</h2>
-              <p className="text-white/80 font-bold uppercase tracking-widest text-[10px] mt-1">
-                {lowStockProducts.length} Items need restocking
-              </p>
-            </div>
+            <h2 className="text-3xl md:text-4xl font-extrabold tracking-tight uppercase">
+              CRITICAL STOCK REORDER LEVEL REACHED!
+            </h2>
+            <p className="text-red-100 text-sm md:text-base mt-2 max-w-2xl font-medium">
+              The following product groups contain items that have reached or dropped below their safety threshold.
+            </p>
           </div>
-          <button 
-            onClick={() => setIsOpen(false)}
-            className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-all z-10"
-          >
-            <FaTimes />
-          </button>
         </div>
 
-        {/* Content */}
-        <div className="p-6">
-          <p className="text-sm font-medium text-gray-500 mb-4">
-            The following items have dropped below their minimum threshold and require immediate restocking:
-          </p>
+        {/* List of critical product groups */}
+        <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-4">
+          <div className="flex justify-between items-center text-xs font-bold text-gray-400 uppercase tracking-wider border-b pb-2 px-2">
+            <span>Product Group</span>
+            <span className="w-48 text-right">Low Stock Items</span>
+          </div>
 
-          <div className="max-h-[40vh] overflow-y-auto no-scrollbar rounded-2xl border border-gray-100 divide-y divide-gray-50">
-            {lowStockProducts.map(product => {
-              const currentStock = product.availableQty ?? product.totalQty ?? 0;
-              const threshold = product.restockingConfig?.threshold !== undefined && product.restockingConfig?.threshold !== null 
-                ? product.restockingConfig.threshold 
-                : (product.reorderLevel || 10);
-                
-              return (
-                <div key={product._id} className="p-4 flex items-center justify-between hover:bg-orange-50/30 transition-colors">
+          {alertGroups.map((groupName) => {
+            const groupData = groupedAlerts[groupName];
+            return (
+              <div key={groupName} className="flex justify-between items-center py-4 border-b border-gray-100 hover:bg-red-50/30 px-4 rounded-xl transition-colors">
+                <div className="flex items-center gap-4">
+                  <div className="text-3xl p-2 bg-red-50 text-red-500 rounded-lg shadow-sm border border-red-100">📦</div>
                   <div>
-                    <h4 className="font-black text-gray-900">{product.name}</h4>
-                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-0.5">
-                      {product.productGroup?.name || "Uncategorized"}
-                    </p>
-                  </div>
-                  <div className="flex gap-4">
-                    <div className="text-center">
-                      <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Stock</p>
-                      <p className="font-black text-rose-500">{currentStock} <span className="text-[10px]">{product.units}</span></p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Min</p>
-                      <p className="font-black text-gray-600">{threshold}</p>
-                    </div>
+                    <h4 className="font-extrabold text-gray-800 text-lg md:text-xl">{groupName}</h4>
+                    <p className="text-sm text-red-500 font-bold mt-0.5">{groupData.count} product{groupData.count > 1 ? 's' : ''} reached critical stock</p>
                   </div>
                 </div>
-              );
-            })}
-          </div>
+                <div className="flex items-center">
+                  <button
+                    onClick={() => {
+                      dismissAlert();
+                      navigate("/branch/recycling");
+                    }}
+                    className="px-5 py-2.5 bg-red-100 text-red-700 font-extrabold rounded-xl hover:bg-red-200 transition-colors shadow-sm transform hover:scale-105 active:scale-95 duration-150"
+                  >
+                    View Group
+                  </button>
+                </div>
+              </div>
+            );
+          })}
         </div>
 
-        {/* Footer */}
-        <div className="p-6 bg-gray-50 flex gap-4 border-t border-gray-100">
-          <button
-            onClick={() => setIsOpen(false)}
-            className="flex-1 py-3 text-sm font-black text-gray-500 hover:text-gray-700 hover:bg-gray-200 bg-gray-100 rounded-2xl transition-all uppercase tracking-widest"
-          >
-            Close
-          </button>
+        {/* Footer actions */}
+        <div className="bg-gray-50 px-6 py-6 md:px-8 border-t border-gray-100 flex flex-col md:flex-row gap-4 items-center justify-between">
           <button
             onClick={() => {
-              setIsOpen(false);
-              navigate("/branch/recycling"); // Or wherever restocking is
+              dismissAlert();
             }}
-            className="flex-1 py-3 text-sm font-black text-white bg-orange-500 hover:bg-orange-600 rounded-2xl shadow-xl shadow-orange-500/20 transition-all uppercase tracking-widest hover:-translate-y-1"
+            className="w-full md:w-auto px-6 py-3 border-2 border-gray-300 text-gray-600 font-bold hover:bg-gray-100 transition rounded-xl flex items-center justify-center gap-2"
           >
-            Go to Restocking
+            <span>🔓</span> Dismiss and View All
+          </button>
+          
+          <button
+            onClick={() => {
+              dismissAlert();
+              navigate("/branch/recycling");
+            }}
+            className="w-full md:w-auto px-8 py-3.5 bg-gradient-to-r from-red-600 to-rose-600 text-white font-extrabold hover:from-red-700 hover:to-rose-700 transition rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-red-600/35 transform hover:-translate-y-0.5 active:translate-y-0"
+          >
+            <span>🛒</span> Go to Restocking Page
           </button>
         </div>
+
       </div>
     </div>
   );

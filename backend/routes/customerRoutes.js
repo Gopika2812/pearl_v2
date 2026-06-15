@@ -1264,7 +1264,14 @@ router.post("/balances", async (req, res) => {
     const branchObjectId = new mongoose.Types.ObjectId(branchId);
     const objectIds = customerIds.map(id => new mongoose.Types.ObjectId(id));
 
-    const endLimit = toDate ? new Date(toDate) : new Date();
+    const IST = "Asia/Kolkata";
+    const endLimit = toDate 
+      ? moment.tz(toDate, IST).endOf("day").toDate() 
+      : moment.tz(IST).endOf("day").toDate();
+    const startLimit = fromDate
+      ? moment.tz(fromDate, IST).startOf("day").toDate()
+      : null;
+    const fyStart = moment.tz("2026-04-01", IST).startOf("day").toDate();
 
     const balances = await Customer.aggregate([
       { $match: { _id: { $in: objectIds }, branchId: branchObjectId } },
@@ -1278,8 +1285,8 @@ router.post("/balances", async (req, res) => {
               $match: {
                 $expr: { $eq: ["$customer.customerId", "$$cId"] },
                 status: { $in: ["FINALIZED", "PRINTED", "SENT"] },
-                ...(fromDate && toDate ? {
-                  invoiceDate: { $gte: new Date(fromDate), $lte: new Date(toDate) }
+                ...(startLimit && endLimit ? {
+                  invoiceDate: { $gte: startLimit, $lte: endLimit }
                 } : {})
               }
             },
@@ -1302,8 +1309,8 @@ router.post("/balances", async (req, res) => {
               $match: {
                 $expr: { $eq: ["$customer.customerId", "$$cId"] },
                 status: "confirmed",
-                ...(fromDate && toDate ? {
-                  createdAt: { $gte: new Date(fromDate), $lte: new Date(toDate) }
+                ...(startLimit && endLimit ? {
+                  createdAt: { $gte: startLimit, $lte: endLimit }
                 } : {})
               }
             },
@@ -1328,8 +1335,8 @@ router.post("/balances", async (req, res) => {
                 $expr: { $eq: ["$customer.customerId", "$$cId"] },
                 status: "FINALIZED",
                 $or: [
-                  { invoiceDate: { $gte: new Date("2026-04-01T00:00:00.000Z"), $lte: endLimit } },
-                  { invoiceDate: { $exists: false }, createdAt: { $gte: new Date("2026-04-01T00:00:00.000Z"), $lte: endLimit } }
+                  { invoiceDate: { $gte: fyStart, $lte: endLimit } },
+                  { invoiceDate: { $exists: false }, createdAt: { $gte: fyStart, $lte: endLimit } }
                 ]
               }
             },
@@ -1347,7 +1354,7 @@ router.post("/balances", async (req, res) => {
               $match: {
                 $expr: { $eq: ["$customer.customerId", "$$cId"] },
                 status: { $in: ["confirmed", "bounced"] },
-                createdAt: { $gte: new Date("2026-04-01T00:00:00.000Z"), $lte: endLimit }
+                createdAt: { $gte: fyStart, $lte: endLimit }
               }
             },
             {
@@ -1375,8 +1382,8 @@ router.post("/balances", async (req, res) => {
                 $expr: { $eq: ["$customer.customerId", "$$cId"] },
                 status: "Created",
                 $or: [
-                  { date: { $gte: new Date("2026-04-01T00:00:00.000Z"), $lte: endLimit } },
-                  { date: { $exists: false }, createdAt: { $gte: new Date("2026-04-01T00:00:00.000Z"), $lte: endLimit } }
+                  { date: { $gte: fyStart, $lte: endLimit } },
+                  { date: { $exists: false }, createdAt: { $gte: fyStart, $lte: endLimit } }
                 ]
               }
             },
@@ -1402,8 +1409,8 @@ router.post("/balances", async (req, res) => {
                   ]
                 },
                 $or: [
-                  { journalDate: { $gte: new Date("2026-04-01T00:00:00.000Z"), $lte: endLimit } },
-                  { journalDate: { $exists: false }, createdAt: { $gte: new Date("2026-04-01T00:00:00.000Z"), $lte: endLimit } }
+                  { journalDate: { $gte: fyStart, $lte: endLimit } },
+                  { journalDate: { $exists: false }, createdAt: { $gte: fyStart, $lte: endLimit } }
                 ]
               }
             },
@@ -1429,14 +1436,60 @@ router.post("/balances", async (req, res) => {
                   ]
                 },
                 $or: [
-                  { journalDate: { $gte: new Date("2026-04-01T00:00:00.000Z"), $lte: endLimit } },
-                  { journalDate: { $exists: false }, createdAt: { $gte: new Date("2026-04-01T00:00:00.000Z"), $lte: endLimit } }
+                  { journalDate: { $gte: fyStart, $lte: endLimit } },
+                  { journalDate: { $exists: false }, createdAt: { $gte: fyStart, $lte: endLimit } }
                 ]
               }
             },
             { $group: { _id: null, total: { $sum: "$amount" } } }
           ],
           as: "mjsCrUpToToDate"
+        }
+      },
+      {
+        $lookup: {
+          from: "invoices",
+          let: { cId: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $eq: ["$customer.customerId", "$$cId"] },
+                status: { $in: ["FINALIZED", "PRINTED", "SENT"] },
+                ...(startLimit && endLimit ? {
+                  invoiceDate: { $gte: startLimit, $lte: endLimit }
+                } : endLimit ? {
+                  invoiceDate: { $lte: endLimit }
+                } : {})
+              }
+            },
+            { $sort: { invoiceDate: -1 } },
+            { $limit: 1 },
+            { $project: { invoiceDate: 1 } }
+          ],
+          as: "lastInv"
+        }
+      },
+      {
+        $lookup: {
+          from: "receipts",
+          let: { cId: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $eq: ["$customer.customerId", "$$cId"] },
+                status: "confirmed",
+                ...(startLimit && endLimit ? {
+                  createdAt: { $gte: startLimit, $lte: endLimit }
+                } : endLimit ? {
+                  createdAt: { $lte: endLimit }
+                } : {})
+              }
+            },
+            { $sort: { createdAt: -1 } },
+            { $limit: 1 },
+            { $project: { createdAt: 1 } }
+          ],
+          as: "lastRec"
         }
       },
       {
@@ -1450,7 +1503,9 @@ router.post("/balances", async (req, res) => {
           recBouncedTotal: { $ifNull: [{ $arrayElemAt: ["$receiptsUpToToDate.bouncedTotal", 0] }, 0] },
           cnTotal: { $ifNull: [{ $arrayElemAt: ["$cnsUpToToDate.total", 0] }, 0] },
           mjDrTotal: { $ifNull: [{ $arrayElemAt: ["$mjsDrUpToToDate.total", 0] }, 0] },
-          mjCrTotal: { $ifNull: [{ $arrayElemAt: ["$mjsCrUpToToDate.total", 0] }, 0] }
+          mjCrTotal: { $ifNull: [{ $arrayElemAt: ["$mjsCrUpToToDate.total", 0] }, 0] },
+          lastInvoiceDate: { $arrayElemAt: ["$lastInv.invoiceDate", 0] },
+          lastReceiptDate: { $arrayElemAt: ["$lastRec.createdAt", 0] }
         }
       },
       {
@@ -1458,6 +1513,8 @@ router.post("/balances", async (req, res) => {
           _id: 1,
           totalSalesInvoice: 1,
           totalReceiptValue: 1,
+          lastInvoiceDate: 1,
+          lastReceiptDate: 1,
           debit: {
             $add: [
               { $cond: [{ $gt: ["$openingBalance", 0] }, "$openingBalance", 0] },
@@ -1483,7 +1540,9 @@ router.post("/balances", async (req, res) => {
           credit: 1,
           netBalance: { $subtract: ["$debit", "$credit"] },
           totalSalesInvoice: 1,
-          totalReceiptValue: 1
+          totalReceiptValue: 1,
+          lastInvoiceDate: 1,
+          lastReceiptDate: 1
         }
       }
     ]);

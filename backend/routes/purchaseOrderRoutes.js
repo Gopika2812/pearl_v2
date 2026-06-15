@@ -583,6 +583,73 @@ router.post("/", auth, async (req, res) => {
     if (rest.totalDiscount !== undefined) rest.totalDiscount = Math.round(Number(rest.totalDiscount) * 100) / 100;
     if (rest.transportCharge !== undefined) rest.transportCharge = Math.round(Number(rest.transportCharge) * 100) / 100;
 
+    const finalizePI = async (orderDoc, invId, fy) => {
+      const purchaseInvoice = new PurchaseInvoice({
+        purchaseInvoiceId: invId,
+        purchaseOrderId: orderDoc._id,
+        poNumber: invId,
+        branchId: orderDoc.branchId,
+        warehouse: orderDoc.warehouse,
+        vendor: orderDoc.vendor || "Unknown",
+        vendorId: orderDoc.vendorId,
+        items: orderDoc.items,
+        subtotal: orderDoc.subtotal,
+        totalDiscount: orderDoc.totalDiscount,
+        totalTax: orderDoc.totalTax,
+        extraExpenses: orderDoc.extraExpenses,
+        extraExpenseAmount: orderDoc.extraExpenseAmount,
+        grandTotal: orderDoc.grandTotal,
+        financialYear: fy,
+      });
+
+      await purchaseInvoice.save();
+
+      orderDoc.lastInvoicedItems = orderDoc.items;
+      orderDoc.lastInvoicedGrandTotal = orderDoc.grandTotal;
+      orderDoc.purchaseInvoiceId = invId;
+      orderDoc.status = 'INVOICED';
+      await orderDoc.save();
+
+      for (const item of orderDoc.items) {
+        const product = await Product.findById(item.productId);
+        if (product) {
+          product.updateBatchStock(item.batch, item.qty, item.expiryDate, item.mrp, item.manufacturingDate);
+          await product.save();
+        }
+      }
+
+      if (orderDoc.vendor) {
+        const vendorRecord = await Vendor.findOne({ branchId: orderDoc.branchId, name: orderDoc.vendor });
+        if (vendorRecord) {
+          vendorRecord.credit = (vendorRecord.credit || 0) + orderDoc.grandTotal;
+          await vendorRecord.save();
+        }
+      }
+
+      const purchaseAccountGroup = await LedgerGroup.findOneAndUpdate(
+        { branchId: orderDoc.branchId, name: "Purchase Accounts" },
+        { $setOnInsert: { nature: "Expense" } },
+        { upsert: true, new: true }
+      );
+
+      const gstSlabs = {};
+      orderDoc.items.forEach(item => {
+        const gst = item.gst || 0;
+        const gstFactor = 1 + (gst / 100);
+        const taxableValue = Math.round(((item.purchasePrice || item.sellingPrice) * item.qty / gstFactor) * 100) / 100;
+        gstSlabs[gst] = (gstSlabs[gst] || 0) + taxableValue;
+      });
+
+      for (const [gst, amount] of Object.entries(gstSlabs)) {
+        const ledgerName = `Purchase ${gst}%`;
+        await Ledger.findOneAndUpdate(
+          { branchId: orderDoc.branchId, name: ledgerName, groupId: purchaseAccountGroup._id },
+          { $inc: { currentBalance: -amount } },
+          { upsert: true }
+        );
+      }
+    };
+
     // Handle Customer-PO Flow / Auto Vendor Creation
     let resolvedVendorId = undefined;
     let resolvedCustomerId = req.body.customerId || undefined;
@@ -638,84 +705,139 @@ router.post("/", auth, async (req, res) => {
       || await VoucherType.findOne({ branchId, name: voucherType });
 
     if (!voucher) {
-      // 1. Fallback: Try to find any PO voucher type in this branch
       voucher = await VoucherType.findOne({ branchId, orderType: "PO" });
     }
 
     if (!voucher) {
-      // 2. Fallback: Automatically create a default PO voucher type for this branch
       const currentFY = getGlobalFinancialYear();
-      const prefix = "PO";
-      voucher = new VoucherType({
-        branchId,
-        name: voucherType.toLowerCase() || "purchase order",
-        orderType: "PO",
-        prefix,
-        counter: 1,
-        financialYear: currentFY,
-      });
-      await voucher.save();
+      voucher = await VoucherType.findOneAndUpdate(
+        { branchId, name: voucherType.toLowerCase() || "purchase order", orderType: "PO" },
+        { $setOnInsert: { prefix: "PO", counter: 1, financialYear: currentFY, branchId, orderType: "PO" } },
+        { upsert: true, new: true }
+      );
       console.log(`[SELF-HEALING] Dynamically created default PO voucher type for branch: ${branchId}`);
     }
 
     const currentFY = getGlobalFinancialYear();
 
+    // If the financial year rolled over, reset counter to 1 atomically
     if (voucher.financialYear !== currentFY) {
-      voucher.counter = 1;
-      voucher.financialYear = currentFY;
+      voucher = await VoucherType.findByIdAndUpdate(
+        voucher._id,
+        { $set: { counter: 2, financialYear: currentFY } },
+        { new: true }
+      );
+      // Use counter = 1 for this very first PO of the new FY
+      const invoiceId = `${voucher.prefix}/001/${currentFY}`;
+
+      const order = new PurchaseOrder({
+        invoiceId,
+        voucherType,
+        branchId,
+        financialYear: currentFY,
+        ...rest,
+        vendorId: resolvedVendorId,
+        customerId: resolvedCustomerId,
+        status: status || "PLACED",
+      });
+      await order.save();
+
+      try { await updateProductCostsFromInvoice(rest.items, invoiceId, false, req.user); }
+      catch (err) { console.warn("⚠️ Price Sync Failed (Non-blocking):", err.message); }
+
+      if (voucher.orderType === "PI") {
+        await finalizePI(order, invoiceId, currentFY);
+      }
+
+      await createAuditLog({
+        userId: req.user.id,
+        userModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser",
+        username: req.user.username,
+        branchId: req.user.branch || branchId,
+        action: "CREATE_PO",
+        description: `Created Purchase Order: ${invoiceId} (Vendor: ${rest.vendor}). Total: ₹${order.grandTotal}`,
+        targetId: order._id,
+        targetModel: "PurchaseOrder",
+      });
+
+      return res.status(201).json({ message: "Purchase Order saved successfully", order });
     }
 
-    const regex = new RegExp(`^${voucher.prefix}/\\d+/${currentFY}$`);
-    const highestPO = await PurchaseOrder.findOne({ invoiceId: regex }).sort({ invoiceId: -1 }).lean();
-    if (highestPO) {
-      const parts = highestPO.invoiceId.split('/');
-      const highestNum = parseInt(parts[1], 10);
-      if (!isNaN(highestNum) && voucher.counter <= highestNum) {
-        voucher.counter = highestNum + 1;
-        await voucher.save();
+    // ⚡ ATOMIC COUNTER: grab-and-increment in a single MongoDB operation.
+    // This guarantees no two concurrent requests ever get the same counter value.
+    const MAX_RETRIES = 5;
+    let savedOrder = null;
+    let usedInvoiceId = null;
+
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      // Atomically fetch the current counter AND increment it in one round-trip
+      const updatedVoucher = await VoucherType.findByIdAndUpdate(
+        voucher._id,
+        { $inc: { counter: 1 } },
+        { new: false } // returns the BEFORE value — that's our counter to use
+      );
+
+      if (!updatedVoucher) {
+        return res.status(500).json({ message: "Voucher type disappeared — please refresh and try again." });
+      }
+
+      const counterToUse = updatedVoucher.counter; // value BEFORE increment
+      usedInvoiceId = `${updatedVoucher.prefix}/${String(counterToUse).padStart(3, "0")}/${currentFY}`;
+
+      const order = new PurchaseOrder({
+        invoiceId: usedInvoiceId,
+        voucherType,
+        branchId,
+        financialYear: currentFY,
+        ...rest,
+        vendorId: resolvedVendorId,
+        customerId: resolvedCustomerId,
+        status: status || "PLACED",
+      });
+
+      try {
+        await order.save();
+        savedOrder = order;
+        break; // ✅ Saved successfully — exit retry loop
+      } catch (saveErr) {
+        // 11000 = MongoDB duplicate key error (unique index on {branchId, invoiceId})
+        if (saveErr.code === 11000 && attempt < MAX_RETRIES) {
+          console.warn(`[PO-DEDUP] Duplicate invoiceId detected: ${usedInvoiceId} (attempt ${attempt}/${MAX_RETRIES}). Retrying with next counter...`);
+          continue; // Retry: atomic $inc already bumped counter, so next loop gets a fresh value
+        }
+        throw saveErr; // Non-duplicate error or max retries exceeded — surface it
       }
     }
 
-    const invoiceId = `${voucher.prefix}/${String(voucher.counter).padStart(3, "0")}/${currentFY}`;
-
-    const order = new PurchaseOrder({
-      invoiceId,
-      voucherType,
-      branchId,
-      financialYear: currentFY,
-      ...rest,
-      vendorId: resolvedVendorId,
-      customerId: resolvedCustomerId,
-      status: status || "PLACED",
-    });
-
-    await order.save();
-
-    // ⚡ INSTANT PRICE SYNC: Update master product prices from PO
-    try {
-      await updateProductCostsFromInvoice(rest.items, invoiceId, false, req.user);
-    } catch (err) {
-      console.warn("⚠️ Price Sync Failed (Non-blocking):", err.message);
+    if (!savedOrder) {
+      return res.status(409).json({
+        success: false,
+        message: "Could not generate a unique Purchase Order ID after multiple attempts. Please try again."
+      });
     }
 
-    voucher.counter += 1;
-    await voucher.save();
+    // ⚡ PRICE SYNC (non-blocking)
+    try { await updateProductCostsFromInvoice(rest.items, usedInvoiceId, false, req.user); }
+    catch (err) { console.warn("⚠️ Price Sync Failed (Non-blocking):", err.message); }
 
-    // Log the creation
+    if (updatedVoucher.orderType === "PI") {
+      await finalizePI(savedOrder, usedInvoiceId, currentFY);
+    }
+
     await createAuditLog({
       userId: req.user.id,
       userModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser",
       username: req.user.username,
       branchId: req.user.branch || branchId,
       action: "CREATE_PO",
-      description: `Created Purchase Order: ${invoiceId} (Vendor: ${rest.vendor}). Total: ₹${order.grandTotal}`,
-      targetId: order._id,
+      description: `Created Purchase Order: ${usedInvoiceId} (Vendor: ${rest.vendor}). Total: ₹${savedOrder.grandTotal}`,
+      targetId: savedOrder._id,
       targetModel: "PurchaseOrder",
     });
 
     res.status(201).json({
       message: "Purchase Order saved successfully",
-      order,
+      order: savedOrder,
     });
   } catch (err) {
     console.error("PO save error:", err);

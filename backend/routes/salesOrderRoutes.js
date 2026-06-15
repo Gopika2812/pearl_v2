@@ -413,7 +413,11 @@ router.get("/", async (req, res) => {
     }
 
     if (isClaim !== undefined) {
-      query.isClaim = isClaim === "true";
+      if (isClaim === "true") {
+        query.isClaim = true;
+      } else if (isClaim === "false") {
+        query.isClaim = { $ne: true };
+      }
     }
 
     // ⚡ Optimized Fetch

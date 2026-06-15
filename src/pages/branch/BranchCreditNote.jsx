@@ -344,14 +344,6 @@ export default function BranchCreditNote() {
                             </button>
 
                             <button 
-                              onClick={() => handlePrint(cn, 'PROFESSIONAL')}
-                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-100 hover:bg-indigo-600 hover:text-white text-[10px] font-black transition-all shadow-sm"
-                              title="Professional Layout"
-                            >
-                              <FaPrint size={12} /> PROF
-                            </button>
-
-                            <button 
                               onClick={() => toggleExpand(cn._id)}
                               className="p-2 bg-slate-50 text-slate-400 rounded-lg hover:bg-slate-100 transition shadow-sm border border-slate-100"
                             >

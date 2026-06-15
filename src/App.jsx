@@ -27,7 +27,6 @@ import BranchDebitNote from "./pages/branch/BranchDebitNote";
 import BranchDispatch from "./pages/branch/BranchDispatch";
 import BranchHome from "./pages/branch/BranchHome";
 import BranchDayBook from "./pages/branch/BranchDayBook";
-import BranchInsights from "./pages/branch/BranchInsights";
 import BranchInvoicedOrders from "./pages/branch/BranchInvoicedOrders";
 import BranchSalesInvoices from "./pages/branch/BranchSalesInvoices";
 import BranchJournalEntries from "./pages/branch/BranchJournalEntries";
@@ -62,7 +61,6 @@ import BranchPhysicalStockRecords from "./pages/branch/BranchPhysicalStockRecord
 import BranchGstReports from "./pages/branch/BranchGstReports";
 import BranchSpottedCustomerLedger from "./pages/branch/BranchSpottedCustomerLedger";
 import SmartOrdersDashboard from "./pages/crm/SmartOrdersDashboard";
-import TaskBoardPage from "./pages/crm/TaskBoardPage";
 import SharedLinkCustomerPage from "./pages/crm/SharedLinkCustomerPage";
 import OnlineOrdersPage from "./pages/branch/OnlineOrdersPage";
 
@@ -81,6 +79,7 @@ import SalaryRecordsPage from "./pages/hr/SalaryRecordsPage";
 import AttendanceReportPage from "./pages/hr/AttendanceReportPage";
 
 import AIAssistantBot from "./components/AIAssistantBot";
+import RestockingAlertModal from "./components/RestockingAlertModal";
 import BranchLoginPage from "./pages/BranchLoginPage";
 import BranchRegisterPage from "./pages/BranchRegisterPage";
 import UserRegistrationPage from "./pages/UserRegistrationPage";
@@ -353,7 +352,7 @@ function AppContent() {
 
   // Check if we're on a branch-specific page
   const isBranchRoute = location.pathname.startsWith("/branch/") || location.pathname === "/branch-home";
-  const isInsightsRoute = location.pathname.startsWith("/branch/insights");
+  const isInsightsRoute = false;
 
   // Check if we're on a super admin page
   const isSuperAdminRoute = location.pathname.startsWith("/super-admin/");
@@ -464,8 +463,6 @@ function AppContent() {
         "/branch/batch-inventory": "stock-summary",
         "/branch/quick-links": "quick-links",
         "/branch/admin-requests": "admin-requests",
-
-        "/branch/insights": "insights",
         "/branch/receipt-records": "receipt",
         "/branch/payment-records": "payment-po",
         "/branch/summary": "summary",
@@ -479,7 +476,6 @@ function AppContent() {
         "/branch/hr/salary-structure": "salary-structure",
         "/branch/hr/reports": "hr-reports",
         "/branch/smart-orders": "smart-orders",
-        "/branch/tasks": "task-board",
         "/branch/spotted-customer-ledger": "spotted-ledger",
         "/branch/online-orders": "online-orders",
       };
@@ -506,7 +502,7 @@ function AppContent() {
       let hasAccess = false;
       if (!requiredPermission) {
         hasAccess = true; // No permission required for this route
-      } else if (allowedPages.includes(requiredPermission) || requiredPermission === "smart-orders" || requiredPermission === "task-board" || requiredPermission === "online-orders") {
+      } else if (allowedPages.includes(requiredPermission) || requiredPermission === "smart-orders" || requiredPermission === "online-orders") {
         hasAccess = true;
       } else if (requiredPermission === "quick-links") {
         // Special case for Quick Links: Allow if ANY master data module is allowed
@@ -759,6 +755,7 @@ function AppContent() {
 
       <SecurityOverlay />
       <FollowUpReminderModal />
+      <RestockingAlertModal />
 
       <div className="flex">
         {/* Sidebar logic:
@@ -827,7 +824,6 @@ function AppContent() {
 
               {/* BRANCH-SPECIFIC ROUTES - Protected */}
               <Route path="/branch-home" element={<ProtectedRoute element={<BranchHome />} />} />
-              <Route path="/branch/insights" element={<ProtectedRoute element={<BranchInsights />} />} />
               <Route path="/branch/po" element={<ProtectedRoute element={<BranchPO />} />} />
               <Route path="/branch/purchase-orders" element={<ProtectedRoute element={<BranchPurchaseOrders />} />} />
               <Route path="/branch/purchase-invoices" element={<ProtectedRoute element={<BranchPurchaseInvoices />} />} />
@@ -881,7 +877,6 @@ function AppContent() {
               <Route path="/branch/hr/salary-records" element={<ProtectedRoute element={<SalaryRecordsPage />} role={["SUPER_ADMIN"]} />} />
               <Route path="/branch/hr/reports" element={<ProtectedRoute element={<HRReportsPage />} />} />
               <Route path="/branch/smart-orders" element={<ProtectedRoute element={<SmartOrdersDashboard />} />} />
-              <Route path="/branch/tasks" element={<ProtectedRoute element={<TaskBoardPage />} />} />
               <Route path="/branch/online-orders" element={<ProtectedRoute element={<OnlineOrdersPage />} />} />
               <Route path="/shared-order/:token" element={<SharedLinkCustomerPage />} />
 

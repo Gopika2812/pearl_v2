@@ -83,7 +83,7 @@ const BranchPurchaseInvoices = () => {
     <div className="min-h-screen bg-gray-50 pt-20 md:pt-4 md:pl-20">
 
 
-      <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 py-4">
+      <div className="w-full">
         {/* HEADER */}
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-6">
           <div className="flex items-center justify-between">
@@ -159,7 +159,6 @@ const BranchPurchaseInvoices = () => {
                     {isFieldAllowed("grandTotal") && <th className="px-6 py-4 text-right">Grand Total</th>}
                     <th className="px-6 py-4 text-center">Status</th>
                     {isFieldAllowed("entryDate") && <th className="px-6 py-4 text-center">Entry Date</th>}
-                    {isFieldAllowed("action") && <th className="px-6 py-4 text-center">Action</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -211,17 +210,6 @@ const BranchPurchaseInvoices = () => {
                             <p className="text-[10px] text-gray-400 font-bold mt-0.5">
                               {new Date(inv.createdAt).toLocaleTimeString("en-IN", { hour: '2-digit', minute: '2-digit' })}
                             </p>
-                          </td>
-                        )}
-                        {isFieldAllowed("action") && (
-                          <td className="px-6 py-4 text-center">
-                            <button 
-                              onClick={() => toast.info("Viewing details for " + inv.purchaseInvoiceId)}
-                              className="text-green-600 hover:bg-green-50 p-2 rounded-lg transition"
-                              title="View Details"
-                            >
-                              <FaFileAlt size={14} />
-                            </button>
                           </td>
                         )}
                       </tr>

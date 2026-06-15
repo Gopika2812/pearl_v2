@@ -42,9 +42,8 @@ const BranchSuppliers = () => {
   const [expandedRows, setExpandedRows] = useState({});
   const [editingSupplier, setEditingSupplier] = useState(null);
   const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalItems, setTotalItems] = useState(0);
-  const limit = 50;
+  const [pageSize, setPageSize] = useState(50);
+  const limit = 5000; // Fetch all suppliers at once to compute accurate totals
   const [isSafeMode, setIsSafeMode] = useState(false);
   const fileInputRef = useRef(null);
 
@@ -59,9 +58,9 @@ const BranchSuppliers = () => {
 
   useEffect(() => {
     if (branchLoaded && branchId) {
-      fetchSuppliers(debouncedSearchTerm, page);
+      fetchSuppliers(debouncedSearchTerm);
     }
-  }, [branchLoaded, branchId, debouncedSearchTerm, page]);
+  }, [branchLoaded, branchId, debouncedSearchTerm]);
 
   useEffect(() => {
     const ledgerVendorId = searchParams.get("ledgerVendorId");
@@ -82,12 +81,12 @@ const BranchSuppliers = () => {
     }
   }, [searchParams, branchLoaded]);
 
-  const fetchSuppliers = async (search = "", pageNum = 1) => {
+  const fetchSuppliers = async (search = "") => {
     try {
       setLoading(true);
 
-      // Fetch vendors with search and pagination
-      const vendorUrl = `${API_BASE}/vendors?branchId=${branchId}&search=${encodeURIComponent(search)}&page=${pageNum}&limit=${limit}`;
+      // Fetch all vendors to support client-side aggregation
+      const vendorUrl = `${API_BASE}/vendors?branchId=${branchId}&search=${encodeURIComponent(search)}&limit=${limit}`;
       const vendorResponse = await fetchWithAuth(vendorUrl);
 
       if (!vendorResponse.ok) {
@@ -98,8 +97,6 @@ const BranchSuppliers = () => {
       let suppliers = vendorData.data || [];
       
       setSuppliers(suppliers);
-      setTotalPages(vendorData.pagination?.pages || 1);
-      setTotalItems(vendorData.pagination?.total || 0);
 
       if (suppliers.length === 0) {
         toast.info("No suppliers found");
@@ -229,6 +226,8 @@ const BranchSuppliers = () => {
   };
 
   const filteredSuppliers = getSortedSuppliers(suppliers);
+  const totalPagesLocal = Math.ceil(filteredSuppliers.length / pageSize);
+  const paginatedSuppliers = filteredSuppliers.slice((page - 1) * pageSize, page * pageSize);
 
   const handleExportExcel = () => {
     try {
@@ -325,11 +324,11 @@ const BranchSuppliers = () => {
     }
   };
 
-  const totalCredit = filteredSuppliers.reduce(
+  const totalCredit = paginatedSuppliers.reduce(
     (sum, supplier) => sum + (supplier.credit || 0),
     0
   );
-  const totalDebit = filteredSuppliers.reduce(
+  const totalDebit = paginatedSuppliers.reduce(
     (sum, supplier) => sum + (supplier.debit || 0),
     0
   );
@@ -362,72 +361,6 @@ const BranchSuppliers = () => {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              onClick={() => navigate("/branch/supplier-transactions")}
-              className="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-2 text-sm shadow-md active:scale-95"
-            >
-              <FaExchangeAlt /> All Transactions
-            </button>
-
-            <button
-              onClick={() => {
-                setEditingSupplier(null);
-                setIsAddModalOpen(true);
-              }}
-              className="bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-2 text-sm shadow-md active:scale-95"
-            >
-              <FaPlus /> Add Supplier
-            </button>
-
-            <div className="flex items-center gap-3 bg-white p-2 px-4 rounded-xl border border-gray-200 shadow-sm">
-              <div className="flex flex-col">
-                <span className="text-[9px] font-black text-gray-400 uppercase leading-none">Safe Mode</span>
-                <span className="text-[8px] font-bold text-gray-500 uppercase leading-tight">Info Only</span>
-              </div>
-              <button
-                onClick={() => setIsSafeMode(!isSafeMode)}
-                className={`w-10 h-5 rounded-full transition-all relative ${isSafeMode ? 'bg-emerald-500' : 'bg-gray-300'}`}
-              >
-                <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all`} style={{ left: isSafeMode ? '1.35rem' : '0.125rem' }}></div>
-              </button>
-            </div>
-
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleBulkUpload}
-              accept=".xlsx,.xls,.csv"
-              className="hidden"
-            />
-            <button
-              onClick={() => {
-                if (!isSafeMode) {
-                  const confirmBal = window.confirm("⚠️ You are uploading in BALANCING MODE. This will adjust Credit/Debit balances. For info-only updates, enable SAFE MODE. Proceed?");
-                  if (!confirmBal) return;
-                }
-                fileInputRef.current?.click();
-              }}
-              className={`${isSafeMode ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-purple-600 hover:bg-purple-700'} text-white px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-2 text-sm shadow-md active:scale-95`}
-            >
-              <FaUpload /> {isSafeMode ? "Safe Update" : "Bulk Upload"}
-            </button>
-
-            {(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN" || user?.actionPermissions?.export !== false) && (
-              <>
-                <button
-                  onClick={handleExportExcel}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-2 text-sm shadow-md active:scale-95"
-                >
-                  <FaFileExport /> Export
-                </button>
-                <button
-                  onClick={handleExportSnapshot}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-2 text-sm shadow-md active:scale-95"
-                >
-                  <FaFileExport /> 31st Mar Snapshot
-                </button>
-              </>
-            )}
 
             <div className="flex bg-gray-100 p-1 rounded-xl items-center">
               <button
@@ -469,7 +402,7 @@ const BranchSuppliers = () => {
               <div>
                 <p className="text-gray-500 text-xs md:text-sm font-semibold uppercase">Total Suppliers</p>
                 <p className="text-3xl md:text-4xl font-bold text-blue-600 mt-1">
-                  {filteredSuppliers.length}
+                  {paginatedSuppliers.length}
                 </p>
               </div>
               <div className="text-4xl md:text-5xl text-blue-200">👥</div>
@@ -519,7 +452,7 @@ const BranchSuppliers = () => {
 
             {/* Pagination Info */}
             <div className="text-xs font-bold text-gray-400 uppercase tracking-widest whitespace-nowrap">
-              Showing {suppliers.length} of {totalItems} Suppliers
+              Showing {filteredSuppliers.length === 0 ? 0 : Math.min((page - 1) * pageSize + 1, filteredSuppliers.length)} - {Math.min(page * pageSize, filteredSuppliers.length)} of {filteredSuppliers.length} Suppliers
             </div>
 
             {/* View Toggle */}
@@ -559,7 +492,7 @@ const BranchSuppliers = () => {
       ) : viewMode === "card" ? (
         /* CARD VIEW */
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
-          {filteredSuppliers.map((supplier) => (
+          {paginatedSuppliers.map((supplier) => (
             <div
               key={supplier._id}
               className="bg-white rounded-lg shadow-md hover:shadow-lg transition p-4 md:p-5 border-t-4 border-blue-600"
@@ -721,7 +654,7 @@ const BranchSuppliers = () => {
               </tr>
             </thead>
             <tbody>
-              {filteredSuppliers.map((supplier, index) => {
+              {paginatedSuppliers.map((supplier, index) => {
                 const isExpanded = !!expandedRows[supplier._id];
                 return (
                   <React.Fragment key={supplier._id}>
@@ -865,50 +798,71 @@ const BranchSuppliers = () => {
       )}
 
       {/* Pagination Controls */}
-      {totalPages > 1 && (
-        <div className="mt-8 flex items-center justify-center gap-2 pb-10">
-          <button
-            onClick={() => setPage(p => Math.max(1, p - 1))}
-            disabled={page === 1}
-            className="px-4 py-2 bg-white border border-gray-200 rounded-xl font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
+      <div className="mt-8 flex flex-col md:flex-row items-center justify-between gap-4 pb-10">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">Items per page:</span>
+          <select 
+            value={pageSize}
+            onChange={(e) => { 
+              setPageSize(Number(e.target.value)); 
+              setPage(1); 
+            }}
+            className="px-2 py-1.5 border border-gray-200 rounded-lg text-sm font-bold text-gray-700 outline-none hover:border-blue-400 transition cursor-pointer"
           >
-            Previous
-          </button>
-          
-          <div className="flex items-center gap-1">
-            {[...Array(totalPages)].map((_, i) => {
-               const pNum = i + 1;
-               // Show current, first, last and 2 neighbors
-               if (pNum === 1 || pNum === totalPages || (pNum >= page - 1 && pNum <= page + 1)) {
-                 return (
-                   <button
-                     key={pNum}
-                     onClick={() => setPage(pNum)}
-                     className={`w-10 h-10 rounded-xl font-bold transition-all ${
-                       page === pNum 
-                         ? "bg-blue-600 text-white shadow-md scale-110" 
-                         : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"
-                     }`}
-                   >
-                     {pNum}
-                   </button>
-                 );
-               } else if (pNum === page - 2 || pNum === page + 2) {
-                 return <span key={pNum} className="text-gray-400 font-bold px-1">...</span>;
-               }
-               return null;
-            })}
-          </div>
-
-          <button
-            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-            disabled={page === totalPages}
-            className="px-4 py-2 bg-white border border-gray-200 rounded-xl font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
-          >
-            Next
-          </button>
+            <option value={10}>10</option>
+            <option value={50}>50</option>
+            <option value={100}>100</option>
+            <option value={200}>200</option>
+            <option value={300}>300</option>
+            <option value={1000}>1000</option>
+            <option value={5000}>All</option>
+          </select>
         </div>
-      )}
+
+        {totalPagesLocal > 1 && (
+          <div className="flex items-center justify-center gap-2">
+            <button
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className="px-4 py-2 bg-white border border-gray-200 rounded-xl font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
+            >
+              Previous
+            </button>
+            
+            <div className="flex items-center gap-1">
+              {[...Array(totalPagesLocal)].map((_, i) => {
+                 const pNum = i + 1;
+                 if (pNum === 1 || pNum === totalPagesLocal || (pNum >= page - 1 && pNum <= page + 1)) {
+                   return (
+                     <button
+                       key={pNum}
+                       onClick={() => setPage(pNum)}
+                       className={`w-10 h-10 rounded-xl font-bold transition-all ${
+                         page === pNum 
+                           ? "bg-blue-600 text-white shadow-md scale-110" 
+                           : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"
+                       }`}
+                     >
+                       {pNum}
+                     </button>
+                   );
+                 } else if (pNum === page - 2 || pNum === page + 2) {
+                   return <span key={pNum} className="text-gray-400 font-bold px-1">...</span>;
+                 }
+                 return null;
+              })}
+            </div>
+
+            <button
+              onClick={() => setPage(p => Math.min(totalPagesLocal, p + 1))}
+              disabled={page === totalPagesLocal}
+              className="px-4 py-2 bg-white border border-gray-200 rounded-xl font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
+            >
+              Next
+            </button>
+          </div>
+        )}
+      </div>
 
       {/* VENDOR LEDGER MODAL */}
       <VendorLedgerModal

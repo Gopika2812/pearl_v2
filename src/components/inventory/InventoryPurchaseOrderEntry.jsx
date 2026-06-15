@@ -733,14 +733,18 @@ const InventoryPurchaseOrderEntry = ({
     setEnableRoundOff(true);
   };
 
+  // 🛡️ Ref-based guard: prevents double-submit even under rapid clicks (faster than React state)
+  const submittingRef = useRef(false);
+
   // Place Purchase Order
   const handleFinalAction = async () => {
+    if (submittingRef.current) return; // 🚫 Already in-flight — block immediately
     if (!voucherType) return toast.error("Select Voucher Type!");
     if (!vendor) return toast.error("Select Vendor!");
     if (!warehouse) return toast.error("Select Warehouse!");
-
     if (items.length === 0) return toast.error("Add at least one product!");
 
+    submittingRef.current = true;
     setSaving(true);
     const orderData = {
       branchId: currentBranch?._id || currentBranch?.id,
@@ -790,6 +794,7 @@ const InventoryPurchaseOrderEntry = ({
       console.error(err);
       toast.error("Something went wrong!");
     } finally {
+      submittingRef.current = false;
       setSaving(false);
     }
   };

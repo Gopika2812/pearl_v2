@@ -7,6 +7,7 @@ import {
 import { toast } from "react-toastify";
 import { API_BASE, fetchWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
+import DateRangeDropdown from "../../components/common/DateRangeDropdown";
 
 const OnlineOrdersPage = () => {
     const { currentBranch } = useBranch();
@@ -224,28 +225,16 @@ const OnlineOrdersPage = () => {
                             </div>
                         </div>
 
-                        <div>
-                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1.5">From Date</label>
-                            <div className="relative">
-                                <FaCalendarAlt className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-                                <input
-                                    type="date"
-                                    value={filterFromDate}
-                                    onChange={(e) => setFilterFromDate(e.target.value)}
-                                    className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-transparent focus:border-indigo-500 focus:bg-white rounded-xl outline-none transition-all font-semibold text-slate-700 text-xs"
-                                />
-                            </div>
-                        </div>
-
-                        <div>
-                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1.5">To Date</label>
-                            <div className="relative">
-                                <FaCalendarAlt className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-                                <input
-                                    type="date"
-                                    value={filterToDate}
-                                    onChange={(e) => setFilterToDate(e.target.value)}
-                                    className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-transparent focus:border-indigo-500 focus:bg-white rounded-xl outline-none transition-all font-semibold text-slate-700 text-xs"
+                        <div className="md:col-span-2">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1.5">Date Range</label>
+                            <div className="h-12 flex items-center">
+                                <DateRangeDropdown 
+                                    startDate={filterFromDate}
+                                    endDate={filterToDate}
+                                    onDateChange={(start, end) => {
+                                        setFilterFromDate(start);
+                                        setFilterToDate(end);
+                                    }}
                                 />
                             </div>
                         </div>

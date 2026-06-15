@@ -36,6 +36,12 @@ const BranchPurchaseOrders = () => {
   const [filterFromDate, setFilterFromDate] = useState(new Date().toISOString().split('T')[0]);
   const [filterToDate, setFilterToDate] = useState(new Date().toISOString().split('T')[0]);
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [totalOrders, setTotalOrders] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+
   // Search debounce logic
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -62,8 +68,12 @@ const BranchPurchaseOrders = () => {
     }
   }, [searchTerm]);
 
+  // Reset to page 1 when filters or search change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearch, filterFromDate, filterToDate]);
+
   const fetchPurchaseOrders = async (searchOverride) => {
-    // Get branch ID from context
     if (!currentBranch?._id) {
       toast.error("Branch not selected. Please select a branch from the sidebar.");
       return;
@@ -73,13 +83,18 @@ const BranchPurchaseOrders = () => {
     try {
       const search = searchOverride !== undefined ? searchOverride : debouncedSearch;
       const res = await fetchWithAuth(
-        `${API_BASE}/purchase-orders?branchId=${currentBranch._id}${search ? `&search=${search}` : ""}&fromDate=${filterFromDate}&toDate=${filterToDate}`
+        `${API_BASE}/purchase-orders?branchId=${currentBranch._id}${search ? `&search=${search}` : ""}&fromDate=${filterFromDate}&toDate=${filterToDate}&page=${currentPage}&limit=${pageSize}`
       );
       const data = await res.json();
 
       if (!res.ok) throw new Error(data.message || "Failed to fetch orders");
 
       setPurchaseOrders(data.data || []);
+      // Store pagination info from API
+      if (data.pagination) {
+        setTotalOrders(data.pagination.total || 0);
+        setTotalPages(data.pagination.pages || 1);
+      }
       toast.success(`Fetched ${data?.data?.length || 0} purchase orders`);
     } catch (err) {
       console.error("Error fetching purchase orders:", err);
@@ -91,7 +106,7 @@ const BranchPurchaseOrders = () => {
 
   useEffect(() => {
     fetchPurchaseOrders();
-  }, [currentBranch?._id, debouncedSearch, filterFromDate, filterToDate]);
+  }, [currentBranch?._id, debouncedSearch, filterFromDate, filterToDate, currentPage, pageSize]);
 
   const toggleExpanded = (orderId) => {
     setExpandedOrders((prev) => ({
@@ -604,7 +619,7 @@ const BranchPurchaseOrders = () => {
                             })}
                           </td>
                         )}
-                        {(isFieldAllowed("action_edit") || isFieldAllowed("action_delete") || isFieldAllowed("action_invoice") || isFieldAllowed("action_slip")) && (
+                        {(isFieldAllowed("action_edit") || isFieldAllowed("action_delete") || isFieldAllowed("action_invoice")) && (
                           <td className="px-6 py-4 text-center">
                             <div className="flex items-center justify-center gap-2">
                               {order.status !== 'INVOICED' ? (
@@ -688,15 +703,6 @@ const BranchPurchaseOrders = () => {
                                       title="Update Existing Invoice"
                                     >
                                       <FaSync size={10} /> Re-gen PI
-                                    </button>
-                                  )}
-                                  {isFieldAllowed("action_slip") && (
-                                    <button
-                                      onClick={() => navigate(`/branch/dispatch?type=PO&voucher=${encodeURIComponent(order.voucherType)}&orderId=${order._id}`)}
-                                      className="bg-indigo-500 hover:bg-indigo-600 text-white p-2 rounded-lg transition shadow-md shadow-indigo-100 flex items-center gap-1 text-xs font-bold"
-                                      title="Loading Slip"
-                                    >
-                                      <FaTruck size={12} /> SLIP
                                     </button>
                                   )}
                                 </>
@@ -947,6 +953,75 @@ const BranchPurchaseOrders = () => {
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+        )}
+
+        {/* PAGINATION */}
+        {!loading && totalOrders > 0 && (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-6 py-4 mt-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+            {/* Left: Records info + per-page */}
+            <div className="flex items-center gap-4">
+              <span className="text-xs font-bold text-gray-500">
+                Showing <span className="text-gray-800">{((currentPage - 1) * pageSize) + 1}</span>–<span className="text-gray-800">{Math.min(currentPage * pageSize, totalOrders)}</span> of <span className="text-[#319bab]">{totalOrders}</span> orders
+              </span>
+              <select
+                value={pageSize}
+                onChange={e => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
+                className="text-xs font-bold border border-gray-200 rounded-lg px-2 py-1.5 bg-gray-50 text-gray-700 focus:outline-none focus:border-[#319bab] cursor-pointer"
+              >
+                {[10, 20, 50, 100].map(n => (
+                  <option key={n} value={n}>{n} / page</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Right: Page navigation */}
+            <div className="flex items-center gap-1">
+              {/* Prev */}
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="px-3 py-1.5 text-xs font-black rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
+              >
+                ‹ Prev
+              </button>
+
+              {/* Page numbers */}
+              {Array.from({ length: totalPages }, (_, i) => i + 1)
+                .filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 2)
+                .reduce((acc, p, idx, arr) => {
+                  if (idx > 0 && p - arr[idx - 1] > 1) acc.push('...');
+                  acc.push(p);
+                  return acc;
+                }, [])
+                .map((p, idx) =>
+                  p === '...' ? (
+                    <span key={`ellipsis-${idx}`} className="px-2 text-gray-400 text-xs font-bold">…</span>
+                  ) : (
+                    <button
+                      key={p}
+                      onClick={() => setCurrentPage(p)}
+                      className={`w-8 h-8 text-xs font-black rounded-lg border transition ${
+                        currentPage === p
+                          ? 'bg-[#319bab] text-white border-[#319bab] shadow-md shadow-[#319bab]/20'
+                          : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  )
+                )
+              }
+
+              {/* Next */}
+              <button
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="px-3 py-1.5 text-xs font-black rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
+              >
+                Next ›
+              </button>
             </div>
           </div>
         )}

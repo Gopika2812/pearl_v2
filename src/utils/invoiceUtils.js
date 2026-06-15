@@ -452,18 +452,39 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
                       <div>
                          <span style="color: #64748b; font-weight: bold; text-transform: uppercase; font-size: 9px; display: block;">Previous Balance:</span>
                          <span style="font-size: 13px; font-weight: 900;">₹${(() => {
-                            const val = Number(previewData?.openingBalance || 0);
-                            const absVal = Math.abs(val).toLocaleString(undefined, { minimumFractionDigits: 2 });
-                            const label = val >= 0 ? "Dr" : "Cr";
+                            if (previewData?.openingBalance !== undefined) {
+                                const val = Number(previewData.openingBalance);
+                                const absVal = Math.abs(val).toLocaleString(undefined, { minimumFractionDigits: 2 });
+                                const label = isDN ? (val >= 0 ? "Cr" : "Dr") : (val >= 0 ? "Dr" : "Cr");
+                                return `${absVal} ${label}`;
+                            }
+                            const actualParty = party?.customerId || party?.vendorId || party || {};
+                            const debit = Number(actualParty.debit || 0);
+                            const credit = Number(actualParty.credit || 0);
+                            const currentBal = isDN ? (credit - debit) : (debit - credit);
+                            const prevBal = currentBal + Number(previewData?.grandTotal || 0);
+                            
+                            const absVal = Math.abs(prevBal).toLocaleString(undefined, { minimumFractionDigits: 2 });
+                            const label = isDN ? (prevBal >= 0 ? "Cr" : "Dr") : (prevBal >= 0 ? "Dr" : "Cr");
                             return `${absVal} ${label}`;
                          })()}</span>
                       </div>
                       <div>
                          <span style="color: #64748b; font-weight: bold; text-transform: uppercase; font-size: 9px; display: block;">Closing Balance:</span>
                          <span style="font-size: 13px; font-weight: 900;">₹${(() => {
-                            const val = Number(previewData?.closingBalance || 0);
-                            const absVal = Math.abs(val).toLocaleString(undefined, { minimumFractionDigits: 2 });
-                            const label = val >= 0 ? "Dr" : "Cr";
+                            if (previewData?.closingBalance !== undefined) {
+                                const val = Number(previewData.closingBalance);
+                                const absVal = Math.abs(val).toLocaleString(undefined, { minimumFractionDigits: 2 });
+                                const label = isDN ? (val >= 0 ? "Cr" : "Dr") : (val >= 0 ? "Dr" : "Cr");
+                                return `${absVal} ${label}`;
+                            }
+                            const actualParty = party?.customerId || party?.vendorId || party || {};
+                            const debit = Number(actualParty.debit || 0);
+                            const credit = Number(actualParty.credit || 0);
+                            const currentBal = isDN ? (credit - debit) : (debit - credit);
+                            
+                            const absVal = Math.abs(currentBal).toLocaleString(undefined, { minimumFractionDigits: 2 });
+                            const label = isDN ? (currentBal >= 0 ? "Cr" : "Dr") : (currentBal >= 0 ? "Dr" : "Cr");
                             return `${absVal} ${label}`;
                          })()}</span>
                       </div>

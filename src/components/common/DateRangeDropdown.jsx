@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { FaCalendarAlt, FaChevronDown } from 'react-icons/fa';
 
-const DateRangeDropdown = ({ startDate, endDate, onDateChange, minWidth = "200px" }) => {
+const DateRangeDropdown = ({ startDate, endDate, onDateChange, minWidth = "200px", alignRight = true }) => {
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const [datePreset, setDatePreset] = useState("");
     const dropdownRef = useRef(null);
@@ -167,7 +167,7 @@ const DateRangeDropdown = ({ startDate, endDate, onDateChange, minWidth = "200px
             </button>
 
             {isDropdownOpen && (
-                <div className="absolute right-0 lg:left-0 mt-2 w-[340px] bg-white border border-gray-200 rounded-xl shadow-xl z-50 p-4 flex gap-3 animate-fade-in">
+                <div className={`absolute ${alignRight ? "right-0" : "left-0"} mt-2 w-[340px] bg-white border border-gray-200 rounded-xl shadow-xl z-[100] p-4 flex gap-3 animate-fade-in`}>
                     {/* Presets Column */}
                     <div className="flex flex-col gap-1 border-r border-gray-100 pr-3 w-[120px] shrink-0">
                         {["Today", "Yesterday", "This Week", "Last Week", "This Month", "Last Month", "This Quarter", "Last Quarter", "Cur FY", "Pre FY"].map(preset => (

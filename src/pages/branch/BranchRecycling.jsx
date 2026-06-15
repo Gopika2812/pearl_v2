@@ -132,7 +132,28 @@ export default function BranchRecycling() {
   // Full Page Stock Alert states
   const [showFullPageAlert, setShowFullPageAlert] = useState(false);
   const [alertProducts, setAlertProducts] = useState([]);
-  const [alertDismissed, setAlertDismissed] = useState(false);
+
+  // 24-hour dismiss logic using localStorage (shared across all users on same browser)
+  const ALERT_DISMISS_KEY = "lowStockAlertDismissedAt";
+  const ALERT_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+  const isAlertDismissed = () => {
+    try {
+      const storedAt = localStorage.getItem(ALERT_DISMISS_KEY);
+      if (!storedAt) return false;
+      const elapsed = Date.now() - parseInt(storedAt, 10);
+      return elapsed < ALERT_COOLDOWN_MS;
+    } catch {
+      return false;
+    }
+  };
+
+  const dismissAlert = () => {
+    try {
+      localStorage.setItem(ALERT_DISMISS_KEY, String(Date.now()));
+    } catch {}
+    setShowFullPageAlert(false);
+  };
 
   // Restocking Configuration Modal State
   const [restockingConfigMode, setRestockingConfigMode] = useState(false);
@@ -971,7 +992,8 @@ export default function BranchRecycling() {
       setAllProducts(updateFn);
       
       if (newShowAlert) {
-        setAlertDismissed(false); // Reset so it pops up immediately if critical
+        // Clear dismiss so alert re-shows immediately if critical (on manual refresh)
+        try { localStorage.removeItem(ALERT_DISMISS_KEY); } catch {}
       }
       
       toast.success(newShowAlert ? `🔔 Alert active for ${product.name}` : `🔕 Alert muted for ${product.name}`);
@@ -2146,11 +2168,11 @@ export default function BranchRecycling() {
       
       setAlertProducts(criticalProducts);
 
-      if (criticalProducts.length > 0 && !alertDismissed && !showFullPageAlert) {
+      if (criticalProducts.length > 0 && !isAlertDismissed() && !showFullPageAlert) {
         setShowFullPageAlert(true);
       }
     }
-  }, [allProducts, products, alertDismissed]);
+  }, [allProducts, products]);
 
   // Helper to resolve product group name (handles object, rawProductGroups fallback, or populated lookup fallback)
   const getGroupNameOfProduct = (product) => {
@@ -2236,8 +2258,7 @@ export default function BranchRecycling() {
                     <button
                       onClick={() => {
                         setSelectedProductGroup(groupName);
-                        setShowFullPageAlert(false);
-                        setAlertDismissed(true);
+                        dismissAlert();
                       }}
                       className="px-5 py-2.5 bg-red-100 text-red-700 font-extrabold rounded-xl hover:bg-red-200 transition-colors shadow-sm transform hover:scale-105 active:scale-95 duration-150"
                     >
@@ -2253,8 +2274,7 @@ export default function BranchRecycling() {
           <div className="bg-gray-50 px-6 py-6 md:px-8 border-t border-gray-100 flex flex-col md:flex-row gap-4 items-center justify-between">
             <button
               onClick={() => {
-                setShowFullPageAlert(false);
-                setAlertDismissed(true);
+                dismissAlert();
               }}
               className="w-full md:w-auto px-6 py-3 border-2 border-gray-300 text-gray-600 font-bold hover:bg-gray-100 transition rounded-xl flex items-center justify-center gap-2"
             >
@@ -2268,8 +2288,7 @@ export default function BranchRecycling() {
                 alertProducts.forEach(p => newSelected.add(p._id));
                 setSelectedProducts(newSelected);
                 
-                setShowFullPageAlert(false);
-                setAlertDismissed(true);
+                dismissAlert();
                 
                 toast.success(`✅ Selected all ${alertProducts.length} low stock products for restocking!`);
               }}

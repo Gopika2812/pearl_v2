@@ -7,6 +7,7 @@ import { API_BASE, fetchWithAuth } from "../../api";
 import SupplierDebitNoteModal from "../../components/inventory/SupplierDebitNoteModal";
 import { useBranch } from "../../context/BranchContext";
 import { getInvoiceHTML } from "../../utils/invoiceUtils";
+import DateRangeDropdown from "../../components/common/DateRangeDropdown";
 
 export default function BranchDebitNote() {
   const { currentBranch, user } = useBranch();
@@ -26,6 +27,13 @@ export default function BranchDebitNote() {
   const [editData, setEditData] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedDN, setExpandedDN] = useState({});
+  const [filterFromDate, setFilterFromDate] = useState("");
+  const [filterToDate, setFilterToDate] = useState("");
+
+  // Cancel Modal State
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
+  const [cancelDn, setCancelDn] = useState(null);
+  const [cancelReason, setCancelReason] = useState("");
 
   useEffect(() => {
     if (currentBranch?._id) fetchDebitNotes();
@@ -51,10 +59,19 @@ export default function BranchDebitNote() {
     setExpandedDN(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const filteredDN = debitNotes.filter(dn => 
-    dn.debitNoteId?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    dn.vendor?.name?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredDN = debitNotes.filter(dn => {
+    const matchSearch = dn.debitNoteId?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                        dn.vendor?.name?.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    if (!matchSearch) return false;
+
+    if (filterFromDate && filterToDate) {
+      const dnDateStr = new Date(dn.createdAt).toISOString().split('T')[0];
+      if (dnDateStr < filterFromDate || dnDateStr > filterToDate) return false;
+    }
+
+    return true;
+  });
 
   const formatDate = (date) => new Date(date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 
@@ -298,14 +315,19 @@ export default function BranchDebitNote() {
     setShowModal(true);
   };
 
-  const handleCancel = async (dn) => {
-    const narration = window.prompt("Enter reason for cancellation:");
-    if (!narration) return;
+  const handleCancel = (dn) => {
+    setCancelDn(dn);
+    setCancelReason("");
+    setCancelModalOpen(true);
+  };
+
+  const confirmCancel = async () => {
+    if (!cancelReason.trim()) return toast.warning("Cancellation reason is required");
 
     try {
-      const res = await fetchWithAuth(`${API_BASE}/debit-notes/${dn._id}/cancel`, {
+      const res = await fetchWithAuth(`${API_BASE}/debit-notes/${cancelDn._id}/cancel`, {
         method: "PATCH",
-        body: JSON.stringify({ narration })
+        body: JSON.stringify({ narration: cancelReason })
       });
       const data = await res.json();
       if (data.success) {
@@ -316,12 +338,15 @@ export default function BranchDebitNote() {
       }
     } catch (err) {
       toast.error("Error cancelling debit note");
+    } finally {
+      setCancelModalOpen(false);
+      setCancelDn(null);
     }
   };
 
   return (
     <div className="min-h-screen bg-gray-50 pt-20 md:pt-4 md:pl-20">
-      <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 py-6 font-sans">
+      <div className="w-full font-sans">
         
         {/* HEADER SECTION */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
@@ -353,17 +378,41 @@ export default function BranchDebitNote() {
                 <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-1">Total Debit Value</p>
                 <p className="text-3xl font-black text-rose-600 tracking-tighter italic">₹{filteredDN.reduce((sum, dn) => sum + (dn.grandTotal || 0), 0).toLocaleString()}</p>
             </div>
-            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex items-center gap-4 relative overflow-hidden">
-                <FaSearch className="absolute -right-4 -bottom-4 text-8xl text-gray-50 -rotate-12" />
-                <div className="z-10 w-full">
-                    <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Search Records</p>
-                    <input 
-                      type="text"
-                      placeholder="DN ID or Vendor..."
-                      className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-4 py-2 text-sm font-bold focus:border-rose-500 outline-none transition-all placeholder:text-gray-300"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                    />
+            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex items-center gap-4 relative overflow-visible col-span-1 md:col-span-3">
+                <FaSearch className="absolute -right-4 -bottom-4 text-8xl text-gray-50 -rotate-12 pointer-events-none" />
+                <div className="z-10 w-full flex flex-col md:flex-row gap-4 items-end">
+                    <div className="flex-1 w-full">
+                        <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Search Records</p>
+                        <input 
+                          type="text"
+                          placeholder="DN ID or Vendor..."
+                          className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-4 py-2 text-sm font-bold focus:border-rose-500 outline-none transition-all placeholder:text-gray-300"
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                        />
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <DateRangeDropdown
+                          startDate={filterFromDate}
+                          endDate={filterToDate}
+                          onDateChange={(start, end) => {
+                              setFilterFromDate(start);
+                              setFilterToDate(end);
+                          }}
+                      />
+                      {(filterFromDate || searchQuery) && (
+                        <button
+                           onClick={() => {
+                             setFilterFromDate("");
+                             setFilterToDate("");
+                             setSearchQuery("");
+                           }}
+                           className="text-[10px] font-black text-rose-600 hover:text-rose-700 uppercase tracking-wider px-2"
+                        >
+                          Reset
+                        </button>
+                      )}
+                    </div>
                 </div>
             </div>
         </div>
@@ -439,19 +488,13 @@ export default function BranchDebitNote() {
                                       CANCEL
                                   </button>
                                   <button 
-                                    onClick={(e) => { e.stopPropagation(); handlePrint(dn); }}
-                                    className="px-2 py-1 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-600 hover:text-white transition-all text-[10px] font-black border border-blue-100 flex items-center gap-1"
-                                    title="Print Debit Note"
+                                    onClick={(e) => { e.stopPropagation(); handlePrint(dn, 'STANDARD'); }}
+                                    className="flex items-center gap-1 px-2 py-1 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-all text-[10px] font-black border border-slate-200"
+                                    title="Standard Layout Print"
                                   >
-                                      <FaPrint size={10} /> PRINT
+                                      <FaPrint size={10} /> STD
                                   </button>
-                                  <button 
-                                    onClick={(e) => { e.stopPropagation(); handleDownloadPDF(dn); }}
-                                    className="px-2 py-1 bg-green-50 text-green-600 rounded-lg hover:bg-green-600 hover:text-white transition-all text-[10px] font-black border border-green-100 flex items-center gap-1"
-                                    title="Download PDF"
-                                  >
-                                      <FaDownload size={10} /> PDF
-                                  </button>
+
                                   <button 
                                     onClick={(e) => { e.stopPropagation(); toggleExpand(dn._id); }}
                                     className="p-2 hover:bg-white rounded-xl text-rose-600 transition-all shadow-sm group-hover:shadow-md border border-transparent hover:border-rose-100"
@@ -516,6 +559,39 @@ export default function BranchDebitNote() {
         editData={editData}
         onSuccess={fetchDebitNotes}
       />
+
+      {/* CANCEL MODAL */}
+      {cancelModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl animate-fadeIn">
+            <h3 className="text-xl font-black text-gray-900 mb-2">Cancel Debit Note</h3>
+            <p className="text-sm text-gray-500 mb-6 font-medium">Please provide a reason for cancelling this debit note.</p>
+            
+            <textarea
+              className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-4 py-3 text-sm font-semibold focus:border-red-400 outline-none transition-all placeholder:text-gray-300 resize-none h-24 mb-6"
+              placeholder="Enter reason here..."
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+              autoFocus
+            />
+            
+            <div className="flex justify-end gap-3">
+              <button 
+                onClick={() => setCancelModalOpen(false)}
+                className="px-5 py-2.5 rounded-xl font-bold text-gray-500 hover:bg-gray-100 transition-colors"
+              >
+                Go Back
+              </button>
+              <button 
+                onClick={confirmCancel}
+                className="px-5 py-2.5 rounded-xl font-bold text-white bg-red-500 hover:bg-red-600 shadow-lg shadow-red-500/30 transition-all active:scale-95"
+              >
+                Confirm Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

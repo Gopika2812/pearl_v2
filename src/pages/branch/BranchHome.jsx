@@ -9,6 +9,7 @@ import { Link } from "react-router-dom";
 import { useBranch } from "../../context/BranchContext";
 import { API_BASE, fetchWithAuth } from "../../api";
 import { toast } from "react-toastify";
+import DateRangeDropdown from "../../components/common/DateRangeDropdown";
 
 // Helper for date ranges
 const getDateRange = (rangeType) => {
@@ -47,9 +48,15 @@ export default function BranchHome() {
   // Dashboard state (Super Admin Only)
   const [stats, setStats] = useState(null);
   const [loadingStats, setLoadingStats] = useState(false);
-  const [filterType, setFilterType] = useState("thisMonth");
-  const [customStart, setCustomStart] = useState("");
-  const [customEnd, setCustomEnd] = useState("");
+
+  // Date filter — initialised to current month
+  const getToday = () => new Date().toISOString().split("T")[0];
+  const getMonthStart = () => {
+    const d = new Date(); d.setDate(1);
+    return d.toISOString().split("T")[0];
+  };
+  const [filterFromDate, setFilterFromDate] = useState(getMonthStart);
+  const [filterToDate, setFilterToDate] = useState(getToday);
 
   // Non-SuperAdmin State (Personal Dashboard)
   const [todayAttendance, setTodayAttendance] = useState(null);
@@ -69,7 +76,7 @@ export default function BranchHome() {
         fetchAttendanceLogs();
       }
     }
-  }, [currentBranch?._id, filterType, isSuperAdmin]);
+  }, [currentBranch?._id, filterFromDate, filterToDate, isSuperAdmin]);
 
   const fetchMyTokens = async () => {
     setLoadingTokens(true);
@@ -86,23 +93,13 @@ export default function BranchHome() {
     }
   };
 
-  const fetchDashboardStats = async (startOverride, endOverride) => {
+  const fetchDashboardStats = async () => {
     setLoadingStats(true);
     try {
-      let startDate, endDate;
-      
-      if (startOverride && endOverride) {
-        startDate = new Date(startOverride);
-        endDate = new Date(endOverride);
-      } else if (filterType !== 'custom') {
-        const range = getDateRange(filterType);
-        startDate = range.startDate;
-        endDate = range.endDate;
-      } else {
-        if (!customStart || !customEnd) return;
-        startDate = new Date(customStart);
-        endDate = new Date(customEnd);
-      }
+      const startDate = new Date(filterFromDate);
+      startDate.setHours(0, 0, 0, 0);
+      const endDate = new Date(filterToDate);
+      endDate.setHours(23, 59, 59, 999);
 
       const params = new URLSearchParams({
         startDate: startDate.toISOString(),
@@ -332,11 +329,7 @@ export default function BranchHome() {
     }
   };
 
-  const handleCustomFilter = () => {
-    if (!customStart || !customEnd) return;
-    setFilterType("custom");
-    fetchDashboardStats(customStart, customEnd);
-  };
+  // handleCustomFilter removed — DateRangeDropdown handles this via onDateChange callback
 
   const formatCurrency = (val) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(val || 0);
 
@@ -763,44 +756,35 @@ export default function BranchHome() {
         </div>
 
         {/* DASHBOARD FILTERS */}
-        <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 mb-6 flex flex-col xl:flex-row items-center justify-between gap-4">
-          <div className="flex flex-wrap bg-gray-100 p-1.5 rounded-xl w-full xl:w-auto gap-1">
-            {['today', 'yesterday', 'thisWeek', 'thisMonth', 'thisYear'].map(type => (
-              <button
-                key={type}
-                onClick={() => setFilterType(type)}
-                className={`flex-1 xl:flex-none px-5 py-2.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${
-                  filterType === type 
-                  ? "bg-[#319CD3] text-white shadow-md" 
-                  : "text-gray-500 hover:text-[#00376B] hover:bg-white"
-                }`}
-              >
-                {type.replace(/([A-Z])/g, ' $1')}
-              </button>
-            ))}
+        <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 mb-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Dashboard Period</span>
+            {loadingStats && (
+              <span className="w-4 h-4 border-2 border-[#319CD3] border-t-transparent rounded-full animate-spin" />
+            )}
           </div>
-          <div className="flex flex-wrap items-center gap-3 w-full xl:w-auto">
-            <input 
-              type="date" 
-              value={customStart}
-              onChange={e => setCustomStart(e.target.value)}
-              className="flex-1 xl:flex-none px-4 py-2.5 bg-gray-50 border border-gray-200 text-sm font-bold text-gray-700 rounded-xl focus:outline-none focus:border-[#319CD3]" 
+          <div className="flex items-center gap-3 w-full sm:w-auto z-20">
+            <DateRangeDropdown
+              startDate={filterFromDate}
+              endDate={filterToDate}
+              onDateChange={(start, end) => {
+                setFilterFromDate(start);
+                setFilterToDate(end);
+              }}
+              minWidth="240px"
             />
-            <span className="text-gray-400 font-black text-xs">TO</span>
-            <input 
-              type="date" 
-              value={customEnd}
-              onChange={e => setCustomEnd(e.target.value)}
-              className="flex-1 xl:flex-none px-4 py-2.5 bg-gray-50 border border-gray-200 text-sm font-bold text-gray-700 rounded-xl focus:outline-none focus:border-[#319CD3]" 
-            />
-            <button 
-              onClick={handleCustomFilter}
-              className="w-full xl:w-auto px-6 py-2.5 bg-[#00376B] text-white rounded-xl text-xs font-black tracking-widest hover:bg-[#002855] transition-colors shadow-sm"
+            <button
+              onClick={() => {
+                setFilterFromDate(getMonthStart());
+                setFilterToDate(getToday());
+              }}
+              className="text-[10px] font-black text-[#319CD3] hover:text-[#00376B] uppercase tracking-wider px-2 whitespace-nowrap"
             >
-              APPLY FILTER
+              Reset
             </button>
           </div>
         </div>
+
 
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           

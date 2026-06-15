@@ -535,7 +535,7 @@ export default function InventorySalesOrderEntry({
     fetchProductsByGroup();
   }, [productGroup, localProducts]);
 
-  // ⚡ PERFORMANCE: Fetch products from backend when searching by name
+  // ⚡ PERFORMANCE: Fetch products from backend when searching by name (uses fast /search endpoint)
   useEffect(() => {
     if (!itemSearch.trim()) {
       // If search is empty and no group, use the initial 50 products
@@ -545,11 +545,14 @@ export default function InventorySalesOrderEntry({
       return;
     }
 
+    const controller = new AbortController();
+
     const fetchProductsFromBackend = async () => {
       setSearchingProducts(true);
       try {
         const res = await fetchWithAuth(
-          `${API_BASE}/products?search=${encodeURIComponent(itemSearch)}&branchId=${branchId}&limit=100`
+          `${API_BASE}/products/search?search=${encodeURIComponent(itemSearch.trim())}&branchId=${branchId}&limit=60`,
+          { signal: controller.signal }
         );
         const data = await res.json();
 
@@ -562,6 +565,7 @@ export default function InventorySalesOrderEntry({
         const productList = Array.isArray(data.data) ? data.data : [];
         setFetchedProducts(productList);
       } catch (err) {
+        if (err.name === "AbortError") return; // Ignore cancelled requests
         console.error("❌ Failed to search products:", err);
         setFetchedProducts([]);
       } finally {
@@ -569,8 +573,11 @@ export default function InventorySalesOrderEntry({
       }
     };
 
-    const timer = setTimeout(fetchProductsFromBackend, 300); // Debounce 300ms
-    return () => clearTimeout(timer);
+    const timer = setTimeout(fetchProductsFromBackend, 350); // Debounce 350ms
+    return () => {
+      clearTimeout(timer);
+      controller.abort(); // Cancel any in-flight request
+    };
   }, [itemSearch, branchId, productGroup, localProducts]);
 
 

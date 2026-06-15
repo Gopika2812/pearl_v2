@@ -8,6 +8,7 @@ import { toast, ToastContainer } from "react-toastify";
 import { API_BASE, fetchWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 import { useInventory } from "../../context/InventoryContext";
+import DateRangeDropdown from "../../components/common/DateRangeDropdown";
 
 const Tokenization = () => {
   const { currentBranch, user, refreshBlockingTokens } = useBranch();
@@ -27,6 +28,11 @@ const Tokenization = () => {
   // PAGE FILTERS
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 24;
   
   const [tokenMessage, setTokenMessage] = useState("");
   const customerDropdownRef = useRef(null);
@@ -159,7 +165,17 @@ const Tokenization = () => {
         
         const matchesStatus = statusFilter === "ALL" || t.status === statusFilter;
         
-        return matchesSearch && matchesStatus;
+        let matchesDate = true;
+        if (startDate) {
+          matchesDate = matchesDate && new Date(t.createdAt) >= new Date(startDate);
+        }
+        if (endDate) {
+          const end = new Date(endDate);
+          end.setHours(23, 59, 59, 999);
+          matchesDate = matchesDate && new Date(t.createdAt) <= end;
+        }
+
+        return matchesSearch && matchesStatus && matchesDate;
       })
       .sort((a, b) => {
         // Sort by status priority first
@@ -169,7 +185,14 @@ const Tokenization = () => {
         // Then by most recent
         return new Date(b.createdAt) - new Date(a.createdAt);
       });
-  }, [tokens, searchQuery, statusFilter]);
+  }, [tokens, searchQuery, statusFilter, startDate, endDate]);
+
+  const totalPages = Math.ceil(filteredTokens.length / itemsPerPage);
+  const paginatedTokens = filteredTokens.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, statusFilter, startDate, endDate]);
 
   // --- CLICK OUTSIDE HANDLERS ---
   useEffect(() => {
@@ -415,7 +438,7 @@ const Tokenization = () => {
 
       
       {/* Header Section */}
-      <div className="max-w-7xl mx-auto mb-8">
+      <div className="w-full mb-8">
         <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/50 p-6 md:p-8 flex flex-col md:flex-row md:items-center justify-between gap-6 border border-slate-100">
           <div className="flex items-center gap-5">
             <div className="p-4 bg-gradient-to-tr from-indigo-600 to-indigo-500 rounded-2xl shadow-lg shadow-indigo-200">
@@ -436,8 +459,8 @@ const Tokenization = () => {
       </div>
 
       {/* Filters Hub */}
-      <div className="max-w-7xl mx-auto mb-6 flex flex-col md:flex-row gap-4">
-        <div className="flex-1 relative group">
+      <div className="w-full mb-6 flex flex-col lg:flex-row gap-4">
+        <div className="flex-1 relative group min-w-[200px]">
           <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 transition-colors group-focus-within:text-indigo-500">
             <FaSearch />
           </div>
@@ -449,6 +472,25 @@ const Tokenization = () => {
             className="w-full bg-white border-2 border-slate-100 rounded-2xl pl-12 pr-4 py-4 text-sm font-bold shadow-sm focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 transition-all outline-none"
           />
         </div>
+
+        <div className="flex items-center gap-3 w-full sm:w-auto z-20">
+          <DateRangeDropdown
+            startDate={startDate}
+            endDate={endDate}
+            onDateChange={(start, end) => {
+              setStartDate(start);
+              setEndDate(end);
+            }}
+            minWidth="240px"
+          />
+          <button 
+            onClick={() => { setStartDate(""); setEndDate(""); }}
+            className="text-[10px] font-black text-indigo-500 hover:text-indigo-700 uppercase tracking-wider px-2 whitespace-nowrap"
+          >
+            Reset
+          </button>
+        </div>
+
         <div className="flex gap-2 p-1.5 bg-white border-2 border-slate-100 rounded-2xl shadow-sm overflow-x-auto no-scrollbar">
           {["ALL", "OPEN", "TAKEN", "IN_PROGRESS", "COMPLETED", "CANCELLED"].map(status => (
             <button
@@ -467,7 +509,7 @@ const Tokenization = () => {
       </div>
 
       {/* Stats */}
-      <div className="max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+      <div className="w-full grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
         {[
           { label: "Active", value: tokens.filter(t => ["OPEN", "TAKEN", "IN_PROGRESS"].includes(t.status)).length, color: "text-indigo-600" },
           { label: "Pending", value: tokens.filter(t => t.status === "OPEN").length, color: "text-amber-600" },
@@ -482,7 +524,7 @@ const Tokenization = () => {
       </div>
 
       {/* Main Grid */}
-      <div className="max-w-7xl mx-auto">
+      <div className="w-full">
         {loading ? (
           <div className="flex flex-col items-center justify-center py-20">
             <FaSpinner className="text-3xl text-indigo-500 animate-spin mb-4" />
@@ -493,11 +535,40 @@ const Tokenization = () => {
             <p className="text-slate-400 font-bold uppercase text-[10px]">No Tokens Found</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {filteredTokens.map(token => (
-              <TokenCard key={token._id} token={token} />
-            ))}
-          </div>
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {paginatedTokens.map(token => (
+                <TokenCard key={token._id} token={token} />
+              ))}
+            </div>
+
+            {totalPages > 1 && (
+              <div className="flex flex-col sm:flex-row justify-between items-center mt-8 bg-white p-4 rounded-2xl shadow-sm border border-slate-100 gap-4">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                  Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, filteredTokens.length)} of {filteredTokens.length} entries
+                </p>
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="px-4 py-2 bg-slate-50 text-slate-600 font-bold text-xs rounded-lg border border-slate-200 disabled:opacity-50 transition-colors hover:bg-slate-100"
+                  >
+                    Prev
+                  </button>
+                  <div className="flex items-center px-2">
+                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Page {currentPage} / {totalPages}</span>
+                  </div>
+                  <button 
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                    className="px-4 py-2 bg-slate-50 text-slate-600 font-bold text-xs rounded-lg border border-slate-200 disabled:opacity-50 transition-colors hover:bg-slate-100"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
 

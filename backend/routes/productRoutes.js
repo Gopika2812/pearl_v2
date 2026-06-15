@@ -149,6 +149,47 @@ router.post("/", async (req, res) => {
   }
 });
 
+// GET: Fast product search for dropdowns (no aggregations, no stock recalculation)
+// Used by the sales order item search. Returns only essential fields for fast autocomplete.
+router.get("/search", async (req, res) => {
+  try {
+    const { search = "", branchId, limit = 50 } = req.query;
+
+    if (!branchId) {
+      return res.status(400).json({ success: false, message: "branchId is required" });
+    }
+
+    let branchObjectId;
+    try {
+      branchObjectId = mongoose.Types.ObjectId.isValid(branchId)
+        ? new mongoose.Types.ObjectId(branchId)
+        : branchId;
+    } catch (e) {
+      branchObjectId = branchId;
+    }
+
+    const filter = { branchId: branchObjectId };
+    if (search.trim()) {
+      filter.name = { $regex: search.trim(), $options: "i" };
+    }
+
+    const pageSize = Math.min(200, Math.max(1, parseInt(limit) || 50));
+
+    // ⚡ Super lightweight: only fetch fields needed for the dropdown + billing
+    const products = await Product.find(filter)
+      .select("_id name totalQty sellingPrice purchasingPrice gst hsnCode marginPercentage adminMargin productGroup units unitConversion")
+      .populate("productGroup", "_id name")
+      .sort({ name: 1 })
+      .limit(pageSize)
+      .lean();
+
+    return res.json({ success: true, data: products });
+  } catch (error) {
+    console.error("Fast Product Search Error:", error);
+    res.status(500).json({ success: false, message: "Search failed", error: error.message });
+  }
+});
+
 // GET: Fetch All Products with Pagination
 router.get("/", async (req, res) => {
   try {
