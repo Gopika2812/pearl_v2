@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import InventoryPurchaseOrderEntry from "../../components/inventory/InventoryPurchaseOrderEntry";
 import InventoryPurchaseOrderHeader from "../../components/inventory/InventoryPurchaseOrderHeader";
@@ -12,6 +13,7 @@ const BranchPO = () => {
     warehouses, vendors, salesOwners, salesMen, deliveryMen, customerGroups
   } = useInventory();
   const { currentBranch, user } = useBranch();
+  const navigate = useNavigate();
 
   const [items, setItems] = useState([]);
 
@@ -40,6 +42,7 @@ const BranchPO = () => {
             salesMen={salesMen}
             deliveryMen={deliveryMen}
             customerGroups={customerGroups}
+            onPOSaved={() => navigate("/branch/purchase-orders")}
           />
         </div>
       </div>

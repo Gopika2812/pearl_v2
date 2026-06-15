@@ -731,11 +731,11 @@ router.post("/", auth, async (req, res) => {
       const invoiceId = `${voucher.prefix}/001/${currentFY}`;
 
       const order = new PurchaseOrder({
+        ...rest,
         invoiceId,
         voucherType,
         branchId,
         financialYear: currentFY,
-        ...rest,
         vendorId: resolvedVendorId,
         customerId: resolvedCustomerId,
         status: status || "PLACED",
@@ -785,11 +785,11 @@ router.post("/", auth, async (req, res) => {
       usedInvoiceId = `${updatedVoucher.prefix}/${String(counterToUse).padStart(3, "0")}/${currentFY}`;
 
       const order = new PurchaseOrder({
+        ...rest,
         invoiceId: usedInvoiceId,
         voucherType,
         branchId,
         financialYear: currentFY,
-        ...rest,
         vendorId: resolvedVendorId,
         customerId: resolvedCustomerId,
         status: status || "PLACED",
