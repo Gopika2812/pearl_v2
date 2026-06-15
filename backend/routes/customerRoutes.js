@@ -2350,7 +2350,7 @@ router.get("/:id/ledger", async (req, res) => {
 
         return {
           id: `inv-${s._id}`,
-          date: s.createdAt || s.invoiceDate,
+          date: s.invoiceDate || s.createdAt,
           type: "INVOICE",
           particulars: `Sales Invoice: ${s.invoiceNumber}`,
           debit: s.grandTotal || 0,
@@ -2399,7 +2399,7 @@ router.get("/:id/ledger", async (req, res) => {
       })),
       ...vendorInvoicesInRange.map(p => ({
         id: `pur-${p._id}`,
-        date: p.createdAt || p.invoiceDate,
+        date: p.invoiceDate || p.createdAt,
         type: "PURCHASE",
         particulars: `${p.voucherType || "Purchase"}: ${p.purchaseInvoiceId}${p.vendorInvoiceNumber ? ` [Ref: ${p.vendorInvoiceNumber}]` : ""}`,
         debit: 0,

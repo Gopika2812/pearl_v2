@@ -768,10 +768,11 @@ router.post("/", auth, async (req, res) => {
     const MAX_RETRIES = 5;
     let savedOrder = null;
     let usedInvoiceId = null;
+    let updatedVoucher = null;
 
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       // Atomically fetch the current counter AND increment it in one round-trip
-      const updatedVoucher = await VoucherType.findByIdAndUpdate(
+      updatedVoucher = await VoucherType.findByIdAndUpdate(
         voucher._id,
         { $inc: { counter: 1 } },
         { new: false } // returns the BEFORE value — that's our counter to use
