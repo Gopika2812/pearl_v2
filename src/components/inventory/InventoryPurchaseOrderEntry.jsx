@@ -483,6 +483,16 @@ const InventoryPurchaseOrderEntry = ({
       return;
     }
 
+    if (!mrp) {
+      toast.error("MRP is mandatory!");
+      return;
+    }
+
+    if (!expiryDate) {
+      toast.error("Expiry Date is mandatory!");
+      return;
+    }
+
     // 🛡️ RED MODAL ALERT FOR NEGATIVE MARGIN
     if (Number(sellingPrice) < Number(purchasePrice)) {
       setPendingItemData({ product, purchasePrice: Number(purchasePrice), sellingPrice: Number(sellingPrice) });
