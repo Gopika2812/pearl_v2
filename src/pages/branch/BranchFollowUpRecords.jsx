@@ -24,6 +24,7 @@ const BranchFollowUpRecords = () => {
     const [fromDate, setFromDate] = useState(new Date().toISOString().split("T")[0]);
     const [toDate, setToDate] = useState(new Date().toISOString().split("T")[0]);
     const [searchTerm, setSearchTerm] = useState("");
+    const [typeFilter, setTypeFilter] = useState("FINANCE");
     const [groupFilter, setGroupFilter] = useState("All");
     const [categoryFilter, setCategoryFilter] = useState("All");
     const [zoneFilter, setZoneFilter] = useState("All");
@@ -61,7 +62,7 @@ const BranchFollowUpRecords = () => {
         if (!currentBranch?._id) return;
         setLoading(true);
         try {
-            const url = `${API_BASE}/follow-ups?branchId=${currentBranch._id}&fromDate=${fromDate}&toDate=${toDate}&limit=500`;
+            const url = `${API_BASE}/follow-ups?branchId=${currentBranch._id}&fromDate=${fromDate}&toDate=${toDate}&limit=500&followUpType=${typeFilter}`;
             const res = await fetchWithAuth(url);
             const data = await res.json();
             if (data.success) {
@@ -140,7 +141,9 @@ const BranchFollowUpRecords = () => {
 
     const filteredRecords = getFilteredSortedRecords();
 
-    const RESULT_OPTIONS = ["All", "Paid", "Promised", "Part Payment Promised", "No Response", "Call Later", "Billing Dispute", "Others"];
+    const RESULT_OPTIONS = typeFilter === "ORDER" 
+        ? ["All", "Past complaints", "Transfer to branches", "Shop closed", "Looking for offers and discounts", "No Response", "Call Later", "others"]
+        : ["All", "Paid", "Promised", "Part Payment Promised", "Already Paid – Entry Pending", "No Response", "Call Later", "Document Needed", "Billing Dispute", "Approval Pending", "Long Pending", "Not Committed", "others"];
 
     const getResultColor = (result) => {
         switch (result) {
@@ -150,6 +153,10 @@ const BranchFollowUpRecords = () => {
             case "No Response":             return "bg-gray-100 text-gray-700";
             case "Call Later":              return "bg-amber-100 text-amber-700";
             case "Billing Dispute":         return "bg-rose-100 text-rose-700";
+            case "Past complaints":         return "bg-rose-100 text-rose-700";
+            case "Transfer to branches":    return "bg-purple-100 text-purple-700";
+            case "Shop closed":             return "bg-gray-200 text-gray-800";
+            case "Looking for offers and discounts": return "bg-emerald-100 text-emerald-700";
             default:                        return "bg-indigo-50 text-indigo-700";
         }
     };
@@ -221,6 +228,21 @@ const BranchFollowUpRecords = () => {
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                         />
+                    </div>
+
+                    {/* Type Filter */}
+                    <div className="relative min-w-[145px]">
+                        <select className="w-full appearance-none bg-gray-50 border border-gray-200 focus:border-indigo-500 rounded-lg pl-3 pr-8 py-2 text-xs font-bold uppercase text-gray-700 outline-none cursor-pointer transition-all"
+                            value={typeFilter} 
+                            onChange={(e) => {
+                                setTypeFilter(e.target.value);
+                                // The new records will fetch when user clicks search, or we could fetch automatically.
+                                // Let's keep it manual via search button as the date filter does.
+                            }}>
+                            <option value="FINANCE">Followup (Finance)</option>
+                            <option value="ORDER">Order Followup</option>
+                        </select>
+                        <FaFilter className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={10} />
                     </div>
 
                     {/* Group Filter */}

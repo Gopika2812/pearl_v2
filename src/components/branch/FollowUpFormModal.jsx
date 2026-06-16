@@ -3,9 +3,9 @@ import { FaTimes, FaHistory, FaClock, FaSave, FaExclamationTriangle } from "reac
 import { toast } from "react-toastify";
 import { API_BASE } from "../../api";
 
-const FollowUpFormModal = ({ isOpen, onClose, customer, user, branch, onSave }) => {
+const FollowUpFormModal = ({ isOpen, onClose, customer, user, branch, onSave, type = "FINANCE" }) => {
     const [submitting, setSubmitting] = useState(false);
-    const [result, setResult] = useState("Promised");
+    const [result, setResult] = useState(type === "ORDER" ? "Looking for offers and discounts" : "Promised");
     const [remarks, setRemarks] = useState("");
     const [riskStatus, setRiskStatus] = useState(customer?.riskStatus || "safe_zone");
     const [nextFollowUpDate, setNextFollowUpDate] = useState("");
@@ -13,7 +13,7 @@ const FollowUpFormModal = ({ isOpen, onClose, customer, user, branch, onSave }) 
 
     useEffect(() => {
         if (isOpen && customer) {
-            setResult("Promised");
+            setResult(type === "ORDER" ? "Looking for offers and discounts" : "Promised");
             setRemarks("");
             setRiskStatus(customer?.riskStatus || "safe_zone");
             setNextFollowUpDate("");
@@ -21,11 +21,16 @@ const FollowUpFormModal = ({ isOpen, onClose, customer, user, branch, onSave }) 
         }
     }, [customer?._id, isOpen]);
 
-    const RESULT_OPTIONS = [
-        "Paid", "Promised", "Part Payment Promised", "Already Paid – Entry Pending",
-        "No Response", "Call Later", "Document Needed", "Billing Dispute",
-        "Approval Pending", "Long Pending", "Not Committed", "others"
-    ];
+    const RESULT_OPTIONS = type === "ORDER" 
+        ? [
+            "Past complaints", "Transfer to branches", "Shop closed", 
+            "Looking for offers and discounts", "No Response", "Call Later", "others"
+          ]
+        : [
+            "Paid", "Promised", "Part Payment Promised", "Already Paid – Entry Pending",
+            "No Response", "Call Later", "Document Needed", "Billing Dispute",
+            "Approval Pending", "Long Pending", "Not Committed", "others"
+          ];
 
     const RISK_OPTIONS = [
         { id: "safe_zone", label: "Safe Zone", color: "bg-emerald-500", active: "bg-emerald-600 ring-4 ring-emerald-500/20" },
@@ -53,8 +58,9 @@ const FollowUpFormModal = ({ isOpen, onClose, customer, user, branch, onSave }) 
                 creditLimitDays: customer.creditLimitDays || 0,
                 result,
                 remarks,
-                riskStatus,
-                nextFollowUpDate: combinedDate
+                riskStatus: type === "ORDER" ? undefined : riskStatus,
+                nextFollowUpDate: combinedDate,
+                followUpType: type
             };
 
             const res = await fetch(`${API_BASE}/follow-ups`, {
@@ -91,7 +97,9 @@ const FollowUpFormModal = ({ isOpen, onClose, customer, user, branch, onSave }) 
                             <FaHistory size={20} />
                         </div>
                         <div>
-                            <h2 className="text-xl font-black tracking-tight uppercase">Record Follow-Up Result</h2>
+                            <h2 className="text-xl font-black tracking-tight uppercase">
+                                Record {type === "ORDER" ? "Order" : ""} Follow-Up Result
+                            </h2>
                             <p className="text-indigo-100 text-[10px] font-bold uppercase tracking-widest opacity-80">{customer.name}</p>
                         </div>
                     </div>
@@ -103,26 +111,28 @@ const FollowUpFormModal = ({ isOpen, onClose, customer, user, branch, onSave }) 
                 <div className="flex-1 overflow-y-auto p-8">
                     <form onSubmit={handleSubmit} className="space-y-8">
                         {/* RISK ZONE SELECTION */}
-                        <div className="bg-gray-50/50 p-6 rounded-2xl border border-gray-100">
-                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-[2px] mb-4 block">Assessment Status</label>
-                            <div className="grid grid-cols-3 gap-4">
-                                {RISK_OPTIONS.map(opt => (
-                                    <button
-                                        key={opt.id}
-                                        type="button"
-                                        onClick={() => setRiskStatus(opt.id)}
-                                        className={`flex items-center justify-center gap-3 py-4 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
-                                            riskStatus === opt.id 
-                                                ? `${opt.active} text-white shadow-lg` 
-                                                : "bg-white text-gray-400 border border-gray-100 hover:border-gray-200"
-                                        }`}
-                                    >
-                                        <span className={`w-2 h-2 rounded-full ${riskStatus === opt.id ? 'bg-white' : opt.color}`}></span>
-                                        {opt.label}
-                                    </button>
-                                ))}
+                        {type !== "ORDER" && (
+                            <div className="bg-gray-50/50 p-6 rounded-2xl border border-gray-100">
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-[2px] mb-4 block">Assessment Status</label>
+                                <div className="grid grid-cols-3 gap-4">
+                                    {RISK_OPTIONS.map(opt => (
+                                        <button
+                                            key={opt.id}
+                                            type="button"
+                                            onClick={() => setRiskStatus(opt.id)}
+                                            className={`flex items-center justify-center gap-3 py-4 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
+                                                riskStatus === opt.id 
+                                                    ? `${opt.active} text-white shadow-lg` 
+                                                    : "bg-white text-gray-400 border border-gray-100 hover:border-gray-200"
+                                            }`}
+                                        >
+                                            <span className={`w-2 h-2 rounded-full ${riskStatus === opt.id ? 'bg-white' : opt.color}`}></span>
+                                            {opt.label}
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
-                        </div>
+                        )}
 
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                             <div className="space-y-6">

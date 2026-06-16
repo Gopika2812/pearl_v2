@@ -1333,7 +1333,7 @@ router.post("/balances", async (req, res) => {
             {
               $match: {
                 $expr: { $eq: ["$customer.customerId", "$$cId"] },
-                status: "FINALIZED",
+                status: { $in: ["FINALIZED", "PRINTED", "SENT"] },
                 $or: [
                   { invoiceDate: { $gte: fyStart, $lte: endLimit } },
                   { invoiceDate: { $exists: false }, createdAt: { $gte: fyStart, $lte: endLimit } }
@@ -2220,7 +2220,7 @@ router.get("/:id/ledger", async (req, res) => {
     const invoicesInRange = await Invoice.find({
       "customer.customerId": id,
       branchId: customer.branchId,
-      status: "FINALIZED",
+      status: { $in: ["FINALIZED", "PRINTED", "SENT"] },
       $or: [
         { invoiceDate: { $gte: effectiveStart, $lte: end } },
         { invoiceDate: { $exists: false }, createdAt: { $gte: effectiveStart, $lte: end } }
@@ -2348,9 +2348,20 @@ router.get("/:id/ledger", async (req, res) => {
         const user = s.salesOrderId?.billingPerson || s.generatedBy || "-";
         const dMan = s.salesOrderId?.deliveryMan?.name || s.deliveryPerson || "-";
 
+        // Combine invoiceDate (date) with createdAt (time) for accurate sorting
+        let preciseDate = s.createdAt;
+        if (s.invoiceDate && s.createdAt) {
+          const invDate = new Date(s.invoiceDate);
+          const createdDate = new Date(s.createdAt);
+          invDate.setHours(createdDate.getHours(), createdDate.getMinutes(), createdDate.getSeconds(), createdDate.getMilliseconds());
+          preciseDate = invDate;
+        } else if (s.invoiceDate) {
+          preciseDate = s.invoiceDate;
+        }
+
         return {
           id: `inv-${s._id}`,
-          date: s.invoiceDate || s.createdAt,
+          date: preciseDate,
           type: "INVOICE",
           particulars: `Sales Invoice: ${s.invoiceNumber}`,
           debit: s.grandTotal || 0,

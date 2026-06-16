@@ -21,6 +21,11 @@ const followUpSchema = new mongoose.Schema(
     creditLimit: { type: Number, default: 0 },
     creditLimitDays: { type: Number, default: 0 },
 
+    followUpType: {
+      type: String,
+      enum: ["FINANCE", "ORDER"],
+      default: "FINANCE",
+    },
     result: {
       type: String,
       required: true,
@@ -36,7 +41,11 @@ const followUpSchema = new mongoose.Schema(
         "Approval Pending",
         "Long Pending",
         "Not Committed",
-        "others"
+        "others",
+        "Past complaints",
+        "Transfer to branches",
+        "Shop closed",
+        "Looking for offers and discounts"
       ],
     },
     remarks: { type: String, default: "" },

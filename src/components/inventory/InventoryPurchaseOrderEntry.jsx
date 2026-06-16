@@ -1073,7 +1073,19 @@ const InventoryPurchaseOrderEntry = ({
                    type="checkbox" 
                    id="isSample" 
                    checked={isSample} 
-                   onChange={(e) => setIsSample(e.target.checked)} 
+                   onChange={(e) => {
+                     const checked = e.target.checked;
+                     setIsSample(checked);
+                     if (checked) {
+                       setPurchasePrice(0);
+                       setMarketCapPrice(0);
+                       setSellingPrice(0);
+                     } else if (selectedProductData) {
+                       setPurchasePrice(selectedProductData.purchasingPrice || selectedProductData.rate || 0);
+                       setMarketCapPrice(selectedProductData.marketCapPrice || 0);
+                       setSellingPrice(selectedProductData.sellingPrice || selectedProductData.rate || 0);
+                     }
+                   }} 
                    className="w-3.5 h-3.5 text-[#319bab] rounded border-gray-300 focus:ring-[#319bab] cursor-pointer" 
                  />
                  <label htmlFor="isSample" className="text-[11px] font-bold text-gray-600 uppercase tracking-tight cursor-pointer">

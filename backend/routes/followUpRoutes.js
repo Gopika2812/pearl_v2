@@ -11,7 +11,7 @@ router.post("/", async (req, res) => {
     const { 
       branchId, customerId, followUpBy, 
       closingBalance, creditLimit, creditLimitDays, 
-      result, remarks, nextFollowUpDate, riskStatus 
+      result, remarks, nextFollowUpDate, riskStatus, followUpType 
     } = req.body;
 
     // Mark previous PENDING reminders for this customer as COMPLETED
@@ -34,7 +34,8 @@ router.post("/", async (req, res) => {
       remarks,
       nextFollowUpDate,
       riskStatus: riskStatus || "safe_zone",
-      status
+      status,
+      followUpType: followUpType || "FINANCE"
     });
 
     await followUp.save();
@@ -57,7 +58,7 @@ router.post("/", async (req, res) => {
 // GET follow-ups with filters
 router.get("/", async (req, res) => {
   try {
-    const { branchId, fromDate, toDate, customerId } = req.query;
+    const { branchId, fromDate, toDate, customerId, followUpType } = req.query;
     
     let query = {};
     if (branchId && mongoose.Types.ObjectId.isValid(branchId)) {
@@ -71,6 +72,10 @@ router.get("/", async (req, res) => {
       const start = fromDate ? getISTStartOfDay(fromDate) : getISTStartOfDay();
       const end = toDate ? getISTEndOfDay(toDate) : getISTEndOfDay();
       query.createdAt = { $gte: start, $lte: end };
+    }
+
+    if (followUpType) {
+      query.followUpType = followUpType;
     }
 
     const records = await FollowUp.find(query)

@@ -68,6 +68,9 @@ const BranchFollowUp = () => {
     const [isTokenOpen, setIsTokenOpen] = useState(false);
     const [isManageCategoriesOpen, setIsManageCategoriesOpen] = useState(false);
     
+    // Tab State: "FINANCE" or "ORDER"
+    const [activeTab, setActiveTab] = useState("FINANCE");
+    
     const [selectedCustomer, setSelectedCustomer] = useState(null);
     const [selectedCustomerForHistory, setSelectedCustomerForHistory] = useState(null);
     const [selectedCustomerForToken, setSelectedCustomerForToken] = useState(null);
@@ -296,7 +299,7 @@ const BranchFollowUp = () => {
                 {/* HEADER & FILTERS */}
                 <div className="flex flex-col gap-4 mb-4">
                     {/* Header Row */}
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <div className="flex items-center gap-3">
                             <div className="w-10 h-10 bg-indigo-600 rounded-lg flex items-center justify-center shadow-md">
                                 <FaPhone className="text-white text-lg" />
@@ -305,6 +308,30 @@ const BranchFollowUp = () => {
                                 <h1 className="text-2xl font-black text-gray-900 leading-none">Follow-Up Hub</h1>
                                 <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-1">Recovery Dashboard</p>
                             </div>
+                        </div>
+                        
+                        {/* Tab Toggle */}
+                        <div className="flex bg-gray-100 p-1 rounded-xl w-fit">
+                            <button
+                                onClick={() => setActiveTab("FINANCE")}
+                                className={`px-6 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${
+                                    activeTab === "FINANCE" 
+                                        ? "bg-white text-indigo-600 shadow-sm" 
+                                        : "text-gray-500 hover:text-gray-700"
+                                }`}
+                            >
+                                Finance
+                            </button>
+                            <button
+                                onClick={() => setActiveTab("ORDER")}
+                                className={`px-6 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${
+                                    activeTab === "ORDER" 
+                                        ? "bg-white text-indigo-600 shadow-sm" 
+                                        : "text-gray-500 hover:text-gray-700"
+                                }`}
+                            >
+                                Order
+                            </button>
                         </div>
                     </div>
 
@@ -1217,6 +1244,7 @@ const BranchFollowUp = () => {
                 user={user}
                 branch={currentBranch}
                 onSave={fetchData}
+                type={activeTab}
             />
 
             <CustomerFollowUpHistoryModal 
@@ -1224,6 +1252,7 @@ const BranchFollowUp = () => {
                 onClose={() => setIsHistoryOpen(false)}
                 customer={selectedCustomerForHistory}
                 branch={currentBranch}
+                type={activeTab}
             />
 
             <TokenManagerModal 

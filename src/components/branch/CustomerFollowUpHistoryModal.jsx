@@ -3,7 +3,7 @@ import { FaTimes, FaHistory, FaUser, FaPhone, FaCalendarAlt, FaClock } from "rea
 import { toast } from "react-toastify";
 import { API_BASE } from "../../api";
 
-const CustomerFollowUpHistoryModal = ({ isOpen, onClose, customer, branch }) => {
+const CustomerFollowUpHistoryModal = ({ isOpen, onClose, customer, branch, type = "FINANCE" }) => {
     const [records, setRecords] = useState([]);
     const [loading, setLoading] = useState(false);
 
@@ -11,12 +11,12 @@ const CustomerFollowUpHistoryModal = ({ isOpen, onClose, customer, branch }) => 
         if (isOpen && customer?._id && branch?._id) {
             fetchHistory();
         }
-    }, [isOpen, customer?._id, branch?._id]);
+    }, [isOpen, customer?._id, branch?._id, type]);
 
     const fetchHistory = async () => {
         setLoading(true);
         try {
-            const url = `${API_BASE}/follow-ups?branchId=${branch._id}&customerId=${customer._id}`;
+            const url = `${API_BASE}/follow-ups?branchId=${branch._id}&customerId=${customer._id}&followUpType=${type}`;
             const res = await fetch(url, {
                 headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
             });
@@ -58,7 +58,9 @@ const CustomerFollowUpHistoryModal = ({ isOpen, onClose, customer, branch }) => 
                             <FaHistory size={28} />
                         </div>
                         <div>
-                            <h2 className="text-3xl font-black tracking-tight uppercase">Follow-Up History</h2>
+                            <h2 className="text-3xl font-black tracking-tight uppercase">
+                                {type === "ORDER" ? "Order " : ""}Follow-Up History
+                            </h2>
                             <p className="text-gray-400 text-xs font-bold uppercase tracking-[0.3em] mt-1 flex items-center gap-2">
                                 <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
                                 {customer?.name}
