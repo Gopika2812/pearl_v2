@@ -34,6 +34,11 @@ const BranchFollowUpRecords = () => {
     useEffect(() => {
         if (currentBranch?._id) {
             fetchRecords();
+        }
+    }, [currentBranch?._id, typeFilter]);
+
+    useEffect(() => {
+        if (currentBranch?._id) {
             fetchMeta();
         }
     }, [currentBranch?._id]);

@@ -75,7 +75,14 @@ router.get("/", async (req, res) => {
     }
 
     if (followUpType) {
-      query.followUpType = followUpType;
+      if (followUpType === "FINANCE") {
+        query.$or = [
+          { followUpType: "FINANCE" },
+          { followUpType: { $exists: false } }
+        ];
+      } else {
+        query.followUpType = followUpType;
+      }
     }
 
     const records = await FollowUp.find(query)
