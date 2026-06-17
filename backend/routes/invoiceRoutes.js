@@ -2035,16 +2035,31 @@ router.get("", async (req, res) => {
 // GET - Get single invoice details (with items) for Lazy Loading & Printing
 router.get("/:id", async (req, res) => {
   try {
-    const invoice = await Invoice.findById(req.params.id)
-      .populate("customer.customerId")
-      .populate({
-        path: "salesOrderId",
-        populate: { path: "deliveryMan" }
-      })
-      .populate("branchId")
-      .populate("items.productId")
-      .populate("deliveryMan")
-      .lean();
+    const { id } = req.params;
+    let invoice;
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      invoice = await Invoice.findById(id)
+        .populate("customer.customerId")
+        .populate({
+          path: "salesOrderId",
+          populate: { path: "deliveryMan" }
+        })
+        .populate("branchId")
+        .populate("items.productId")
+        .populate("deliveryMan")
+        .lean();
+    } else {
+      invoice = await Invoice.findOne({ invoiceNumber: id })
+        .populate("customer.customerId")
+        .populate({
+          path: "salesOrderId",
+          populate: { path: "deliveryMan" }
+        })
+        .populate("branchId")
+        .populate("items.productId")
+        .populate("deliveryMan")
+        .lean();
+    }
 
     if (!invoice) return res.status(404).json({ success: false, message: "Invoice not found" });
 

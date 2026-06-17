@@ -385,7 +385,7 @@ const BranchInvoicedOrders = () => {
 
       if (order.salesInvoiceId) {
         // Fetch the existing finalized invoice to print the exact generated bill
-        const res = await fetchWithAuth(`${API_BASE}/invoices/${order.salesInvoiceId}`);
+        const res = await fetchWithAuth(`${API_BASE}/invoices/${encodeURIComponent(order.salesInvoiceId)}`);
         const data = await res.json();
         
         if (!data.success && !data._id) {
