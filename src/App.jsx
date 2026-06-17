@@ -355,7 +355,9 @@ function AppContent() {
   const isInsightsRoute = false;
 
   // Check if we're on a super admin page
-  const isSuperAdminRoute = location.pathname.startsWith("/super-admin/");
+  const isSuperAdminRoute = location.pathname.startsWith("/super-admin/") || 
+    ((user?.role === "SUPER_ADMIN" || user?.role === "SUPERADMIN") && 
+     (location.pathname === "/admin/attendance-report" || location.pathname === "/branch/smart-orders"));
 
   // Super admin viewing a branch → treat as branch route for layout purposes
   const isSuperAdminViewingBranch = !!superAdminViewBranch && isBranchRoute;

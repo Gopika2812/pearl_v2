@@ -1,31 +1,28 @@
 import mongoose from "mongoose";
 import dotenv from "dotenv";
+import Customer from "./models/Customer.js";
+import Vendor from "./models/Vendor.js"; // Might be named Supplier or Vendor, checking both
+
 dotenv.config();
 
-const MONGO_URI = process.env.MONGO_URI;
-
 async function run() {
-  if (!MONGO_URI) {
-    console.error("MONGO_URI not found in environment!");
-    process.exit(1);
+  await mongoose.connect(process.env.MONGO_URI);
+  const customers = await Customer.find({ name: { $regex: /HALIMA/i } });
+  console.log("Customers:");
+  customers.forEach(c => console.log(`- ${c.name} (ID: ${c._id}, LinkedVendor: ${c.linkedVendorId})`));
+
+  let VendorModel;
+  try {
+    VendorModel = (await import("./models/Vendor.js")).default;
+  } catch (e) {
+    VendorModel = (await import("./models/Supplier.js")).default;
   }
-  await mongoose.connect(MONGO_URI);
-  console.log("Connected to MongoDB");
+  
+  const vendors = await VendorModel.find({ name: { $regex: /HALIMA/i } });
+  console.log("\nVendors/Suppliers:");
+  vendors.forEach(v => console.log(`- ${v.name} (ID: ${v._id})`));
 
-  const Customer = mongoose.connection.db.collection("customers");
-  const AuditLog = mongoose.connection.db.collection("auditlogs");
-
-  // Fetch customer by name
-  const halima = await Customer.findOne({ name: { $regex: /halima/i } });
-  console.log("\n--- HALIMA RECORD ---");
-  console.log(JSON.stringify(halima, null, 2));
-
-  // Let's also look at the latest CUSTOMER_BULK_UPLOAD audit log to see what it reports
-  const latestLogs = await AuditLog.find({ action: "CUSTOMER_BULK_UPLOAD" }).sort({ createdAt: -1 }).limit(3).toArray();
-  console.log("\n--- LATEST BULK UPLOAD AUDIT LOGS ---");
-  console.log(JSON.stringify(latestLogs, null, 2));
-
-  await mongoose.disconnect();
+  process.exit(0);
 }
 
 run().catch(console.error);

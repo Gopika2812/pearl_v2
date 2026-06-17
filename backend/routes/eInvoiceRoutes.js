@@ -494,15 +494,7 @@ router.post("/convert-to-b2c/:invoiceId", async (req, res) => {
     invoice.einvoiceError = null; // Clear error
     await invoice.save();
 
-    // 2. Update Customer Record (if linked)
-    if (invoice.customer?.customerId) {
-      await mongoose.model("Customer").findByIdAndUpdate(invoice.customer.customerId, {
-        gstin: "",
-        registrationType: "unregistered"
-      });
-    }
-
-    // 3. Audit Log
+    // 2. Audit Log
     await createAuditLog({
       userId: userId || "System",
       username: username || "System",

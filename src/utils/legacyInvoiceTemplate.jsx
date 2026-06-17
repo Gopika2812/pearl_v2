@@ -188,11 +188,35 @@ export const getOriginalInvoiceHTML = (previewData, order) => {
 
         <div class="certification">Certified that the particulars given above are true and correct.</div>
         <div class="copy-label">${copyTitle} - PAGE 1</div>
-        <div class="quick-info" style="display:flex; flex-direction:column; align-items:center; margin-top:10px;">
-           <img src="https://quickchart.io/qr?size=150&text=${encodeURIComponent(`upi://pay?pa=${previewData?.seller?.gpayNo || order?.branchId?.gpayNo || ''}&pn=${previewData?.seller?.name || 'Pearl Agency'}&cu=INR`)}" style="width:30mm; height:30mm;" alt="GPay QR"/>
-           <div style="font-size:9px; font-weight:bold; color:#000; margin-top:4px;">Scan to Pay</div>
-         </div>
-         <div class="footer">E. & O.E. | Generated on ${new Date().toLocaleString("en-IN")}</div>
+        
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-top: 15px;">
+          <!-- Left Side: Back Orders -->
+          <div style="flex: 1; padding-right: 20px;">
+            ' + (() => {
+              const previewBackOrders = (previewData?.items || []).filter(item => item.backOrderQty > 0);
+              const dbBackOrders = (order?.backOrderItems || []).length > 0 
+                  ? (order.backOrderItems || []).map(item => ({ name: item.name, qty: item.qty, unit: item.unit }))
+                  : (order?.invoiceItems || order?.lastInvoicedItems || []).filter(item => item.backOrderQty > 0).map(item => ({ name: item.name, qty: item.backOrderQty, unit: item.unit }));
+              
+              const backOrdersToShow = previewBackOrders.length > 0 ? previewBackOrders.map(item => ({ name: item.name, qty: item.backOrderQty, unit: item.unit })) : dbBackOrders;
+
+              if (backOrdersToShow.length === 0) return "";
+              
+              return '<div style="font-size: 10px; color: #dc2626; font-weight: bold; margin-bottom: 4px;">⚠️ YOUR PENDING ORDER WAS:</div>' +
+                '<div style="font-size: 9px; line-height: 1.4; color: #000; font-weight: 600;">' +
+                  backOrdersToShow.map(item => item.name + " - " + item.qty + " " + (item.unit || "") + " (not sent)").join(", ") +
+                '</div>';
+            })() + '
+          </div>
+          
+          <!-- Right Side: QR -->
+          <div style="display:flex; flex-direction:column; align-items:center;">
+             <img src="https://quickchart.io/qr?size=150&text=${encodeURIComponent(`upi://pay?pa=${previewData?.seller?.gpayNo || order?.branchId?.gpayNo || ''}&pn=${previewData?.seller?.name || 'Pearl Agency'}&cu=INR`)}" style="width:25mm; height:25mm;" alt="GPay QR"/>
+             <div style="font-size:8px; font-weight:bold; color:#000; margin-top:4px;">Scan to Pay</div>
+          </div>
+        </div>
+
+        <div class="footer">E. & O.E. | Generated on ${new Date().toLocaleString("en-IN")}</div>
       </div>
     </div>`;
 
@@ -298,37 +322,8 @@ export const getOriginalInvoiceHTML = (previewData, order) => {
               </div>
             </div>
 
-            <!-- BACK ORDER SECTION (if applicable) -->
-  ${editedItems.some(item => item.backOrderQty > 0) ? `
-    <div style="margin-top: 15px; padding-top: 10px; border-top: 2px solid #000;">
-      <div class="section-title">📦 BACK ORDER SUMMARY</div>
-      <table>
-        <thead>
-          <tr>
-            <th style="width: 35%;">Product Name</th>
-            <th>HSN Code</th>
-            <th style="text-align: right;">Req</th>
-            <th style="text-align: right;">Conf</th>
-            <th style="text-align: right;">Pend ⚠️</th>
-            <th style="text-align: center;">Per</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${editedItems.map((item, idx) => item.backOrderQty > 0 ? `
-            <tr>
-              <td>${item.name}</td>
-              <td style="text-align: center;">${item.hsn || "-"}</td>
-              <td style="text-align: right;">${item.originalQty || item.qty} ${item.altQty > 0 ? `(${item.altQty} ${item.altUnit})` : ""}</td>
-              <td style="text-align: right;">${item.confirmedQty} ${item.altQty > 0 && (item.originalQty || item.qty) > 0 ? `(${(item.altQty * (item.confirmedQty / (item.originalQty || item.qty))).toFixed(0)} ${item.altUnit})` : (item.altQty > 0 ? `(0 ${item.altUnit})` : "")}</td>
-              <td style="text-align: right; color: red; font-weight: bold;">${item.backOrderQty} ${item.altQty > 0 && (item.originalQty || item.qty) > 0 ? `(${(item.altQty * (item.backOrderQty / (item.originalQty || item.qty))).toFixed(0)} ${item.altUnit})` : (item.altQty > 0 ? `(${item.altQty} ${item.altUnit})` : "")}</td>
-              <td style="text-align: center; text-transform: uppercase;">${item.unit || ""}</td>
-            </tr>
-          ` : "").join("")}
-        </tbody>
-      </table>
-    </div>
-    ${previewData?.notes ? `<div style="margin-top: 15px; padding: 12px; background: #f8fafc; font-size: 13px; border: 1px dashed #cbd5e1; border-radius: 4px;"><strong>Notes:</strong> ${previewData.notes}</div>` : ""}
-  ` : ""}
+            <!-- BACK ORDER SECTION (Removed as it is now on Page 1) -->
+            ${previewData?.notes ? `<div style="margin-top: 15px; padding: 12px; background: #f8fafc; font-size: 13px; border: 1px dashed #cbd5e1; border-radius: 4px;"><strong>Notes:</strong> ${previewData.notes}</div>` : ""}
 
             <div class="certification">Certified that the particulars given above are true and correct.</div>
             <div class="copy-label">${copyTitle} - PAGE 2</div>

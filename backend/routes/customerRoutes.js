@@ -193,22 +193,22 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       if (updateMode === "opening_balance") {
         // Define aliases for Debit
         const debitAliases = [
-          "debit", "debitbalance", "dr", "drbalance", "openingdebit", "openingdr", 
+          "debit", "debitbalance", "dr", "drbalance", "openingdebit", "openingdr",
           "openingdrbalance", "amountdr", "debitamount", "de", "deb", "debt"
         ];
-        
+
         // Define aliases for Credit
         const creditAliases = [
-          "credit", "creditbalance", "cr", "crbalance", "openingcredit", "openingcr", 
+          "credit", "creditbalance", "cr", "crbalance", "openingcredit", "openingcr",
           "openingcrbalance", "amountcr", "creditamount", "cre", "cred"
         ];
-        
+
         // Define aliases for general single balance columns (like 'Opening Balance' or 'Balance')
         const generalBalanceAliases = [
           "openingbalance", "balance", "outstanding", "amount", "netbalance", "closingbalance",
           "outstandingamount", "bal"
         ];
-        
+
         // Helper to find the first matching value in normalizedRow
         const findVal = (aliases) => {
           for (const alias of aliases) {
@@ -729,7 +729,7 @@ router.get("/", async (req, res) => {
 
     // 0️⃣ Exclude customers linked to vendors if requested
     if (excludeLinked === "true") {
-      andConditions.push({ 
+      andConditions.push({
         $or: [
           { linkedVendorId: { $exists: false } },
           { linkedVendorId: null }
@@ -875,125 +875,125 @@ router.get("/", async (req, res) => {
 
     // 2.5 Lookup Last Invoice early if sorting by it
     if (isInvoiceAgeSort) {
-        pipeline.push(
-            {
-                $lookup: {
-                    from: "invoices",
-                    let: { cId: "$_id" },
-                    pipeline: [
-                        { $match: { $expr: { $eq: ["$customer.customerId", "$$cId"] }, status: { $in: ["FINALIZED", "PRINTED", "SENT"] } } },
-                        { $sort: { invoiceDate: -1 } },
-                        { $limit: 1 }
-                    ],
-                    as: "lastInv"
-                }
-            },
-            { $unwind: { path: "$lastInv", preserveNullAndEmptyArrays: true } },
-            {
-                $addFields: {
-                    lastInvoiceDate: "$lastInv.invoiceDate",
-                    lastInvoiceNumber: "$lastInv.invoiceNumber",
-                    hasInvoiceDate: {
-                        $cond: {
-                            if: { $eq: [{ $ifNull: ["$lastInv.invoiceDate", null] }, null] },
-                            then: 0,
-                            else: 1
-                        }
-                    }
-                }
+      pipeline.push(
+        {
+          $lookup: {
+            from: "invoices",
+            let: { cId: "$_id" },
+            pipeline: [
+              { $match: { $expr: { $eq: ["$customer.customerId", "$$cId"] }, status: { $in: ["FINALIZED", "PRINTED", "SENT"] } } },
+              { $sort: { invoiceDate: -1 } },
+              { $limit: 1 }
+            ],
+            as: "lastInv"
+          }
+        },
+        { $unwind: { path: "$lastInv", preserveNullAndEmptyArrays: true } },
+        {
+          $addFields: {
+            lastInvoiceDate: "$lastInv.invoiceDate",
+            lastInvoiceNumber: "$lastInv.invoiceNumber",
+            hasInvoiceDate: {
+              $cond: {
+                if: { $eq: [{ $ifNull: ["$lastInv.invoiceDate", null] }, null] },
+                then: 0,
+                else: 1
+              }
             }
-        );
+          }
+        }
+      );
     }
 
     // 2.55 Lookup Last Receipt early if sorting by it
     if (isReceiptAgeSort) {
-        pipeline.push(
-            {
-                $lookup: {
-                    from: "receipts",
-                    let: { cId: "$_id" },
-                    pipeline: [
-                        { $match: { $expr: { $eq: ["$customer.customerId", "$$cId"] }, status: "confirmed" } },
-                        { $sort: { createdAt: -1 } },
-                        { $limit: 1 }
-                    ],
-                    as: "lastRec"
-                }
-            },
-            { $unwind: { path: "$lastRec", preserveNullAndEmptyArrays: true } },
-            {
-                $addFields: {
-                    lastReceiptDate: "$lastRec.createdAt",
-                    hasReceiptDate: {
-                        $cond: {
-                            if: { $eq: [{ $ifNull: ["$lastRec.createdAt", null] }, null] },
-                            then: 0,
-                            else: 1
-                        }
-                    }
-                }
+      pipeline.push(
+        {
+          $lookup: {
+            from: "receipts",
+            let: { cId: "$_id" },
+            pipeline: [
+              { $match: { $expr: { $eq: ["$customer.customerId", "$$cId"] }, status: "confirmed" } },
+              { $sort: { createdAt: -1 } },
+              { $limit: 1 }
+            ],
+            as: "lastRec"
+          }
+        },
+        { $unwind: { path: "$lastRec", preserveNullAndEmptyArrays: true } },
+        {
+          $addFields: {
+            lastReceiptDate: "$lastRec.createdAt",
+            hasReceiptDate: {
+              $cond: {
+                if: { $eq: [{ $ifNull: ["$lastRec.createdAt", null] }, null] },
+                then: 0,
+                else: 1
+              }
             }
-        );
+          }
+        }
+      );
     }
 
     // 2.56 Lookup Total Sales Invoice early if sorting by it
     if (isSalesInvoiceSort) {
-        pipeline.push(
-            {
-                $lookup: {
-                    from: "invoices",
-                    let: { cId: "$_id" },
-                    pipeline: [
-                        { 
-                          $match: { 
-                            $expr: { $eq: ["$customer.customerId", "$$cId"] }, 
-                            status: { $in: ["FINALIZED", "PRINTED", "SENT"] },
-                            ...(fromDate && toDate ? {
-                              invoiceDate: { $gte: new Date(fromDate), $lte: new Date(toDate) }
-                            } : {})
-                          } 
-                        },
-                        { $group: { _id: null, total: { $sum: "$grandTotal" } } }
-                    ],
-                    as: "invoiceSum"
+      pipeline.push(
+        {
+          $lookup: {
+            from: "invoices",
+            let: { cId: "$_id" },
+            pipeline: [
+              {
+                $match: {
+                  $expr: { $eq: ["$customer.customerId", "$$cId"] },
+                  status: { $in: ["FINALIZED", "PRINTED", "SENT"] },
+                  ...(fromDate && toDate ? {
+                    invoiceDate: { $gte: new Date(fromDate), $lte: new Date(toDate) }
+                  } : {})
                 }
-            },
-            {
-                $addFields: {
-                    totalSalesInvoice: { $ifNull: [{ $arrayElemAt: ["$invoiceSum.total", 0] }, 0] }
-                }
-            }
-        );
+              },
+              { $group: { _id: null, total: { $sum: "$grandTotal" } } }
+            ],
+            as: "invoiceSum"
+          }
+        },
+        {
+          $addFields: {
+            totalSalesInvoice: { $ifNull: [{ $arrayElemAt: ["$invoiceSum.total", 0] }, 0] }
+          }
+        }
+      );
     }
 
     // 2.57 Lookup Total Receipt early if sorting by it
     if (isReceiptValueSort) {
-        pipeline.push(
-            {
-                $lookup: {
-                    from: "receipts",
-                    let: { cId: "$_id" },
-                    pipeline: [
-                        { 
-                          $match: { 
-                            $expr: { $eq: ["$customer.customerId", "$$cId"] }, 
-                            status: "confirmed",
-                            ...(fromDate && toDate ? {
-                              createdAt: { $gte: new Date(fromDate), $lte: new Date(toDate) }
-                            } : {})
-                          } 
-                        },
-                        { $group: { _id: null, total: { $sum: "$amount" } } }
-                    ],
-                    as: "receiptSum"
+      pipeline.push(
+        {
+          $lookup: {
+            from: "receipts",
+            let: { cId: "$_id" },
+            pipeline: [
+              {
+                $match: {
+                  $expr: { $eq: ["$customer.customerId", "$$cId"] },
+                  status: "confirmed",
+                  ...(fromDate && toDate ? {
+                    createdAt: { $gte: new Date(fromDate), $lte: new Date(toDate) }
+                  } : {})
                 }
-            },
-            {
-                $addFields: {
-                    totalReceiptValue: { $ifNull: [{ $arrayElemAt: ["$receiptSum.total", 0] }, 0] }
-                }
-            }
-        );
+              },
+              { $group: { _id: null, total: { $sum: "$amount" } } }
+            ],
+            as: "receiptSum"
+          }
+        },
+        {
+          $addFields: {
+            totalReceiptValue: { $ifNull: [{ $arrayElemAt: ["$receiptSum.total", 0] }, 0] }
+          }
+        }
+      );
     }
 
     const sort = {};
@@ -1045,65 +1045,65 @@ router.get("/", async (req, res) => {
 
     // 2.6 Deferred Lookup for Last Invoice (If not already looked up early)
     if (!isInvoiceAgeSort && !isMini) {
-        pipeline.push(
-            {
-                $lookup: {
-                    from: "invoices",
-                    let: { cId: "$_id" },
-                    pipeline: [
-                        { $match: { $expr: { $eq: ["$customer.customerId", "$$cId"] }, status: { $in: ["FINALIZED", "PRINTED", "SENT"] } } },
-                        { $sort: { invoiceDate: -1 } },
-                        { $limit: 1 }
-                    ],
-                    as: "lastInv"
-                }
-            },
-            { $unwind: { path: "$lastInv", preserveNullAndEmptyArrays: true } },
-            {
-                $addFields: {
-                    lastInvoiceDate: "$lastInv.invoiceDate",
-                    lastInvoiceNumber: "$lastInv.invoiceNumber",
-                    hasInvoiceDate: {
-                        $cond: {
-                            if: { $eq: [{ $ifNull: ["$lastInv.invoiceDate", null] }, null] },
-                            then: 0,
-                            else: 1
-                        }
-                    }
-                }
+      pipeline.push(
+        {
+          $lookup: {
+            from: "invoices",
+            let: { cId: "$_id" },
+            pipeline: [
+              { $match: { $expr: { $eq: ["$customer.customerId", "$$cId"] }, status: { $in: ["FINALIZED", "PRINTED", "SENT"] } } },
+              { $sort: { invoiceDate: -1 } },
+              { $limit: 1 }
+            ],
+            as: "lastInv"
+          }
+        },
+        { $unwind: { path: "$lastInv", preserveNullAndEmptyArrays: true } },
+        {
+          $addFields: {
+            lastInvoiceDate: "$lastInv.invoiceDate",
+            lastInvoiceNumber: "$lastInv.invoiceNumber",
+            hasInvoiceDate: {
+              $cond: {
+                if: { $eq: [{ $ifNull: ["$lastInv.invoiceDate", null] }, null] },
+                then: 0,
+                else: 1
+              }
             }
-        );
+          }
+        }
+      );
     }
 
     // 2.65 Deferred Lookup for Last Receipt (If not already looked up early)
     if (!isReceiptAgeSort && !isMini) {
-        pipeline.push(
-            {
-                $lookup: {
-                    from: "receipts",
-                    let: { cId: "$_id" },
-                    pipeline: [
-                        { $match: { $expr: { $eq: ["$customer.customerId", "$$cId"] }, status: "confirmed" } },
-                        { $sort: { createdAt: -1 } },
-                        { $limit: 1 }
-                    ],
-                    as: "lastRec"
-                }
-            },
-            { $unwind: { path: "$lastRec", preserveNullAndEmptyArrays: true } },
-            {
-                $addFields: {
-                    lastReceiptDate: "$lastRec.createdAt",
-                    hasReceiptDate: {
-                        $cond: {
-                            if: { $eq: [{ $ifNull: ["$lastRec.createdAt", null] }, null] },
-                            then: 0,
-                            else: 1
-                        }
-                    }
-                }
+      pipeline.push(
+        {
+          $lookup: {
+            from: "receipts",
+            let: { cId: "$_id" },
+            pipeline: [
+              { $match: { $expr: { $eq: ["$customer.customerId", "$$cId"] }, status: "confirmed" } },
+              { $sort: { createdAt: -1 } },
+              { $limit: 1 }
+            ],
+            as: "lastRec"
+          }
+        },
+        { $unwind: { path: "$lastRec", preserveNullAndEmptyArrays: true } },
+        {
+          $addFields: {
+            lastReceiptDate: "$lastRec.createdAt",
+            hasReceiptDate: {
+              $cond: {
+                if: { $eq: [{ $ifNull: ["$lastRec.createdAt", null] }, null] },
+                then: 0,
+                else: 1
+              }
             }
-        );
+          }
+        }
+      );
     }
 
     // 5. Lookups (Population)
@@ -1265,8 +1265,8 @@ router.post("/balances", async (req, res) => {
     const objectIds = customerIds.map(id => new mongoose.Types.ObjectId(id));
 
     const IST = "Asia/Kolkata";
-    const endLimit = toDate 
-      ? moment.tz(toDate, IST).endOf("day").toDate() 
+    const endLimit = toDate
+      ? moment.tz(toDate, IST).endOf("day").toDate()
       : moment.tz(IST).endOf("day").toDate();
     const startLimit = fromDate
       ? moment.tz(fromDate, IST).startOf("day").toDate()
@@ -1402,10 +1402,12 @@ router.post("/balances", async (req, res) => {
                 $expr: {
                   $and: [
                     { $eq: ["$by.partyType", "DEBTOR"] },
-                    { $or: [
-                      { $eq: ["$by.partyId", "$$cId"] },
-                      { $eq: ["$by.partyId", { $toString: "$$cId" }] }
-                    ] }
+                    {
+                      $or: [
+                        { $eq: ["$by.partyId", "$$cId"] },
+                        { $eq: ["$by.partyId", { $toString: "$$cId" }] }
+                      ]
+                    }
                   ]
                 },
                 $or: [
@@ -1429,10 +1431,12 @@ router.post("/balances", async (req, res) => {
                 $expr: {
                   $and: [
                     { $eq: ["$to.partyType", "DEBTOR"] },
-                    { $or: [
-                      { $eq: ["$to.partyId", "$$cId"] },
-                      { $eq: ["$to.partyId", { $toString: "$$cId" }] }
-                    ] }
+                    {
+                      $or: [
+                        { $eq: ["$to.partyId", "$$cId"] },
+                        { $eq: ["$to.partyId", { $toString: "$$cId" }] }
+                      ]
+                    }
                   ]
                 },
                 $or: [
@@ -1861,9 +1865,9 @@ router.patch("/:id/approve-credit-bypass", auth, async (req, res) => {
 
     // Policy: If 3 or more approvals already exist, only Super Admin can approve the next one.
     if (approvedCount >= 3 && req.user?.role !== "SUPER_ADMIN") {
-      return res.status(403).json({ 
-        success: false, 
-        message: `This customer has already had ${approvedCount} credit approvals. This request now requires Super Admin authorization.` 
+      return res.status(403).json({
+        success: false,
+        message: `This customer has already had ${approvedCount} credit approvals. This request now requires Super Admin authorization.`
       });
     }
 
@@ -2029,12 +2033,12 @@ router.get("/credit-requests/history", async (req, res) => {
     }
 
     const history = await OverrideRequest.find(filter)
-    .populate("customerId", "name whatsapp")
-    .populate("branchId", "name code")
-    .populate("approvedBy", "name username")
-    .populate("requestedBy", "name username")
-    .sort({ updatedAt: -1 })
-    .limit(500);
+      .populate("customerId", "name whatsapp")
+      .populate("branchId", "name code")
+      .populate("approvedBy", "name username")
+      .populate("requestedBy", "name username")
+      .sort({ updatedAt: -1 })
+      .limit(500);
 
     // Calculate request counts for each customer in the history
     const customerIds = [...new Set(history.map(h => h.customerId?._id).filter(id => id))];
@@ -2196,7 +2200,7 @@ router.get("/:id/ledger", async (req, res) => {
     // Default dates: This month if not specified
     const now = new Date();
     const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-    
+
     let startStr = startDate;
     let endStr = endDate;
 
@@ -2257,21 +2261,21 @@ router.get("/:id/ledger", async (req, res) => {
       .populate("branchId", "name code");
 
     const mjInRangeBy = await ManualJournal.find({
-        "by.partyType": "DEBTOR",
-        "by.partyId": id,
-        $or: [
-          { journalDate: { $gte: effectiveStart, $lte: end } },
-          { journalDate: { $exists: false }, createdAt: { $gte: effectiveStart, $lte: end } }
-        ]
+      "by.partyType": "DEBTOR",
+      "by.partyId": id,
+      $or: [
+        { journalDate: { $gte: effectiveStart, $lte: end } },
+        { journalDate: { $exists: false }, createdAt: { $gte: effectiveStart, $lte: end } }
+      ]
     }).select("amount journalDate journalId narration userName paymentMode");
 
     const mjInRangeTo = await ManualJournal.find({
-        "to.partyType": "DEBTOR",
-        "to.partyId": id,
-        $or: [
-          { journalDate: { $gte: effectiveStart, $lte: end } },
-          { journalDate: { $exists: false }, createdAt: { $gte: effectiveStart, $lte: end } }
-        ]
+      "to.partyType": "DEBTOR",
+      "to.partyId": id,
+      $or: [
+        { journalDate: { $gte: effectiveStart, $lte: end } },
+        { journalDate: { $exists: false }, createdAt: { $gte: effectiveStart, $lte: end } }
+      ]
     }).select("amount journalDate journalId narration userName paymentMode");
 
     // 4. Fetch Vendor-side transactions for the range
@@ -2382,8 +2386,8 @@ router.get("/:id/ledger", async (req, res) => {
           date: r.createdAt,
           type: r.status === "bounced" ? "CHEQUE BOUNCE" : (r.status === "cancelled" ? "CANCELLED" : "RECEIPT"),
           particulars: `${r.status === "bounced" ? "CHEQUE BOUNCE: " : (r.status === "cancelled" ? "CANCELLED: " : "Receipt: ")}${r.receiptId} (${(r.paymentMethod || "CASH").toUpperCase()})${r.relatedOrders && r.relatedOrders.length > 0
-              ? ` - for Invoices: ${r.relatedOrders.map(ro => ro.salesOrderId?.salesInvoiceId || ro.salesOrderId?.invoiceId || ro.invoiceId).join(", ")}`
-              : (r.originalSalesOrderId?.salesInvoiceId || r.originalSalesOrderId?.invoiceId || r.originalInvoiceId ? ` - for Inv: ${r.originalSalesOrderId?.salesInvoiceId || r.originalSalesOrderId?.invoiceId || r.originalInvoiceId}` : "")
+            ? ` - for Invoices: ${r.relatedOrders.map(ro => ro.salesOrderId?.salesInvoiceId || ro.salesOrderId?.invoiceId || ro.invoiceId).join(", ")}`
+            : (r.originalSalesOrderId?.salesInvoiceId || r.originalSalesOrderId?.invoiceId || r.originalInvoiceId ? ` - for Inv: ${r.originalSalesOrderId?.salesInvoiceId || r.originalSalesOrderId?.invoiceId || r.originalInvoiceId}` : "")
             }${r.status === 'cancelled' ? ` [By: ${canceller}${r.cancelReason ? ` | Reason: ${r.cancelReason}` : ""}]` : ""}`,
           debit: r.status === "bounced" ? (r.amount || 0) : 0,
           credit: (r.status === "bounced" || r.status === "cancelled") ? 0 : (r.amount || 0),
@@ -2679,22 +2683,22 @@ router.post("/transfer-transaction", auth, async (req, res) => {
     } else {
       doc.customerId = target._id;
     }
-    
+
     // 🔥 NEW: Update branchId to match the target customer's branch
     doc.branchId = target.branchId;
-    
+
     await doc.save({ session });
 
     // If Invoice, update the Invoice model too
     if (type === "INVOICE") {
       await Invoice.updateMany(
         { salesOrderId: doc._id },
-        { 
-          $set: { 
-            "customer.customerId": target._id, 
+        {
+          $set: {
+            "customer.customerId": target._id,
             "customer.name": target.name,
             branchId: target.branchId // Update branch reference
-          } 
+          }
         },
         { session }
       );

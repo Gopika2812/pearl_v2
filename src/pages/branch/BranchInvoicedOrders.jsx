@@ -1536,13 +1536,15 @@ const BranchInvoicedOrders = () => {
                                           )}
                                         </button>
                                         
-                                        <button
-                                          onClick={() => handleInstantPrint(order)}
-                                          className="flex items-center justify-center p-2 rounded-lg transition text-blue-600 bg-blue-50 hover:bg-blue-100 hover:text-blue-700 shadow-sm border border-blue-200"
-                                          title="Print SI Bill Anytime (No Restrictions)"
-                                        >
-                                          <FaPrint className="text-sm" />
-                                        </button>
+                                        {order.salesInvoiceId && (
+                                          <button
+                                            onClick={() => handleInstantPrint(order)}
+                                            className="flex items-center justify-center p-2 rounded-lg transition text-blue-600 bg-blue-50 hover:bg-blue-100 hover:text-blue-700 shadow-sm border border-blue-200"
+                                            title="Print SI Bill Anytime (No Restrictions)"
+                                          >
+                                            <FaPrint className="text-sm" />
+                                          </button>
+                                        )}
                                       </div>
                                   )}
 

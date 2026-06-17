@@ -177,11 +177,72 @@ router.get("/search", async (req, res) => {
 
     // ⚡ Super lightweight: only fetch fields needed for the dropdown + billing
     const products = await Product.find(filter)
-      .select("_id name totalQty sellingPrice purchasingPrice gst hsnCode marginPercentage adminMargin productGroup units unitConversion")
+      .select("_id name totalQty openingQty sellingPrice purchasingPrice gst hsnCode marginPercentage adminMargin productGroup units unitConversion")
       .populate("productGroup", "_id name")
       .sort({ name: 1 })
       .limit(pageSize)
       .lean();
+
+    const productIds = products.map(p => p._id);
+    if (products.length > 0 && branchObjectId) {
+      const [salesTotals, purchaseTotals, cnTotals, dnTotals, psvTotals] = await Promise.all([
+        Invoice.aggregate([
+          { $match: { branchId: branchObjectId, status: { $ne: "CANCELLED" }, invoiceDate: { $gt: HARD_ANCHOR_DATE } } },
+          { $unwind: "$items" },
+          { $match: { "items.productId": { $in: productIds }, "items.qty": { $gt: 0 } } },
+          { $group: { _id: "$items.productId", total: { $sum: "$items.qty" } } }
+        ]),
+        PurchaseInvoice.aggregate([
+          { $match: { branchId: branchObjectId, status: { $ne: "CANCELLED" }, invoiceDate: { $gt: HARD_ANCHOR_DATE } } },
+          { $unwind: "$items" },
+          { $match: { "items.productId": { $in: productIds }, "items.qty": { $gt: 0 } } },
+          { $group: { _id: "$items.productId", total: { $sum: "$items.qty" } } }
+        ]),
+        CreditNote.aggregate([
+          { $match: { branchId: branchObjectId, status: { $ne: "CANCELLED" }, createdAt: { $gt: HARD_ANCHOR_DATE } } },
+          { $addFields: { effectiveDate: { $ifNull: ["$date", "$createdAt"] } } },
+          { $match: { effectiveDate: { $gt: HARD_ANCHOR_DATE } } },
+          { $unwind: "$items" },
+          { $match: { "items.productId": { $in: productIds }, "items.qty": { $gt: 0 } } },
+          { $group: { _id: "$items.productId", total: { $sum: "$items.qty" } } }
+        ]),
+        DebitNote.aggregate([
+          { $match: { branchId: branchObjectId, status: { $ne: "CANCELLED" }, date: { $gt: HARD_ANCHOR_DATE } } },
+          { $unwind: "$items" },
+          { $match: { "items.productId": { $in: productIds }, "items.qty": { $gt: 0 } } },
+          { $group: { _id: "$items.productId", total: { $sum: "$items.qty" } } }
+        ]),
+        PhysicalStockEntry.aggregate([
+          { $match: { branchId: branchObjectId, status: "APPROVED", productId: { $in: productIds } } },
+          { $group: { _id: "$productId", inward: { $sum: "$inwardQty" }, outward: { $sum: "$outwardQty" } } }
+        ])
+      ]);
+
+      const salesMap = new Map(salesTotals.map(t => [t._id.toString(), t.total]));
+      const purchaseMap = new Map(purchaseTotals.map(t => [t._id.toString(), t.total]));
+      const cnMap = new Map(cnTotals.map(t => [t._id.toString(), t.total]));
+      const dnMap = new Map(dnTotals.map(t => [t._id.toString(), t.total]));
+      const psvMap = new Map(psvTotals.map(t => [t._id.toString(), { inward: t.inward, outward: t.outward }]));
+
+      const enhancedProducts = products.map((product) => {
+        const pId = product._id.toString();
+        const opening = Number(product.openingQty || 0);
+        const inwardPurchases = Number(purchaseMap.get(pId) || 0);
+        const inwardCreditNotes = Number(cnMap.get(pId) || 0);
+        const outwardSales = Number(salesMap.get(pId) || 0);
+        const outwardDebitNotes = Number(dnMap.get(pId) || 0);
+        const psv = psvMap.get(pId) || { inward: 0, outward: 0 };
+
+        const closingStock = (opening + inwardPurchases + inwardCreditNotes + psv.inward) - (outwardSales + outwardDebitNotes + psv.outward);
+
+        return {
+          ...product,
+          availableQty: Math.round(closingStock * 100) / 100
+        };
+      });
+
+      return res.json({ success: true, data: enhancedProducts });
+    }
 
     return res.json({ success: true, data: products });
   } catch (error) {

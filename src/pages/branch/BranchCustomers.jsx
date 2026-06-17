@@ -503,77 +503,12 @@ const BranchCustomers = () => {
             </button>
 
             {(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN") && (
-              <button
-                onClick={handleMergeCustomers}
-                className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-2 text-sm shadow-md active:scale-95"
-                title="Merge two customer records into one"
-              >
-                <FaObjectGroup /> Merge Records
-              </button>
-            )}
-
-            <div className="flex items-center gap-3 bg-white p-2 px-4 rounded-xl border border-gray-200 shadow-sm">
-              <div className="flex flex-col">
-                <span className="text-[9px] font-black text-gray-400 uppercase leading-none">Safe Mode</span>
-                <span className="text-[8px] font-bold text-gray-500 uppercase leading-tight">Info Only</span>
-              </div>
-              <button
-                onClick={() => setIsSafeMode(!isSafeMode)}
-                className={`w-10 h-5 rounded-full transition-all relative ${isSafeMode ? 'bg-emerald-500' : 'bg-gray-300'}`}
-              >
-                <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${isSafeMode ? 'left-5.5' : 'left-0.5'}`} style={{ left: isSafeMode ? '1.35rem' : '0.125rem' }}></div>
-              </button>
-            </div>
-
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleBulkUpload}
-              accept=".xlsx,.xls,.csv"
-              className="hidden"
-            />
-            <button
-              onClick={() => {
-                if (!isSafeMode) {
-                  const confirmBal = window.confirm("⚠️ You are uploading in BALANCING MODE. This will adjust Debit/Credit balances. For info-only updates, enable SAFE MODE. Proceed?");
-                  if (!confirmBal) return;
-                }
-                fileInputRef.current?.click();
-              }}
-              className={`${isSafeMode ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-purple-600 hover:bg-purple-700'} text-white px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-2 text-sm shadow-md active:scale-95`}
-            >
-              <FaUpload /> {isSafeMode ? "Safe Update" : "Bulk Upload"}
-            </button>
-
-            {(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN" || user?.actionPermissions?.export !== false) && (
               <>
                 <button
                   onClick={handleExportExcel}
                   className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-2 text-sm shadow-md active:scale-95"
                 >
                   <FaFileExport /> Export Excel
-                </button>
-
-                <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200">
-                  <input
-                    type="date"
-                    value={exportDate}
-                    onChange={(e) => setExportDate(e.target.value)}
-                    className="bg-white border border-slate-200 text-[11px] font-bold rounded-lg px-2 py-1.5 focus:ring-1 focus:ring-primary outline-none"
-                  />
-                  <button
-                    onClick={handleExportBalances}
-                    className="bg-primary hover:bg-primary/90 text-white px-3 py-2 rounded-lg font-black text-[10px] uppercase tracking-widest transition-all shadow-md flex items-center gap-2"
-                  >
-                    <FaFileExport /> Export Balances
-                  </button>
-                </div>
-
-                <button
-                  onClick={handleExportSnapshot}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-2 text-sm shadow-md active:scale-95"
-                >
-                  <FaFileExport /> 31st Mar Snapshot
                 </button>
               </>
             )}

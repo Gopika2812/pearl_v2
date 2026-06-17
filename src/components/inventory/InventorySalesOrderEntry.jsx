@@ -2109,7 +2109,7 @@ export default function InventorySalesOrderEntry({
                     )}
                     {!searchingProducts && fetchedProducts
                       .map((p) => {
-                        const currentStock = availableQtyCache[p._id] ?? p.availableQty ?? p.totalQty ?? 0;
+                        const currentStock = availableQtyCache[p._id] ?? productsWithStock?.find(prod => prod._id === p._id)?.availableQty ?? p.availableQty ?? p.totalQty ?? 0;
                         return (
                           <div
                             key={p._id}
