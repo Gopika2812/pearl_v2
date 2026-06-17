@@ -202,10 +202,11 @@ export const getOriginalInvoiceHTML = (previewData, order) => {
 
               if (backOrdersToShow.length === 0) return "";
               
-              return '<div style="font-size: 10px; color: #dc2626; font-weight: bold; margin-bottom: 4px;">⚠️ YOUR PENDING ORDER WAS:</div>' +
-                '<div style="font-size: 9px; line-height: 1.4; color: #000; font-weight: 600;">' +
-                  backOrdersToShow.map(item => item.name + " - " + item.qty + " " + (item.unit || "") + " (not sent)").join(", ") +
-                '</div>';
+              return '<div style="font-size: 10px; color: #000; margin-bottom: 4px;">The below ordered items were not sent due to stock unavailability:</div>' +
+                '<div style="font-size: 9px; line-height: 1.4; color: #000; font-weight: bold;">' +
+                  backOrdersToShow.map(item => item.name + " – " + item.qty + " " + (item.unit || "")).join(", ") + "." +
+                '</div>' +
+                '<div style="font-size: 10px; color: #000; margin-top: 4px;">Subject to availability, we will supply them in the next delivery.</div>';
             })() + '
           </div>
           

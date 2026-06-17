@@ -12,7 +12,7 @@ const BranchProductRecords = () => {
   const navigate = useNavigate();
   const { currentBranch, user } = useBranch();
   const { productGroups, products, customers } = useInventory();
-  const [analysisMode, setAnalysisMode] = useState("product"); // 'product' or 'customer'
+  const [analysisMode, setAnalysisMode] = useState("product"); // 'product', 'customer', 'purchase'
 
   // Permission helper
   const isFieldAllowed = (fieldId) => {
@@ -39,52 +39,59 @@ const BranchProductRecords = () => {
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [productSearch, setProductSearch] = useState("");
   const [customerSearch, setCustomerSearch] = useState("");
+  const [vendorSearch, setVendorSearch] = useState("");
   const [groupSearch, setGroupSearch] = useState("");
   const [sortConfig, setSortConfig] = useState({ key: 'date', direction: 'desc' });
 
   // Column Selection for Export
   const [showColumnSelector, setShowColumnSelector] = useState(false);
   const [selectedExportColumns, setSelectedExportColumns] = useState([
-    "date", "time", "invoiceNo", "voucher", "customer", "product", "group", 
-    "purchasePrice", "sellingPrice", "qty", "gst", "discount", "margin", "profit"
+    "date", "time", "invoiceNo", "voucher", "vendor", "customer", "product", "group", 
+    "mrp", "purchasePrice", "sellingPrice", "qty", "batch", "gst", "discount", "margin", "profit"
   ]);
 
   const columnsConfig = [
     { id: "date", label: "Date", getValue: r => new Date(r.date).toLocaleDateString() },
     { id: "time", label: "Time", getValue: r => r.createdAt ? new Date(r.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : new Date(r.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) },
-    { id: "invoiceNo", label: "Invoice No", getValue: r => r.invoiceNumber },
+    { id: "invoiceNo", label: "Voucher No", getValue: r => r.invoiceNumber },
     { id: "voucher", label: "Voucher", getValue: r => r.voucherType, permission: "voucher" },
-    { id: "customer", label: "Customer", getValue: r => r.customerName || "Walk-in" },
+    ...(analysisMode !== "purchase" ? [{ id: "customer", label: "Customer", getValue: r => r.customerName || "Walk-in" }] : []),
+    ...(analysisMode === "purchase" ? [{ id: "vendor", label: "Vendor", getValue: r => r.vendorName || "-" }] : []),
     { id: "product", label: "Product", getValue: r => r.productName },
     { id: "group", label: "Group", getValue: r => r.productGroupName || "No Group" },
+    ...(analysisMode === "purchase" ? [{ id: "mrp", label: "MRP", getValue: r => r.mrp?.toFixed(2) || "-", permission: "purchasePrice" }] : []),
     { id: "purchasePrice", label: "Purchase Price", getValue: r => r.purchasingPrice?.toFixed(2), permission: "purchasePrice" },
-    { id: "sellingPrice", label: "Selling Price", getValue: r => r.sellingPrice?.toFixed(2), permission: "sellingPrice" },
+    ...(analysisMode !== "purchase" ? [{ id: "sellingPrice", label: "Selling Price", getValue: r => r.sellingPrice?.toFixed(2), permission: "sellingPrice" }] : []),
     { id: "qty", label: "Qty", getValue: r => r.qty, permission: "qty" },
-    { id: "gst", label: "GST %", getValue: r => r.gst, permission: "gst" },
-    { id: "discount", label: "Discount/Unit", getValue: r => r.discountPerUnit?.toFixed(2), permission: "discount" },
-    { id: "margin", label: "Profit %", getValue: r => r.profitPercent?.toFixed(1) + "%", permission: "margin" },
-    { id: "profit", label: "Gross Profit", getValue: r => (r.grossProfit * r.qty).toFixed(2), permission: "profit" }
+    ...(analysisMode === "purchase" ? [{ id: "batch", label: "Batch", getValue: r => r.batch || "-", permission: "qty" }] : []),
+    ...(analysisMode !== "purchase" ? [
+      { id: "gst", label: "GST %", getValue: r => r.gst, permission: "gst" },
+      { id: "discount", label: "Discount/Unit", getValue: r => r.discountPerUnit?.toFixed(2), permission: "discount" },
+      { id: "margin", label: "Profit %", getValue: r => r.profitPercent ? r.profitPercent.toFixed(1) + "%" : "-", permission: "margin" },
+      { id: "profit", label: "Gross Profit", getValue: r => r.grossProfit ? (r.grossProfit * r.qty).toFixed(2) : "-", permission: "profit" }
+    ] : [])
   ];
 
-  // Initialize selected columns based on permissions
+  // Initialize selected columns based on permissions and mode
   useEffect(() => {
     const allowed = columnsConfig
       .filter(col => !col.permission || isFieldAllowed(col.permission))
       .map(col => col.id);
     setSelectedExportColumns(allowed);
-  }, [user]);
+  }, [user, analysisMode]);
 
   const fetchHistory = async () => {
     if (!currentBranch?._id) return;
 
     setLoading(true);
     try {
-      let url = `${API_BASE}/invoices/history?branchId=${currentBranch._id}&page=${currentPage}&limit=${limit}&sortKey=${sortConfig.key}&sortDirection=${sortConfig.direction}`;
+      let url = `${API_BASE}/${analysisMode === "purchase" ? "purchase-invoices" : "invoices"}/history?branchId=${currentBranch._id}&page=${currentPage}&limit=${limit}&sortKey=${sortConfig.key}&sortDirection=${sortConfig.direction}`;
       if (fromDate) url += `&fromDate=${fromDate}`;
       if (toDate) url += `&toDate=${toDate}`;
       if (selectedProductGroupId) url += `&productGroupId=${selectedProductGroupId}`;
       if (selectedProductId) url += `&productId=${selectedProductId}`;
-      if (selectedCustomerId) url += `&customerId=${selectedCustomerId}`;
+      if (selectedCustomerId && analysisMode !== "purchase") url += `&customerId=${selectedCustomerId}`;
+      if (vendorSearch && analysisMode === "purchase") url += `&vendorSearch=${encodeURIComponent(vendorSearch)}`;
 
       const res = await fetchWithAuth(url);
       const data = await res.json();
@@ -106,7 +113,7 @@ const BranchProductRecords = () => {
 
   useEffect(() => {
     fetchHistory();
-  }, [currentBranch?._id, selectedProductId, selectedCustomerId, fromDate, toDate, selectedProductGroupId, currentPage, sortConfig]);
+  }, [currentBranch?._id, selectedProductId, selectedCustomerId, fromDate, toDate, selectedProductGroupId, currentPage, sortConfig, analysisMode]);
 
   const handleReset = () => {
     setFromDate("");
@@ -156,12 +163,13 @@ const BranchProductRecords = () => {
       }
 
       // Fetch ALL records for the current filter (with safety cap)
-      let url = `${API_BASE}/invoices/history?branchId=${currentBranch._id}&page=1&limit=${exportLimit}&sortKey=${sortConfig.key}&sortDirection=${sortConfig.direction}`;
+      let url = `${API_BASE}/${analysisMode === "purchase" ? "purchase-invoices" : "invoices"}/history?branchId=${currentBranch._id}&page=1&limit=${exportLimit}&sortKey=${sortConfig.key}&sortDirection=${sortConfig.direction}`;
       if (fromDate) url += `&fromDate=${fromDate}`;
       if (toDate) url += `&toDate=${toDate}`;
       if (selectedProductGroupId) url += `&productGroupId=${selectedProductGroupId}`;
       if (selectedProductId) url += `&productId=${selectedProductId}`;
-      if (selectedCustomerId) url += `&customerId=${selectedCustomerId}`;
+      if (selectedCustomerId && analysisMode !== "purchase") url += `&customerId=${selectedCustomerId}`;
+      if (vendorSearch && analysisMode === "purchase") url += `&vendorSearch=${encodeURIComponent(vendorSearch)}`;
 
       const res = await fetchWithAuth(url);
       const data = await res.json();
@@ -253,6 +261,15 @@ const BranchProductRecords = () => {
                 className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${analysisMode === "customer" ? "bg-white text-[#319bab] shadow-sm" : "text-gray-400 hover:text-gray-600"}`}
               >
                 Customer Wise
+              </button>
+              <button
+                onClick={() => {
+                  setAnalysisMode("purchase");
+                  handleReset();
+                }}
+                className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${analysisMode === "purchase" ? "bg-white text-[#319bab] shadow-sm" : "text-gray-400 hover:text-gray-600"}`}
+              >
+                Purchase Records
               </button>
             </div>
             {(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN" || user?.actionPermissions?.export !== false) && (
@@ -373,7 +390,7 @@ const BranchProductRecords = () => {
                     </div>
                   </div>
                 </>
-              ) : (
+              ) : analysisMode === "customer" ? (
                 <>
                   <div className="mb-4">
                     <div className="flex items-center justify-between mb-2">
@@ -446,6 +463,77 @@ const BranchProductRecords = () => {
                             selectedProductId === p._id 
                               ? 'bg-indigo-600 border-indigo-600 text-white shadow-md' 
                               : 'bg-white border-gray-50 hover:border-indigo-100 hover:bg-gray-50 text-gray-700'
+                          }`}
+                        >
+                          <div className="font-bold text-[11px] truncate flex justify-between items-center">
+                            <span>{p.name}</span>
+                            {p.marketCapPrice > 0 && (
+                              <span className="ml-2 px-1.5 py-0.5 bg-purple-100 text-purple-700 text-[8px] font-black uppercase rounded">MCP</span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="mb-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Search Vendor</label>
+                    </div>
+                    <div className="relative mb-3">
+                      <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={12} />
+                      <input 
+                        type="text"
+                        placeholder="Filter by vendor name... (Press Refresh)"
+                        value={vendorSearch}
+                        onChange={(e) => setVendorSearch(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            fetchHistory();
+                          }
+                        }}
+                        className="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-100 rounded-lg text-xs outline-none focus:border-amber-500 transition shadow-sm"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="mb-4 pt-4 border-t border-gray-100">
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Search Product (Optional)</label>
+                      <span className="text-[9px] font-black text-amber-600">{products.length} Items</span>
+                    </div>
+                    <div className="relative mb-3">
+                      <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={12} />
+                      <input 
+                        type="text"
+                        placeholder="Filter products..."
+                        value={productSearch}
+                        onChange={(e) => setProductSearch(e.target.value)}
+                        className="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-100 rounded-lg text-xs outline-none focus:border-amber-500 transition"
+                      />
+                    </div>
+                    
+                    <div className="space-y-1 max-h-[30vh] overflow-y-auto pr-1 custom-scrollbar">
+                      <div 
+                        onClick={() => setSelectedProductId("")}
+                        className={`p-2 rounded-lg cursor-pointer transition-all border text-center text-[10px] font-black uppercase tracking-widest ${
+                          selectedProductId === "" 
+                            ? 'bg-amber-500 border-amber-500 text-white shadow-sm' 
+                            : 'bg-gray-50 border-gray-50 text-gray-400 hover:bg-gray-100'
+                        }`}
+                      >
+                        All Products
+                      </div>
+                      {products.filter(p => p.name.toLowerCase().includes(productSearch.toLowerCase())).map(p => (
+                        <div 
+                          key={p._id}
+                          onClick={() => setSelectedProductId(p._id === selectedProductId ? "" : p._id)}
+                          className={`p-2 rounded-lg cursor-pointer transition-all border ${
+                            selectedProductId === p._id 
+                              ? 'bg-amber-500 border-amber-500 text-white shadow-md' 
+                              : 'bg-white border-gray-50 hover:border-amber-100 hover:bg-gray-50 text-gray-700'
                           }`}
                         >
                           <div className="font-bold text-[11px] truncate flex justify-between items-center">
@@ -554,18 +642,30 @@ const BranchProductRecords = () => {
                               Voucher / Time {getSortIcon('date')}
                             </th>
                           )}
-                          <th className="px-4 py-3 cursor-pointer hover:bg-gray-100 transition" onClick={() => handleSort('customer')}>
-                            Customer {getSortIcon('customer')}
-                          </th>
+                          {analysisMode !== "purchase" && (
+                            <th className="px-4 py-3 cursor-pointer hover:bg-gray-100 transition" onClick={() => handleSort('customer')}>
+                              Customer {getSortIcon('customer')}
+                            </th>
+                          )}
+                          {analysisMode === "purchase" && (
+                            <th className="px-4 py-3 cursor-pointer hover:bg-gray-100 transition" onClick={() => handleSort('vendor')}>
+                              Vendor {getSortIcon('vendor')}
+                            </th>
+                          )}
                           <th className="px-4 py-3 cursor-pointer hover:bg-gray-100 transition" onClick={() => handleSort('product')}>
                             Product Name {getSortIcon('product')}
                           </th>
+                          {analysisMode === "purchase" && isFieldAllowed("purchasePrice") && (
+                            <th className="px-4 py-3 text-right cursor-pointer hover:bg-gray-100 transition">
+                              MRP ₹
+                            </th>
+                          )}
                           {isFieldAllowed("purchasePrice") && (
                             <th className="px-4 py-3 text-right cursor-pointer hover:bg-gray-100 transition" onClick={() => handleSort('purchase')}>
                               Purchase ₹ {getSortIcon('purchase')}
                             </th>
                           )}
-                          {isFieldAllowed("sellingPrice") && (
+                          {isFieldAllowed("sellingPrice") && analysisMode !== "purchase" && (
                             <th className="px-4 py-3 text-right cursor-pointer hover:bg-gray-100 transition" onClick={() => handleSort('selling')}>
                               Selling ₹ {getSortIcon('selling')}
                             </th>
@@ -575,22 +675,27 @@ const BranchProductRecords = () => {
                               Qty {getSortIcon('qty')}
                             </th>
                           )}
-                          {isFieldAllowed("gst") && (
+                          {analysisMode === "purchase" && isFieldAllowed("qty") && (
+                            <th className="px-4 py-3 text-center cursor-pointer hover:bg-gray-100 transition">
+                              Batch
+                            </th>
+                          )}
+                          {isFieldAllowed("gst") && analysisMode !== "purchase" && (
                             <th className="px-4 py-3 text-center cursor-pointer hover:bg-gray-100 transition" onClick={() => handleSort('gst')}>
                               GST % {getSortIcon('gst')}
                             </th>
                           )}
-                          {isFieldAllowed("discount") && (
+                          {isFieldAllowed("discount") && analysisMode !== "purchase" && (
                             <th className="px-4 py-3 text-right cursor-pointer hover:bg-gray-100 transition" onClick={() => handleSort('discount')}>
                               Discount {getSortIcon('discount')}
                             </th>
                           )}
-                          {isFieldAllowed("margin") && (
+                          {isFieldAllowed("margin") && analysisMode !== "purchase" && (
                             <th className="px-4 py-3 text-right font-black cursor-pointer hover:bg-gray-100 transition" onClick={() => handleSort('profitPercent')}>
                               Profit (%) {getSortIcon('profitPercent')}
                             </th>
                           )}
-                          {isFieldAllowed("profit") && (
+                          {isFieldAllowed("profit") && analysisMode !== "purchase" && (
                             <th className="px-4 py-3 text-right font-black cursor-pointer hover:bg-gray-100 transition" onClick={() => handleSort('profitCash')}>
                               Profit (₹) {getSortIcon('profitCash')}
                             </th>
@@ -628,22 +733,36 @@ const BranchProductRecords = () => {
                                     </div>
                                   </td>
                                 )}
-                                <td className="px-4 py-3">
-                                  <div className="font-bold text-gray-700 text-[11px] truncate w-32" title={r.customerName || "Walk-in"}>
-                                    {r.customerName || "Walk-in"}
-                                  </div>
-                                </td>
+                                {analysisMode !== "purchase" && (
+                                  <td className="px-4 py-3">
+                                    <div className="font-bold text-gray-700 text-[11px] truncate w-32" title={r.customerName || "Walk-in"}>
+                                      {r.customerName || "Walk-in"}
+                                    </div>
+                                  </td>
+                                )}
+                                {analysisMode === "purchase" && (
+                                  <td className="px-4 py-3">
+                                    <div className="font-bold text-gray-700 text-[11px] truncate w-32" title={r.vendorName || "Walk-in"}>
+                                      {r.vendorName || "Walk-in"}
+                                    </div>
+                                  </td>
+                                )}
                                 <td className="px-4 py-3">
                                   <div className="font-bold text-gray-700 text-[11px] truncate w-40" title={r.productName}>
                                     {r.productName}
                                   </div>
                                 </td>
+                                {analysisMode === "purchase" && isFieldAllowed("purchasePrice") && (
+                                  <td className="px-4 py-3 text-right text-gray-500 text-xs">
+                                    ₹{r.mrp?.toFixed(2) || "0.00"}
+                                  </td>
+                                )}
                                 {isFieldAllowed("purchasePrice") && (
                                   <td className="px-4 py-3 text-right text-gray-500 text-xs">
                                     ₹{r.purchasingPrice?.toFixed(2)}
                                   </td>
                                 )}
-                                {isFieldAllowed("sellingPrice") && (
+                                {isFieldAllowed("sellingPrice") && analysisMode !== "purchase" && (
                                   <td className="px-4 py-3 text-right font-bold text-gray-800 text-xs">
                                     ₹{r.sellingPrice?.toFixed(2)}
                                   </td>
@@ -653,22 +772,27 @@ const BranchProductRecords = () => {
                                     {r.qty}
                                   </td>
                                 )}
-                                {isFieldAllowed("gst") && (
+                                {analysisMode === "purchase" && isFieldAllowed("qty") && (
+                                  <td className="px-4 py-3 text-center font-black text-gray-700 text-xs">
+                                    {r.batch || "-"}
+                                  </td>
+                                )}
+                                {isFieldAllowed("gst") && analysisMode !== "purchase" && (
                                   <td className="px-4 py-3 text-center text-gray-500 text-xs">
                                     {r.gst}%
                                   </td>
                                 )}
-                                {isFieldAllowed("discount") && (
+                                {isFieldAllowed("discount") && analysisMode !== "purchase" && (
                                   <td className="px-4 py-3 text-right text-red-500 font-bold text-xs">
                                     -₹{r.discountPerUnit?.toFixed(2)}
                                   </td>
                                 )}
-                                {isFieldAllowed("margin") && (
+                                {isFieldAllowed("margin") && analysisMode !== "purchase" && (
                                   <td className={`px-4 py-3 text-right text-xs font-black ${profitPercent >= 0 ? 'text-green-600' : 'text-red-500'}`}>
                                     {profitPercent.toFixed(1)}%
                                   </td>
                                 )}
-                                {isFieldAllowed("profit") && (
+                                {isFieldAllowed("profit") && analysisMode !== "purchase" && (
                                   <td className={`px-4 py-3 text-right font-black text-xs ${r.grossProfit * r.qty >= 0 ? 'text-green-700' : 'text-red-600'}`}>
                                     ₹{(r.grossProfit * r.qty).toFixed(2)}
                                   </td>
