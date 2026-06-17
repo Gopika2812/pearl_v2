@@ -381,31 +381,47 @@ const BranchInvoicedOrders = () => {
     try {
       setProcessingPrint(true);
       
-      // 1. Generate Invoice Preview with default items (100% quantity)
-      const defaultItems = (order.items || []).map(item => ({
-        ...item,
-        confirmedQty: item.qty,
-        backOrderQty: 0
-      }));
+      let invoiceHTML;
 
-      const previewRes = await fetch(`${API_BASE}/invoices/preview/${order._id}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${localStorage.getItem("token")}`
-        },
-        body: JSON.stringify({
-          items: defaultItems,
-          notes: order.notes || "",
-          invoiceType: "TAX_INVOICE",
-          commonDiscount: order.commonDiscount || 0
-        })
-      });
+      if (order.salesInvoiceId) {
+        // Fetch the existing finalized invoice to print the exact generated bill
+        const res = await fetchWithAuth(`${API_BASE}/invoices/${order.salesInvoiceId}`);
+        const data = await res.json();
+        
+        if (!data.success && !data._id) {
+            throw new Error(data.message || "Failed to fetch finalized invoice");
+        }
+        const finalizedInvoice = data.success ? data.data : data;
 
-      const previewData = await previewRes.json();
-      if (!previewRes.ok) throw new Error(previewData.message || "Preview failed");
+        // Pass finalizedInvoice as both previewData and generatedInvoice
+        invoiceHTML = getOriginalInvoiceHTML(finalizedInvoice, order, finalizedInvoice);
+      } else {
+        // Fallback: Generate Invoice Preview with default items (100% quantity)
+        const defaultItems = (order.items || []).map(item => ({
+          ...item,
+          confirmedQty: item.qty,
+          backOrderQty: 0
+        }));
 
-      const invoiceHTML = getOriginalInvoiceHTML(previewData, order);
+        const previewRes = await fetch(`${API_BASE}/invoices/preview/${order._id}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${localStorage.getItem("token")}`
+          },
+          body: JSON.stringify({
+            items: defaultItems,
+            notes: order.notes || "",
+            invoiceType: "TAX_INVOICE",
+            commonDiscount: order.commonDiscount || 0
+          })
+        });
+
+        const previewData = await previewRes.json();
+        if (!previewRes.ok) throw new Error(previewData.message || "Preview failed");
+
+        invoiceHTML = getOriginalInvoiceHTML(previewData, order);
+      }
 
       const printWindow = window.open("", "_blank");
       if (!printWindow) {

@@ -192,7 +192,7 @@ export const getOriginalInvoiceHTML = (previewData, order) => {
         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-top: 15px;">
           <!-- Left Side: Back Orders -->
           <div style="flex: 1; padding-right: 20px;">
-            ' + (() => {
+            ${(() => {
               const previewBackOrders = (previewData?.items || []).filter(item => item.backOrderQty > 0);
               const dbBackOrders = (order?.backOrderItems || []).length > 0 
                   ? (order.backOrderItems || []).map(item => ({ name: item.name, qty: item.qty, unit: item.unit }))
@@ -207,7 +207,7 @@ export const getOriginalInvoiceHTML = (previewData, order) => {
                   backOrdersToShow.map(item => item.name + " – " + item.qty + " " + (item.unit || "")).join(", ") + "." +
                 '</div>' +
                 '<div style="font-size: 10px; color: #000; margin-top: 4px;">Subject to availability, we will supply them in the next delivery.</div>';
-            })() + '
+            })()}
           </div>
           
           <!-- Right Side: QR -->
