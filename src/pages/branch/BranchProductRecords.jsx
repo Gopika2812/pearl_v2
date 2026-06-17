@@ -74,9 +74,11 @@ const BranchProductRecords = () => {
 
   // Initialize selected columns based on permissions and mode
   useEffect(() => {
+    const defaultCols = ["date", "invoiceNo", "customer", "product", "group", "sellingPrice", "qty", "gst"];
     const allowed = columnsConfig
       .filter(col => !col.permission || isFieldAllowed(col.permission))
-      .map(col => col.id);
+      .map(col => col.id)
+      .filter(id => defaultCols.includes(id));
     setSelectedExportColumns(allowed);
   }, [user, analysisMode]);
 
