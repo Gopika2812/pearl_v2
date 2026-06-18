@@ -1487,6 +1487,145 @@ router.post("/balances", async (req, res) => {
           as: "mjsCrUpToToDate"
         }
       },
+      // VENDOR TRANSACTIONS (For Consolidated Ledger)
+      {
+        $lookup: {
+          from: "purchaseinvoices",
+          let: { vId: "$linkedVendorId" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $ne: ["$$vId", null] },
+                    { $eq: ["$branchId", branchObjectId] },
+                    {
+                      $or: [
+                        { $eq: ["$vendor.vendorId", "$$vId"] },
+                        { $eq: ["$vendorId", "$$vId"] }
+                      ]
+                    }
+                  ]
+                },
+                $or: [
+                  { invoiceDate: { $gte: fyStart, $lte: endLimit } },
+                  { invoiceDate: { $exists: false }, createdAt: { $gte: fyStart, $lte: endLimit } }
+                ]
+              }
+            },
+            { $group: { _id: null, total: { $sum: "$grandTotal" } } }
+          ],
+          as: "vendorInvUpToToDate"
+        }
+      },
+      {
+        $lookup: {
+          from: "payments",
+          let: { vId: "$linkedVendorId" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $ne: ["$$vId", null] },
+                    { $eq: ["$branchId", branchObjectId] },
+                    { $eq: ["$vendor.vendorId", "$$vId"] }
+                  ]
+                },
+                status: { $ne: "cancelled" },
+                createdAt: { $gte: fyStart, $lte: endLimit }
+              }
+            },
+            { $group: { _id: null, total: { $sum: "$amount" } } }
+          ],
+          as: "vendorPayUpToToDate"
+        }
+      },
+      {
+        $lookup: {
+          from: "debitnotes",
+          let: { vId: "$linkedVendorId" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $ne: ["$$vId", null] },
+                    { $eq: ["$branchId", branchObjectId] },
+                    { $eq: ["$vendor.vendorId", "$$vId"] }
+                  ]
+                },
+                status: "Created",
+                createdAt: { $gte: fyStart, $lte: endLimit }
+              }
+            },
+            { $group: { _id: null, total: { $sum: "$grandTotal" } } }
+          ],
+          as: "vendorDNUpToToDate"
+        }
+      },
+      {
+        $lookup: {
+          from: "manualjournals",
+          let: { vId: "$linkedVendorId" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $ne: ["$$vId", null] },
+                    { $eq: ["$branchId", branchObjectId] },
+                    { $eq: ["$by.partyType", "VENDOR"] },
+                    {
+                      $or: [
+                        { $eq: ["$by.partyId", "$$vId"] },
+                        { $eq: ["$by.partyId", { $toString: "$$vId" }] }
+                      ]
+                    }
+                  ]
+                },
+                $or: [
+                  { journalDate: { $gte: fyStart, $lte: endLimit } },
+                  { journalDate: { $exists: false }, createdAt: { $gte: fyStart, $lte: endLimit } }
+                ]
+              }
+            },
+            { $group: { _id: null, total: { $sum: "$amount" } } }
+          ],
+          as: "vendorMjDrUpToToDate"
+        }
+      },
+      {
+        $lookup: {
+          from: "manualjournals",
+          let: { vId: "$linkedVendorId" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $ne: ["$$vId", null] },
+                    { $eq: ["$branchId", branchObjectId] },
+                    { $eq: ["$to.partyType", "VENDOR"] },
+                    {
+                      $or: [
+                        { $eq: ["$to.partyId", "$$vId"] },
+                        { $eq: ["$to.partyId", { $toString: "$$vId" }] }
+                      ]
+                    }
+                  ]
+                },
+                $or: [
+                  { journalDate: { $gte: fyStart, $lte: endLimit } },
+                  { journalDate: { $exists: false }, createdAt: { $gte: fyStart, $lte: endLimit } }
+                ]
+              }
+            },
+            { $group: { _id: null, total: { $sum: "$amount" } } }
+          ],
+          as: "vendorMjCrUpToToDate"
+        }
+      },
       {
         $lookup: {
           from: "invoices",
@@ -1555,6 +1694,11 @@ router.post("/balances", async (req, res) => {
           cnTotal: { $ifNull: [{ $arrayElemAt: ["$cnsUpToToDate.total", 0] }, 0] },
           mjDrTotal: { $ifNull: [{ $arrayElemAt: ["$mjsDrUpToToDate.total", 0] }, 0] },
           mjCrTotal: { $ifNull: [{ $arrayElemAt: ["$mjsCrUpToToDate.total", 0] }, 0] },
+          vendorInvTotal: { $ifNull: [{ $arrayElemAt: ["$vendorInvUpToToDate.total", 0] }, 0] },
+          vendorPayTotal: { $ifNull: [{ $arrayElemAt: ["$vendorPayUpToToDate.total", 0] }, 0] },
+          vendorDNTotal: { $ifNull: [{ $arrayElemAt: ["$vendorDNUpToToDate.total", 0] }, 0] },
+          vendorMjDrTotal: { $ifNull: [{ $arrayElemAt: ["$vendorMjDrUpToToDate.total", 0] }, 0] },
+          vendorMjCrTotal: { $ifNull: [{ $arrayElemAt: ["$vendorMjCrUpToToDate.total", 0] }, 0] },
           lastInvoiceDate: { $arrayElemAt: ["$lastInv.invoiceDate", 0] },
           lastReceiptDate: { $arrayElemAt: ["$lastRec.createdAt", 0] }
         }
@@ -1571,7 +1715,10 @@ router.post("/balances", async (req, res) => {
               { $cond: [{ $gt: ["$openingBalance", 0] }, "$openingBalance", 0] },
               "$invTotal",
               "$recBouncedTotal",
-              "$mjDrTotal"
+              "$mjDrTotal",
+              "$vendorPayTotal",
+              "$vendorDNTotal",
+              "$vendorMjDrTotal"
             ]
           },
           credit: {
@@ -1579,7 +1726,9 @@ router.post("/balances", async (req, res) => {
               { $cond: [{ $lt: ["$openingBalance", 0] }, { $abs: "$openingBalance" }, 0] },
               "$recConfirmedTotal",
               "$cnTotal",
-              "$mjCrTotal"
+              "$mjCrTotal",
+              "$vendorInvTotal",
+              "$vendorMjCrTotal"
             ]
           }
         }
