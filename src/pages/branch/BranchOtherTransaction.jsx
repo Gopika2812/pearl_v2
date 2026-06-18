@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { FaPlus, FaTrash, FaMoneyBillWave, FaDownload, FaFileAlt, FaChevronDown } from "react-icons/fa";
 import { toast } from "react-toastify";
+import * as XLSX from "xlsx";
 import { API_BASE, fetchWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 
@@ -8,6 +9,7 @@ export default function BranchOtherTransaction({ type }) {
   const { currentBranch, user } = useBranch();
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [filterMode, setFilterMode] = useState("ALL");
 
   // Permission helper
   const isFieldAllowed = (fieldId) => {
@@ -214,9 +216,33 @@ export default function BranchOtherTransaction({ type }) {
   const themeColor = isPayment ? "red" : "green";
   const Icon = isPayment ? FaMoneyBillWave : FaDownload;
 
+  const filteredTransactions = filterMode === "ALL" 
+    ? transactions 
+    : transactions.filter(t => t.paymentMode === filterMode);
+
+  const handleExport = () => {
+    if (filteredTransactions.length === 0) return toast.error("No data to export");
+
+    const exportData = filteredTransactions.map(t => ({
+      "ID": t.transactionId,
+      "Date": new Date(t.date).toLocaleDateString("en-IN"),
+      "Ledger Group": t.ledgerGroup,
+      "Ledger Name": t.ledgerName,
+      "Note": t.note || "-",
+      "Payment Mode": t.paymentMode?.replace("_", " "),
+      "GST %": t.gst,
+      "Amount": t.amount,
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, `${type}s`);
+    XLSX.writeFile(wb, `Other_${type}_Records.xlsx`);
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 pt-20 md:pt-4 md:pl-20">
-      <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 py-4">
+      <div className="w-full px-3 sm:px-6 py-4">
         {/* HEADER */}
         <div className={`bg-gradient-to-r from-${themeColor}-600 to-${themeColor}-700 text-white rounded-2xl shadow-lg p-8 mb-8`}>
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -227,12 +253,33 @@ export default function BranchOtherTransaction({ type }) {
                 <p className={`text-${themeColor}-100 mt-2`}>Record miscellaneous {type.toLowerCase()} transactions</p>
               </div>
             </div>
-            <button
-              onClick={() => setShowModal(true)}
-              className={`flex items-center justify-center gap-2 bg-white text-${themeColor}-700 px-6 py-3 rounded-lg font-bold hover:bg-gray-100 transition shadow-lg w-full md:w-auto`}
-            >
-              <FaPlus /> Create {type}
-            </button>
+            <div className="flex flex-col md:flex-row md:items-center gap-3">
+              <select
+                value={filterMode}
+                onChange={(e) => setFilterMode(e.target.value)}
+                className={`bg-white text-${themeColor}-700 px-4 py-3 rounded-lg font-bold shadow-lg outline-none cursor-pointer`}
+              >
+                <option value="ALL">All Modes</option>
+                <option value="CASH">Cash</option>
+                <option value="UPI">UPI</option>
+                <option value="BANK_TRANSFER">Bank Transfer</option>
+                <option value="CHEQUE">Cheque</option>
+                <option value="OTHER">Other</option>
+              </select>
+              <button
+                onClick={handleExport}
+                className={`flex items-center justify-center gap-2 bg-white text-${themeColor}-700 px-4 py-3 rounded-lg font-bold hover:bg-gray-100 transition shadow-lg`}
+                title="Export to Excel"
+              >
+                <FaFileAlt /> Export
+              </button>
+              <button
+                onClick={() => setShowModal(true)}
+                className={`flex items-center justify-center gap-2 bg-white text-${themeColor}-700 px-6 py-3 rounded-lg font-bold hover:bg-gray-100 transition shadow-lg w-full md:w-auto`}
+              >
+                <FaPlus /> Create {type}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -277,7 +324,7 @@ export default function BranchOtherTransaction({ type }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {transactions.map((t) => (
+                  {filteredTransactions.map((t) => (
                     <tr key={t._id} className="hover:bg-gray-50/50 transition duration-150">
                       {isFieldAllowed("id") && (
                         <td className="px-6 py-4 whitespace-nowrap font-mono text-xs font-bold text-gray-500">{t.transactionId}</td>

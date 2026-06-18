@@ -675,12 +675,6 @@ const BranchDeliveryReceipt = () => {
                               >
                                 {expandedId === r._id ? <FaChevronUp size={12} /> : <FaChevronDown size={12} />}
                               </button>
-                              <button 
-                               onClick={() => handleDelete(r._id)}
-                               className="w-10 h-10 flex items-center justify-center bg-white border border-slate-100 text-slate-300 hover:text-rose-500 hover:border-rose-100 rounded-xl transition-all shadow-sm"
-                              >
-                                <FaTrash size={12} />
-                              </button>
                             </div>
                          </td>
                        </tr>
@@ -793,13 +787,7 @@ const BranchDeliveryReceipt = () => {
                            >
                              {expandedId === r._id ? <FaChevronUp size={12} /> : <FaChevronDown size={12} />}
                            </button>
-                           <button 
-                             onClick={() => handleDelete(r._id)}
-                             className="p-3 bg-rose-50 text-rose-500 rounded-xl"
-                           >
-                               <FaTrash size={12} />
-                           </button>
-                         </div>
+                          </div>
                       </div>
                       
                       <div className="bg-slate-50 p-4 rounded-2xl mb-4">

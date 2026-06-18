@@ -11,7 +11,7 @@ import DateRangeDropdown from "../../components/common/DateRangeDropdown";
 const BranchProductRecords = () => {
   const navigate = useNavigate();
   const { currentBranch, user } = useBranch();
-  const { productGroups, products, customers } = useInventory();
+  const { productGroups, products, customers, vendors } = useInventory();
   const [analysisMode, setAnalysisMode] = useState("product"); // 'product', 'customer', 'purchase'
 
   // Permission helper
@@ -37,6 +37,7 @@ const BranchProductRecords = () => {
   const [selectedProductGroupId, setSelectedProductGroupId] = useState("");
   const [selectedProductId, setSelectedProductId] = useState("");
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
+  const [selectedVendorName, setSelectedVendorName] = useState("");
   const [productSearch, setProductSearch] = useState("");
   const [customerSearch, setCustomerSearch] = useState("");
   const [vendorSearch, setVendorSearch] = useState("");
@@ -58,7 +59,7 @@ const BranchProductRecords = () => {
     ...(analysisMode !== "purchase" ? [{ id: "customer", label: "Customer", getValue: r => r.customerName || "Walk-in" }] : []),
     ...(analysisMode === "purchase" ? [{ id: "vendor", label: "Vendor", getValue: r => r.vendorName || "-" }] : []),
     { id: "product", label: "Product", getValue: r => r.productName },
-    { id: "group", label: "Group", getValue: r => r.productGroupName || "No Group" },
+    { id: "group", label: "Group", getValue: r => productGroups.find(g => String(g._id) === String(r.productGroupName))?.name || r.productGroupName || "No Group" },
     ...(analysisMode === "purchase" ? [{ id: "mrp", label: "MRP", getValue: r => r.mrp?.toFixed(2) || "-", permission: "purchasePrice" }] : []),
     { id: "purchasePrice", label: "Purchase Price", getValue: r => r.purchasingPrice?.toFixed(2), permission: "purchasePrice" },
     ...(analysisMode !== "purchase" ? [{ id: "sellingPrice", label: "Selling Price", getValue: r => r.sellingPrice?.toFixed(2), permission: "sellingPrice" }] : []),
@@ -82,9 +83,12 @@ const BranchProductRecords = () => {
     setSelectedExportColumns(allowed);
   }, [user, analysisMode]);
 
+  const currentRequestId = React.useRef(0);
+
   const fetchHistory = async () => {
     if (!currentBranch?._id) return;
 
+    const requestId = ++currentRequestId.current;
     setLoading(true);
     try {
       let url = `${API_BASE}/${analysisMode === "purchase" ? "purchase-invoices" : "invoices"}/history?branchId=${currentBranch._id}&page=${currentPage}&limit=${limit}&sortKey=${sortConfig.key}&sortDirection=${sortConfig.direction}`;
@@ -93,12 +97,16 @@ const BranchProductRecords = () => {
       if (selectedProductGroupId) url += `&productGroupId=${selectedProductGroupId}`;
       if (selectedProductId) url += `&productId=${selectedProductId}`;
       if (selectedCustomerId && analysisMode !== "purchase") url += `&customerId=${selectedCustomerId}`;
-      if (vendorSearch && analysisMode === "purchase") url += `&vendorSearch=${encodeURIComponent(vendorSearch)}`;
+      
+      if (selectedVendorName && analysisMode === "purchase") url += `&vendorSearch=${encodeURIComponent(selectedVendorName)}`;
+      else if (vendorSearch && analysisMode === "purchase") url += `&vendorSearch=${encodeURIComponent(vendorSearch)}`;
 
       const res = await fetchWithAuth(url);
       const data = await res.json();
 
       if (!res.ok) throw new Error(data.message || "Failed to fetch history");
+
+      if (currentRequestId.current !== requestId) return;
 
       setRecords(data.history || []);
       setTotalRecords(data.total || 0);
@@ -106,16 +114,19 @@ const BranchProductRecords = () => {
       setGlobalTotalProfit(data.totalGrossProfit || 0);
       setGlobalAvgProfitPercent(data.total > 0 ? data.totalProfitPercentSum / data.total : 0);
     } catch (err) {
+      if (currentRequestId.current !== requestId) return;
       console.error("Error fetching history:", err);
       toast.error(err.message || "Failed to fetch sales history");
     } finally {
-      setLoading(false);
+      if (currentRequestId.current === requestId) {
+        setLoading(false);
+      }
     }
   };
 
   useEffect(() => {
     fetchHistory();
-  }, [currentBranch?._id, selectedProductId, selectedCustomerId, fromDate, toDate, selectedProductGroupId, currentPage, sortConfig, analysisMode]);
+  }, [currentBranch?._id, selectedProductId, selectedCustomerId, selectedVendorName, fromDate, toDate, selectedProductGroupId, currentPage, sortConfig, analysisMode]);
 
   const handleReset = () => {
     setFromDate("");
@@ -123,6 +134,8 @@ const BranchProductRecords = () => {
     setSelectedProductGroupId("");
     setSelectedProductId("");
     setSelectedCustomerId("");
+    setSelectedVendorName("");
+    setVendorSearch("");
     setCurrentPage(1);
   };
 
@@ -483,21 +496,43 @@ const BranchProductRecords = () => {
                   <div className="mb-4">
                     <div className="flex items-center justify-between mb-2">
                       <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Search Vendor</label>
+                      <span className="text-[9px] bg-amber-50 px-2 py-0.5 rounded-full font-bold text-amber-600">
+                        {Array.from(new Set([...vendors.map(v => v.name), ...records.map(r => r.vendorName)].filter(Boolean))).length} Total
+                      </span>
                     </div>
                     <div className="relative mb-3">
                       <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={12} />
                       <input 
                         type="text"
-                        placeholder="Filter by vendor name... (Press Refresh)"
+                        placeholder="Filter vendors..."
                         value={vendorSearch}
                         onChange={(e) => setVendorSearch(e.target.value)}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') {
-                            fetchHistory();
+                            setSelectedVendorName(vendorSearch);
                           }
                         }}
                         className="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-100 rounded-lg text-xs outline-none focus:border-amber-500 transition shadow-sm"
                       />
+                    </div>
+                    
+                    <div className="space-y-1 max-h-[35vh] overflow-y-auto pr-1 custom-scrollbar">
+                      {Array.from(new Set([...vendors.map(v => v.name), ...records.map(r => r.vendorName)].filter(Boolean)))
+                        .filter(name => name.toLowerCase().includes(vendorSearch.toLowerCase()))
+                        .sort()
+                        .map((name, i) => (
+                        <div 
+                          key={i}
+                          onClick={() => setSelectedVendorName(name === selectedVendorName ? "" : name)}
+                          className={`p-3 rounded-lg cursor-pointer transition-all border ${
+                            selectedVendorName === name 
+                              ? 'bg-amber-500 border-amber-500 text-white shadow-md' 
+                              : 'bg-white border-gray-50 hover:border-amber-100 hover:bg-gray-50 text-gray-700'
+                          }`}
+                        >
+                          <div className="font-bold text-xs truncate" title={name}>{name}</div>
+                        </div>
+                      ))}
                     </div>
                   </div>
 
@@ -581,7 +616,7 @@ const BranchProductRecords = () => {
             <div className="space-y-6">
               <>
                 {/* SUMMARY CARDS */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className={`grid grid-cols-1 md:grid-cols-2 ${analysisMode === "purchase" ? "" : "lg:grid-cols-4"} gap-4`}>
                   <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-center">
                     <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Transactions</span>
                     <span className="text-xl font-black text-[#319bab]">{totalRecords}</span>
@@ -590,7 +625,7 @@ const BranchProductRecords = () => {
                     <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Total Qty</span>
                     <span className="text-xl font-black text-gray-800">{totalQty}</span>
                   </div>
-                  {isFieldAllowed("profit") && (
+                  {isFieldAllowed("profit") && analysisMode !== "purchase" && (
                     <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-center">
                       <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Gross Profit</span>
                       <span className={`text-xl font-black ${totalProfit >= 0 ? 'text-green-600' : 'text-red-500'}`}>
@@ -598,7 +633,7 @@ const BranchProductRecords = () => {
                       </span>
                     </div>
                   )}
-                  {isFieldAllowed("margin") && (
+                  {isFieldAllowed("margin") && analysisMode !== "purchase" && (
                     <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-center">
                       <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Avg. Profit %</span>
                       <span className="text-xl font-black text-[#319bab]">
@@ -657,6 +692,11 @@ const BranchProductRecords = () => {
                           <th className="px-4 py-3 cursor-pointer hover:bg-gray-100 transition" onClick={() => handleSort('product')}>
                             Product Name {getSortIcon('product')}
                           </th>
+                          {analysisMode === "purchase" && (
+                            <th className="px-4 py-3 text-left">
+                              Product Group
+                            </th>
+                          )}
                           {analysisMode === "purchase" && isFieldAllowed("purchasePrice") && (
                             <th className="px-4 py-3 text-right cursor-pointer hover:bg-gray-100 transition">
                               MRP ₹
@@ -728,10 +768,10 @@ const BranchProductRecords = () => {
                                     </div>
                                     <div 
                                       className="text-[9px] text-[#319bab] font-bold cursor-pointer hover:underline transition-colors"
-                                      onClick={() => navigate(`/branch/sales-orders?invoiceId=${encodeURIComponent(r.invoiceId || r.invoiceNumber)}`)}
+                                      onClick={() => navigate(analysisMode === 'purchase' ? '#' : `/branch/sales-orders?invoiceId=${encodeURIComponent(r.invoiceNumber || r.invoiceId)}`)}
                                       title="Click to view full bill"
                                     >
-                                      {r.invoiceId || r.invoiceNumber} | {new Date(r.date).toLocaleDateString()}
+                                      {r.invoiceNumber || r.invoiceId} | {new Date(r.date).toLocaleDateString()}
                                     </div>
                                   </td>
                                 )}
@@ -754,6 +794,13 @@ const BranchProductRecords = () => {
                                     {r.productName}
                                   </div>
                                 </td>
+                                {analysisMode === "purchase" && (
+                                  <td className="px-4 py-3">
+                                    <div className="font-bold text-gray-700 text-[11px] truncate w-24" title={productGroups.find(g => String(g._id) === String(r.productGroupName))?.name || r.productGroupName}>
+                                      {productGroups.find(g => String(g._id) === String(r.productGroupName))?.name || r.productGroupName || "-"}
+                                    </div>
+                                  </td>
+                                )}
                                 {analysisMode === "purchase" && isFieldAllowed("purchasePrice") && (
                                   <td className="px-4 py-3 text-right text-gray-500 text-xs">
                                     ₹{r.mrp?.toFixed(2) || "0.00"}
