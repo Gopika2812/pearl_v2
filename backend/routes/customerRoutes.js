@@ -2070,10 +2070,53 @@ router.get("/:id/check-credit", async (req, res) => {
     const customer = await Customer.findById(id);
     if (!customer) return res.status(404).json({ success: false, message: "Customer not found" });
 
-    // Use the actively maintained closing balance, fallback to debit-credit
-    const currentBalance = customer.closingBalance !== undefined && customer.closingBalance !== null
-      ? customer.closingBalance 
-      : ((customer.debit || 0) - (customer.credit || 0));
+    // Dynamically calculate the accurate current balance (matches Ledger exactly)
+    const [invoices, receipts, cn, mjDr, mjCr] = await Promise.all([
+      mongoose.model("Invoice").aggregate([
+        { $match: { "customer.customerId": customer._id, status: { $in: ["FINALIZED", "PRINTED", "SENT"] } } },
+        { $group: { _id: null, total: { $sum: "$grandTotal" } } }
+      ]),
+      mongoose.model("Receipt").aggregate([
+        { $match: { "customer.customerId": customer._id, status: { $in: ["confirmed", "bounced"] } } },
+        {
+          $group: {
+            _id: null,
+            confirmedTotal: { $sum: { $cond: [{ $eq: ["$status", "confirmed"] }, "$amount", 0] } },
+            bouncedTotal: { $sum: { $cond: [{ $eq: ["$status", "bounced"] }, "$amount", 0] } }
+          }
+        }
+      ]),
+      mongoose.model("CreditNote").aggregate([
+        { $match: { "customer.customerId": customer._id, status: "Created" } },
+        { $group: { _id: null, total: { $sum: "$grandTotal" } } }
+      ]),
+      mongoose.model("ManualJournal").aggregate([
+        {
+          $match: {
+            "by.partyType": "DEBTOR",
+            $or: [{ "by.partyId": customer._id }, { "by.partyId": customer._id.toString() }]
+          }
+        },
+        { $group: { _id: null, total: { $sum: "$amount" } } }
+      ]),
+      mongoose.model("ManualJournal").aggregate([
+        {
+          $match: {
+            "to.partyType": "DEBTOR",
+            $or: [{ "to.partyId": customer._id }, { "to.partyId": customer._id.toString() }]
+          }
+        },
+        { $group: { _id: null, total: { $sum: "$amount" } } }
+      ])
+    ]);
+
+    let calculatedDebit = customer.openingBalance > 0 ? customer.openingBalance : 0;
+    let calculatedCredit = customer.openingBalance < 0 ? Math.abs(customer.openingBalance) : 0;
+
+    calculatedDebit += (invoices[0]?.total || 0) + (receipts[0]?.bouncedTotal || 0) + (mjDr[0]?.total || 0);
+    calculatedCredit += (receipts[0]?.confirmedTotal || 0) + (cn[0]?.total || 0) + (mjCr[0]?.total || 0);
+
+    const currentBalance = calculatedDebit - calculatedCredit;
     const creditLimit = customer.creditLimit || 0;
     const creditLimitDays = customer.creditLimitDays || 0;
 
