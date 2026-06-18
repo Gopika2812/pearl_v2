@@ -95,6 +95,7 @@ router.get("/", async (req, res) => {
   try {
     const { 
       branchId, 
+      vendorId,
       search, 
       status, 
       statuses, 
@@ -114,6 +115,11 @@ router.get("/", async (req, res) => {
     // Filter by branchId if provided
     if (branchId) {
       query.branchId = branchId;
+    }
+
+    // Filter by vendorId if provided
+    if (vendorId) {
+      query.vendorId = vendorId;
     }
 
     // Filter by date range
