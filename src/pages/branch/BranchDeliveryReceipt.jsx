@@ -687,9 +687,9 @@ const BranchDeliveryReceipt = () => {
                                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
                                      <FaWallet className="text-emerald-500" /> Collections
                                    </h4>
-                                   {r.collections?.length > 0 ? (
+                                   {r.collections?.filter(c => c.paymentMode === 'CASH').length > 0 ? (
                                      <div className="space-y-2">
-                                       {r.collections.map((c, i) => (
+                                       {r.collections.filter(c => c.paymentMode === 'CASH').map((c, i) => (
                                          <div key={i} className="flex items-center justify-between bg-white p-3 rounded-xl border border-slate-100 shadow-sm">
                                            <div className="flex flex-col">
                                              <span className="text-xs font-black text-slate-700">{c.customer?.name || "Unknown"}</span>
@@ -818,9 +818,9 @@ const BranchDeliveryReceipt = () => {
                             <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
                               <FaWallet className="text-emerald-500" /> Collections
                             </h4>
-                            {r.collections?.length > 0 ? (
+                            {r.collections?.filter(c => c.paymentMode === 'CASH').length > 0 ? (
                               <div className="space-y-2">
-                                {r.collections.map((c, i) => (
+                                {r.collections.filter(c => c.paymentMode === 'CASH').map((c, i) => (
                                   <div key={i} className="flex items-center justify-between bg-white p-3 rounded-xl border border-slate-100 shadow-sm">
                                     <div className="flex flex-col">
                                       <span className="text-xs font-black text-slate-700">{c.customer?.name || "Unknown"}</span>
