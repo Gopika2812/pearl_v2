@@ -2070,7 +2070,10 @@ router.get("/:id/check-credit", async (req, res) => {
     const customer = await Customer.findById(id);
     if (!customer) return res.status(404).json({ success: false, message: "Customer not found" });
 
-    const currentBalance = (customer.debit || 0) - (customer.credit || 0);
+    // Use the actively maintained closing balance, fallback to debit-credit
+    const currentBalance = customer.closingBalance !== undefined && customer.closingBalance !== null
+      ? customer.closingBalance 
+      : ((customer.debit || 0) - (customer.credit || 0));
     const creditLimit = customer.creditLimit || 0;
     const creditLimitDays = customer.creditLimitDays || 0;
 
@@ -2355,10 +2358,15 @@ router.get("/:id/ledger", async (req, res) => {
         // Combine invoiceDate (date) with createdAt (time) for accurate sorting
         let preciseDate = s.createdAt;
         if (s.invoiceDate && s.createdAt) {
-          const invDate = new Date(s.invoiceDate);
-          const createdDate = new Date(s.createdAt);
-          invDate.setHours(createdDate.getHours(), createdDate.getMinutes(), createdDate.getSeconds(), createdDate.getMilliseconds());
-          preciseDate = invDate;
+          const invMoment = moment.tz(s.invoiceDate, "Asia/Kolkata");
+          const createdMoment = moment.tz(s.createdAt, "Asia/Kolkata");
+          invMoment.set({
+            hour: createdMoment.hour(),
+            minute: createdMoment.minute(),
+            second: createdMoment.second(),
+            millisecond: createdMoment.millisecond()
+          });
+          preciseDate = invMoment.toDate();
         } else if (s.invoiceDate) {
           preciseDate = s.invoiceDate;
         }
