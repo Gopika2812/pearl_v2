@@ -2128,7 +2128,8 @@ router.get("/:id/check-credit", async (req, res) => {
     let oldestUnpaidInvoiceDate = null;
     let overdueDays = 0;
 
-    if (currentBalance > 0 && creditLimitDays > 0) {
+    // Ignore tiny rounding differences (up to ₹10) for overdue checks
+    if (currentBalance > 10 && creditLimitDays > 0) {
       // Find all invoices for this customer, oldest first
       const invoices = await SalesOrder.find({
         "customer.customerId": id,

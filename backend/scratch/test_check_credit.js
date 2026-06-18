@@ -4,15 +4,16 @@ dotenv.config({ path: "../.env" });
 import Customer from "../models/Customer.js";
 
 mongoose.connect(process.env.MONGODB_URI).then(async () => {
-  const customer = await Customer.findOne({ name: "Famous Enterprises (Junction)" });
-  console.log("debit:", customer.debit);
-  console.log("credit:", customer.credit);
-  console.log("closingBalance:", customer.closingBalance);
-  
-  const currentBalance = customer.closingBalance !== undefined && customer.closingBalance !== null
-      ? customer.closingBalance 
-      : ((customer.debit || 0) - (customer.credit || 0));
-  
-  console.log("currentBalance logic:", currentBalance);
+  const customer = await Customer.findOne({ name: "Hotel Sri Annamalayaar Park A/c (Junction)" });
+  if (!customer) {
+    console.log("Customer not found");
+  } else {
+    console.log("debit:", customer.debit);
+    console.log("credit:", customer.credit);
+    console.log("creditLimit:", customer.creditLimit);
+    console.log("creditLimitDays:", customer.creditLimitDays);
+    console.log("isCreditBypassed:", customer.isCreditBypassed);
+    console.log("openingBalance:", customer.openingBalance);
+  }
   process.exit(0);
 });
