@@ -541,9 +541,13 @@ export default function BranchHome() {
                           <p className="text-[8px] font-black text-slate-400 uppercase">ACTIVE GPS LOCATION ADDRESS</p>
                           <p className="text-[10px] font-black text-slate-700 leading-relaxed uppercase">
                             {isPresent ? (
-                              todayAttendance?.presentLocation?.address || "Resolving Precise Location..."
+                              <a href={`https://www.google.com/maps?q=${todayAttendance.presentLocation?.lat},${todayAttendance.presentLocation?.lng}`} target="_blank" rel="noopener noreferrer" className="hover:underline hover:text-emerald-500 cursor-pointer text-emerald-600">
+                                {todayAttendance?.presentLocation?.address || "Resolving Precise Location..."}
+                              </a>
                             ) : isLeft ? (
-                              todayAttendance?.leaveLocation?.address || "Resolving Location..."
+                              <a href={`https://www.google.com/maps?q=${todayAttendance.leaveLocation?.lat},${todayAttendance.leaveLocation?.lng}`} target="_blank" rel="noopener noreferrer" className="hover:underline hover:text-amber-500 cursor-pointer text-amber-600">
+                                {todayAttendance?.leaveLocation?.address || "Resolving Location..."}
+                              </a>
                             ) : "Geolocation Inactive. Click 'Clock In' to capture location."}
                           </p>
                         </div>
@@ -552,13 +556,19 @@ export default function BranchHome() {
                       {(todayAttendance?.presentLocation?.lat || todayAttendance?.leaveLocation?.lat) && (
                         <div className="flex justify-between items-center text-[9px] font-bold text-slate-400 border-t border-slate-100/50 pt-2.5">
                           <span className="uppercase">LAT / LNG Coords:</span>
-                          <span className="font-mono text-slate-600 bg-white px-2 py-0.5 rounded border border-slate-100">
+                          <a 
+                            href={`https://www.google.com/maps?q=${isPresent ? todayAttendance.presentLocation.lat : todayAttendance.leaveLocation?.lat},${isPresent ? todayAttendance.presentLocation.lng : todayAttendance.leaveLocation?.lng}`} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="font-mono text-sky-500 hover:text-sky-700 underline bg-white px-2 py-0.5 rounded border border-sky-100 flex items-center gap-1 cursor-pointer"
+                            title="View Exact Location on Google Maps"
+                          >
                             {isPresent ? (
                               `${Number(todayAttendance.presentLocation.lat).toFixed(6)}, ${Number(todayAttendance.presentLocation.lng).toFixed(6)}`
                             ) : (
                               `${Number(todayAttendance.leaveLocation?.lat || 0).toFixed(6)}, ${Number(todayAttendance.leaveLocation?.lng || 0).toFixed(6)}`
                             )}
-                          </span>
+                          </a>
                         </div>
                       )}
                     </div>
@@ -661,7 +671,19 @@ export default function BranchHome() {
                                 {log.workingHours > 0 ? `${Number(log.workingHours).toFixed(2)} Hrs` : "-"}
                               </td>
                               <td className="py-3 pl-4 text-slate-400 font-medium max-w-[200px] truncate" title={log.presentLocation?.address || log.leaveLocation?.address}>
-                                {log.presentLocation?.address || log.leaveLocation?.address || "Address Not Available"}
+                                {(log.presentLocation?.lat || log.leaveLocation?.lat) ? (
+                                  <a 
+                                    href={`https://www.google.com/maps?q=${log.presentLocation?.lat || log.leaveLocation?.lat},${log.presentLocation?.lng || log.leaveLocation?.lng}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-sky-500 hover:text-sky-600 hover:underline cursor-pointer"
+                                    title="View Exact Location on Maps"
+                                  >
+                                    {log.presentLocation?.address || log.leaveLocation?.address || "View on Map"}
+                                  </a>
+                                ) : (
+                                  <span className="text-slate-400">Address Not Available</span>
+                                )}
                               </td>
                             </tr>
                           );

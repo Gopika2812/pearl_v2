@@ -470,10 +470,14 @@ const AttendancePage = () => {
                         <FaMapMarkerAlt className="text-[8px] text-emerald-500 flex-shrink-0" />
                         <span className="text-[8px] font-black text-emerald-700 uppercase whitespace-normal break-words text-center leading-relaxed">
                           {record?.presentLocation?.address && record.presentLocation.address !== "Location Captured" ? (
-                            record.presentLocation.address
+                            <a href={`https://www.google.com/maps?q=${record.presentLocation.lat},${record.presentLocation.lng}`} target="_blank" rel="noopener noreferrer" className="hover:underline hover:text-emerald-500 cursor-pointer text-emerald-600" title="View Live Location on Maps">
+                              {record.presentLocation.address}
+                            </a>
                           ) : (
                             record?.presentLocation?.lat ? (
-                              `${Number(record.presentLocation.lat).toFixed(4)}, ${Number(record.presentLocation.lng).toFixed(4)}`
+                              <a href={`https://www.google.com/maps?q=${record.presentLocation.lat},${record.presentLocation.lng}`} target="_blank" rel="noopener noreferrer" className="hover:underline hover:text-emerald-500 cursor-pointer text-emerald-600" title="View Live Location on Maps">
+                                {`${Number(record.presentLocation.lat).toFixed(4)}, ${Number(record.presentLocation.lng).toFixed(4)}`}
+                              </a>
                             ) : "Fetching..."
                           )}
                         </span>
@@ -515,10 +519,14 @@ const AttendancePage = () => {
                         <FaMapMarkerAlt className="text-[8px] text-amber-500 flex-shrink-0" />
                         <span className="text-[8px] font-black text-amber-700 uppercase whitespace-normal break-words text-center leading-relaxed">
                           {record?.leaveLocation?.address && record.leaveLocation.address !== "Location Captured" ? (
-                            record.leaveLocation.address
+                            <a href={`https://www.google.com/maps?q=${record.leaveLocation.lat},${record.leaveLocation.lng}`} target="_blank" rel="noopener noreferrer" className="hover:underline hover:text-amber-500 cursor-pointer text-amber-600" title="View Live Location on Maps">
+                              {record.leaveLocation.address}
+                            </a>
                           ) : (
                             record?.leaveLocation?.lat ? (
-                              `${Number(record.leaveLocation.lat).toFixed(4)}, ${Number(record.leaveLocation.lng).toFixed(4)}`
+                              <a href={`https://www.google.com/maps?q=${record.leaveLocation.lat},${record.leaveLocation.lng}`} target="_blank" rel="noopener noreferrer" className="hover:underline hover:text-amber-500 cursor-pointer text-amber-600" title="View Live Location on Maps">
+                                {`${Number(record.leaveLocation.lat).toFixed(4)}, ${Number(record.leaveLocation.lng).toFixed(4)}`}
+                              </a>
                             ) : "Fetching..."
                           )}
                         </span>
