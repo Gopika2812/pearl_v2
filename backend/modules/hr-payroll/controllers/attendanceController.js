@@ -89,45 +89,52 @@ export const markAttendance = async (req, res) => {
     const safeLat = isNaN(lat) ? 0 : lat;
     const safeLng = isNaN(lng) ? 0 : lng;
 
-    if (status === "Present") {
-      updateData.presentTime = new Date();
-      updateData.presentLocation = {
+    const now = new Date();
+    const newPunch = {
+      action: status === "Present" ? "Present" : "Leave",
+      time: now,
+      location: {
         lat: safeLat,
         lng: safeLng,
         address: addressName || "Location Captured"
-      };
-      // Clear leave data in case of re-marking or correction
-      updateData.leaveTime = null;
-      updateData.leaveLocation = null;
-      updateData.workingHours = 0;
-      updateData.overtimeHours = 0;
+      }
+    };
+
+    let pushData = { punchLog: newPunch };
+
+    if (status === "Present") {
+      if (!attendance || !attendance.presentTime) {
+        updateData.presentTime = now;
+        updateData.presentLocation = newPunch.location;
+      }
+      updateData.status = "Present";
     } else if (status === "Leave" || status === "Absent") {
-      if (attendance && (attendance.status === "Present" || attendance.presentTime)) {
-        updateData.leaveTime = new Date();
-        updateData.leaveLocation = {
-          lat: safeLat,
-          lng: safeLng,
-          address: addressName || "Location Captured"
-        };
-        
-        const startTime = attendance.presentTime ? new Date(attendance.presentTime) : null;
-        if (startTime && !isNaN(startTime.getTime())) {
-          const diffMs = updateData.leaveTime - startTime;
-          const diffHrs = Math.max(0, diffMs / (1000 * 60 * 60));
-          updateData.workingHours = isNaN(diffHrs) ? 0 : diffHrs;
-          
-          if (diffHrs > 9 && comment) {
-            updateData.comment = comment;
-            updateData.overtimeHours = Math.max(0, diffHrs - 9);
-          }
-        }
-      } else {
-        updateData.leaveTime = new Date();
-        updateData.leaveLocation = {
-          lat: safeLat,
-          lng: safeLng,
-          address: addressName || "Location Captured"
-        };
+      updateData.leaveTime = now;
+      updateData.leaveLocation = newPunch.location;
+      updateData.status = status;
+
+      // Calculate working hours using the punch log
+      let currentLog = attendance ? (attendance.punchLog || []) : [];
+      // Create a shallow copy to simulate the full log
+      currentLog = [...currentLog, newPunch];
+      
+      let totalMs = 0;
+      let lastIn = null;
+      for (const p of currentLog) {
+         if (p.action === "Present") {
+            lastIn = new Date(p.time);
+         } else if (p.action === "Leave" && lastIn) {
+            totalMs += (new Date(p.time) - lastIn);
+            lastIn = null;
+         }
+      }
+      
+      const diffHrs = Math.max(0, totalMs / (1000 * 60 * 60));
+      updateData.workingHours = isNaN(diffHrs) ? 0 : diffHrs;
+      
+      if (diffHrs > 9 && comment) {
+        updateData.comment = comment;
+        updateData.overtimeHours = Math.max(0, diffHrs - 9);
       }
     }
 
@@ -137,7 +144,7 @@ export const markAttendance = async (req, res) => {
 
     attendance = await Attendance.findOneAndUpdate(
       { employeeId: new mongoose.Types.ObjectId(employeeId), date: todayDate },
-      { $set: updateData },
+      { $set: updateData, $push: pushData },
       { upsert: true, new: true, runValidators: false }
     );
 

@@ -725,19 +725,36 @@ router.post("/preview/:salesOrderId", async (req, res) => {
     let closingBalance = 0;
 
     if (customerToUse) {
-      // 1. Get Live Balance of the target customer
-      const currentBalance = (customerToUse.debit || 0) - (customerToUse.credit || 0);
+      let historicalOpeningBalance = undefined;
+      if (salesOrder.invoiceGenerated || salesOrder.salesInvoiceGenerated) {
+        if (salesOrder.invoiceOpeningBalance !== undefined) {
+          historicalOpeningBalance = salesOrder.invoiceOpeningBalance;
+        } else {
+          const existingInv = await Invoice.findOne({ salesOrderId: salesOrder._id }).lean();
+          if (existingInv && existingInv.openingBalance !== undefined) {
+            historicalOpeningBalance = existingInv.openingBalance;
+          }
+        }
+      }
 
-      // 2. Already applied amount for THIS order (if re-editing)
-      const balanceAdjustment = salesOrder.invoiceGenerated ? (salesOrder.lastInvoicedGrandTotal || 0) : 0;
+      if (historicalOpeningBalance !== undefined) {
+        // USE HISTORICAL BALANCE
+        dynamicOpeningBalance = historicalOpeningBalance;
+      } else {
+        // 1. Get Live Balance of the target customer
+        const currentBalance = (customerToUse.debit || 0) - (customerToUse.credit || 0);
 
-      // Opening Balance = Balance BEFORE this specific bill was added
-      dynamicOpeningBalance = currentBalance - balanceAdjustment;
+        // 2. Already applied amount for THIS order (if re-editing)
+        const balanceAdjustment = (salesOrder.invoiceGenerated || salesOrder.salesInvoiceGenerated) ? (salesOrder.lastInvoicedGrandTotal || 0) : 0;
+
+        // Opening Balance = Balance BEFORE this specific bill was added
+        dynamicOpeningBalance = currentBalance - balanceAdjustment;
+      }
 
       // Closing Balance = Balance AFTER applying the new grandTotal
       closingBalance = dynamicOpeningBalance + grandTotal;
     } else {
-      dynamicOpeningBalance = salesOrder.openingBalance || 0;
+      dynamicOpeningBalance = salesOrder.openingBalance || salesOrder.invoiceOpeningBalance || 0;
       closingBalance = dynamicOpeningBalance + grandTotal;
     }
 
@@ -1267,11 +1284,25 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
         let closingBalance = 0;
 
         if (customer) {
-          // Calculate opening balance BEFORE we apply the current update
-          // Opening Balance = Current DB Balance - (last grand total if this was already invoiced)
-          const currentBalance = (customer.debit || 0) - (customer.credit || 0);
-          const balanceAdjustment = salesOrder.salesInvoiceGenerated ? (salesOrder.lastInvoicedGrandTotal || 0) : 0;
-          dynamicOpeningBalance = currentBalance - balanceAdjustment;
+          let historicalOpeningBalance = undefined;
+          if (salesOrder.invoiceGenerated || salesOrder.salesInvoiceGenerated) {
+            if (salesOrder.invoiceOpeningBalance !== undefined) {
+              historicalOpeningBalance = salesOrder.invoiceOpeningBalance;
+            } else if (invoice && invoice.openingBalance !== undefined) {
+              historicalOpeningBalance = invoice.openingBalance;
+            }
+          }
+
+          if (historicalOpeningBalance !== undefined) {
+             // USE HISTORICAL BALANCE
+             dynamicOpeningBalance = historicalOpeningBalance;
+          } else {
+             // Calculate opening balance BEFORE we apply the current update
+             // Opening Balance = Current DB Balance - (last grand total if this was already invoiced)
+             const currentBalance = (customer.debit || 0) - (customer.credit || 0);
+             const balanceAdjustment = (salesOrder.invoiceGenerated || salesOrder.salesInvoiceGenerated) ? (salesOrder.lastInvoicedGrandTotal || 0) : 0;
+             dynamicOpeningBalance = currentBalance - balanceAdjustment;
+          }
           closingBalance = dynamicOpeningBalance + grandTotal;
         }
 

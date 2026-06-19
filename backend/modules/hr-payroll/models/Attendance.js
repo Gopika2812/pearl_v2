@@ -45,6 +45,15 @@ const attendanceSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    punchLog: [{
+      action: { type: String, enum: ["Present", "Leave"] },
+      time: Date,
+      location: {
+        lat: Number,
+        lng: Number,
+        address: String,
+      }
+    }],
     comment: {
       type: String,
     },

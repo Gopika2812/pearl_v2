@@ -23,6 +23,9 @@ const BranchInventoryAging = () => {
   // Data State
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalRecords, setTotalRecords] = useState(0);
 
   // Edit State
   const [editingRowKey, setEditingRowKey] = useState(null);
@@ -133,11 +136,11 @@ const BranchInventoryAging = () => {
   }, [rows, sortConfig]);
 
   // Fetch data from backend
-  const fetchBatchInventory = async () => {
+  const fetchBatchInventory = async (page = 1) => {
     if (!currentBranch?._id) return;
     setLoading(true);
     try {
-      let url = `${API_BASE}/products/batch-inventory?branchId=${currentBranch._id}`;
+      let url = `${API_BASE}/products/batch-inventory?branchId=${currentBranch._id}&page=${page}&limit=100`;
       
       if (search.trim()) url += `&search=${encodeURIComponent(search.trim())}`;
       if (selectedGroup) url += `&productGroupId=${selectedGroup}`;
@@ -152,6 +155,10 @@ const BranchInventoryAging = () => {
       const data = await res.json();
       if (data.success) {
         setRows(data.data || []);
+        if (data.pagination) {
+          setTotalPages(data.pagination.totalPages);
+          setTotalRecords(data.pagination.totalRecords);
+        }
       } else {
         toast.error(data.message || "Failed to fetch inventory report");
       }
@@ -164,13 +171,14 @@ const BranchInventoryAging = () => {
   };
 
   useEffect(() => {
-    fetchBatchInventory();
-  }, [currentBranch?._id, selectedGroup, selectedCategory, dateFilterType, startDate, endDate]);
+    fetchBatchInventory(currentPage);
+  }, [currentBranch?._id, selectedGroup, selectedCategory, dateFilterType, startDate, endDate, currentPage]);
 
   // Handle Search Input Enter or Manual Trigger
   const handleSearchKeyPress = (e) => {
     if (e.key === "Enter") {
-      fetchBatchInventory();
+      setCurrentPage(1);
+      fetchBatchInventory(1);
     }
   };
 
@@ -182,6 +190,7 @@ const BranchInventoryAging = () => {
     setDateFilterType("none");
     setStartDate("");
     setEndDate("");
+    setCurrentPage(1);
   };
 
   // Summary Metrics
@@ -398,7 +407,7 @@ const BranchInventoryAging = () => {
 
           <div className="flex items-center gap-2 relative">
             <button
-              onClick={fetchBatchInventory}
+              onClick={() => fetchBatchInventory(currentPage)}
               className="bg-white text-slate-600 border border-slate-200 px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 hover:bg-slate-50 active:scale-95 transition"
             >
               <FaSync className={loading ? "animate-spin text-[#319bab]" : ""} /> Refresh
@@ -791,7 +800,30 @@ const BranchInventoryAging = () => {
           )}
         </div>
 
-
+        {/* PAGINATION UI */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between bg-white p-4 rounded-3xl shadow-sm border border-slate-100 mt-4">
+            <span className="text-xs font-bold text-slate-500">
+              Showing page <span className="text-[#319bab]">{currentPage}</span> of {totalPages}
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                disabled={currentPage === 1}
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-slate-50 text-slate-600 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition"
+              >
+                Previous
+              </button>
+              <button
+                disabled={currentPage === totalPages}
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-[#319bab] text-white hover:bg-[#257d8a] disabled:opacity-50 disabled:cursor-not-allowed transition shadow-sm"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
 
       </div>
     </div>

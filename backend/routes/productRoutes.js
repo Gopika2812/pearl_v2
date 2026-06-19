@@ -1573,7 +1573,16 @@ router.get("/batch-inventory", auth, async (req, res) => {
     }
 
     // 1. Fetch products matching query
-    const products = await Product.find(query).populate("productGroup").lean();
+    const totalRecords = await Product.countDocuments(query);
+    let productsQuery = Product.find(query).populate("productGroup").sort({ name: 1 });
+    
+    const limitNum = parseInt(req.query.limit, 10) || 100;
+    const pageNum = parseInt(req.query.page, 10) || 1;
+    const skipNum = (pageNum - 1) * limitNum;
+    
+    productsQuery = productsQuery.skip(skipNum).limit(limitNum);
+    
+    const products = await productsQuery.lean();
     const productIds = products.map(p => p._id);
 
     // 2. Fetch all Purchase Orders for this branch to calculate purchased quantities per batch
@@ -1718,7 +1727,13 @@ router.get("/batch-inventory", auth, async (req, res) => {
 
     res.json({
       success: true,
-      data: rows
+      data: rows,
+      pagination: {
+        currentPage: pageNum,
+        totalPages: Math.ceil(totalRecords / limitNum),
+        totalRecords,
+        limit: limitNum
+      }
     });
   } catch (error) {
     console.error("Error in batch-inventory:", error);
