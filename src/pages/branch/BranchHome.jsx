@@ -484,7 +484,7 @@ export default function BranchHome() {
                         <div className="w-14 h-14 bg-amber-500 text-white rounded-full flex items-center justify-center shadow-lg shadow-amber-100 mx-auto text-xl">
                           <FaRunning />
                         </div>
-                        <p className="text-xs font-black text-amber-600 uppercase tracking-wider">SHIFT COMPLETED</p>
+                        <p className="text-xs font-black text-amber-600 uppercase tracking-wider">CURRENTLY OUT</p>
                       </div>
                     ) : todayAttendance?.status === "Absent" ? (
                       <div className="space-y-2 animate-in zoom-in duration-500">
@@ -508,28 +508,28 @@ export default function BranchHome() {
                     <div className="grid grid-cols-2 gap-3">
                       <button
                         onClick={() => handleMarkAttendance("Present")}
-                        disabled={isPresent || isFinished || fetchingLocation}
+                        disabled={isPresent || fetchingLocation}
                         className={`py-4 px-4 rounded-2xl flex flex-col items-center justify-center gap-1.5 text-[10px] font-black uppercase tracking-wider transition duration-300 ${
-                          isPresent || isFinished
+                          isPresent
                           ? "bg-slate-100 text-slate-300 cursor-not-allowed"
                           : "bg-white text-emerald-600 border-2 border-emerald-100 hover:border-emerald-500 hover:bg-emerald-50 shadow-[0_4px_0_0_#10b98115] active:translate-y-0.5 active:shadow-none"
                         }`}
                       >
                         <FaCheckCircle className="text-base" />
-                        <span>{fetchingLocation ? "Capturing..." : isPresent ? "IN RECORDED" : "IN (GPS)"}</span>
+                        <span>{fetchingLocation ? "Capturing..." : isPresent ? "IN RECORDED" : "CLOCK IN (GPS)"}</span>
                       </button>
 
                       <button
                         onClick={() => handleMarkAttendance("Leave")}
-                        disabled={isFinished || (!isPresent && !todayAttendance) || fetchingLocation}
+                        disabled={!isPresent || fetchingLocation}
                         className={`py-4 px-4 rounded-2xl flex flex-col items-center justify-center gap-1.5 text-[10px] font-black uppercase tracking-wider transition duration-300 ${
-                          isFinished || (!isPresent && !todayAttendance)
+                          !isPresent
                           ? "bg-slate-100 text-slate-300 cursor-not-allowed"
                           : "bg-white text-amber-600 border-2 border-amber-100 hover:border-amber-500 hover:bg-amber-50 shadow-[0_4px_0_0_#f59e0b15] active:translate-y-0.5 active:shadow-none"
                         }`}
                       >
                         <FaRunning className="text-base" />
-                        <span>{isLeft ? "SHIFT FINISHED" : "OUT"}</span>
+                        <span>{isLeft ? "OUT RECORDED" : "CLOCK OUT"}</span>
                       </button>
                     </div>
 
