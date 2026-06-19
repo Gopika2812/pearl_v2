@@ -323,8 +323,14 @@ const BranchCustomerLedger = () => {
 
   return (
     <div className="space-y-6">      {customer?.linkedVendorId && (
-        <div className="bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-100 p-6 rounded-3xl shadow-sm flex items-center justify-between animate-in fade-in slide-in-from-top-4 duration-500">
+        <div className="bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-100 p-6 rounded-3xl shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4 animate-in fade-in slide-in-from-top-4 duration-500">
           <div className="flex items-center gap-4">
+            <button
+              onClick={() => navigate(-1)}
+              className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-indigo-400 hover:text-indigo-600 hover:shadow-md transition-all border border-indigo-100 mr-2"
+            >
+              <FaArrowLeft />
+            </button>
             <div className="bg-indigo-600 text-white p-3 rounded-2xl shadow-lg">
               <FaExchangeAlt />
             </div>
@@ -334,6 +340,20 @@ const BranchCustomerLedger = () => {
                 Linked Vendor: <span className="text-indigo-800">{customer.linkedVendorId?.name}</span> • Showing both Sales & Purchases
               </p>
             </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-3 w-full md:w-auto mt-4 md:mt-0">
+            <button
+              onClick={handleExportPDF}
+              className="group flex-1 md:flex-none items-center justify-center gap-2 bg-white border border-indigo-100 text-indigo-700 px-5 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-indigo-50 transition-all shadow-sm"
+            >
+              <FaDownload className="text-indigo-500" /> PDF
+            </button>
+            <button
+              onClick={handleExportExcel}
+              className="group flex-1 md:flex-none items-center justify-center gap-2 bg-white border border-indigo-100 text-emerald-700 px-5 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-emerald-50 transition-all shadow-sm"
+            >
+              <FaDownload className="text-emerald-500" /> Excel
+            </button>
           </div>
         </div>
       )}
