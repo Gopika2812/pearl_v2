@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { FaChevronDown, FaFileAlt, FaSync, FaSearch } from "react-icons/fa";
+import { FaChevronDown, FaFileAlt, FaSync, FaSearch, FaFileExcel } from "react-icons/fa";
 import { toast } from "react-toastify";
+import * as XLSX from "xlsx";
 import { API_BASE, fetchWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 import DateRangeDropdown from "../../components/common/DateRangeDropdown";
@@ -24,6 +25,7 @@ const BranchPurchaseInvoices = () => {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [filterFromDate, setFilterFromDate] = useState(new Date().toISOString().split('T')[0]);
   const [filterToDate, setFilterToDate] = useState(new Date().toISOString().split('T')[0]);
+  const [exporting, setExporting] = useState(false);
 
   // Search debounce logic
   useEffect(() => {
@@ -72,6 +74,92 @@ const BranchPurchaseInvoices = () => {
     fetchInvoices();
   }, [currentBranch?._id, debouncedSearch, filterFromDate, filterToDate]);
 
+  const handleExportDetailedExcel = async () => {
+    if (!currentBranch?._id) return;
+    setExporting(true);
+    try {
+      // 1. Fetch matching invoices for export (to ensure we have all items without pagination if any)
+      let url = `${API_BASE}/purchase-invoices?branchId=${currentBranch._id}`;
+      if (debouncedSearch) url += `&search=${encodeURIComponent(debouncedSearch)}`;
+      if (filterFromDate) url += `&fromDate=${filterFromDate}`;
+      if (filterToDate) url += `&toDate=${filterToDate}`;
+
+      const res = await fetchWithAuth(url);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to fetch for export");
+
+      let invoicesToExport = data || [];
+      invoicesToExport = invoicesToExport.filter(inv => inv.status !== "CANCELLED");
+
+      if (invoicesToExport.length === 0) {
+        toast.warn("No active purchase invoices found in this range to export.");
+        return;
+      }
+
+      // 2. Prepare Excel rows (Itemized details)
+      const headerRow = [
+        "Date", "Invoice ID", "Vendor Name", "Vendor Bill No", 
+        "Bill Date", "Product Name", "Batch", "Expiry Date", "HSN Code", 
+        "Quantity", "Purchase Price", "Taxable Value", 
+        "CGST", "SGST", "IGST", "GST %", "Total Price", 
+        "Invoice Subtotal", "Invoice Total Tax", "Invoice Extra Charges", "Invoice Grand Total", "Status"
+      ];
+      
+      const rows = [headerRow];
+
+      invoicesToExport.forEach((inv) => {
+        const invNo = inv.purchaseInvoiceId || "-";
+        const vendorName = inv.vendor || "-";
+        const vendorBillNo = inv.vendorBillNo || "-";
+        const invDate = inv.createdAt ? new Date(inv.createdAt).toLocaleDateString('en-IN') : "-";
+        const billDate = inv.vendorDate ? new Date(inv.vendorDate).toLocaleDateString('en-IN') : "-";
+        const status = inv.status || "INVOICED";
+
+        const items = inv.items || [];
+        
+        items.forEach((item) => {
+          const rowData = [
+            invDate,
+            invNo,
+            vendorName,
+            vendorBillNo,
+            billDate,
+            item.name || "",
+            item.batch || "",
+            item.expiryDate ? new Date(item.expiryDate).toLocaleDateString('en-IN') : "",
+            item.hsn || "",
+            item.qty || 0,
+            item.purchasePrice || 0,
+            item.rowPrice || 0, // Pre-tax
+            item.cgst || ((item.gst || 0) / 2) || 0,
+            item.sgst || ((item.gst || 0) / 2) || 0,
+            item.igst || 0,
+            item.gst || 0,
+            item.total || 0,
+            inv.subtotal || 0,
+            inv.totalTax || 0,
+            inv.extraExpenseAmount || 0,
+            inv.grandTotal || 0,
+            status
+          ];
+          rows.push(rowData);
+        });
+      });
+
+      const worksheet = XLSX.utils.aoa_to_sheet(rows);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Purchase_Export");
+      XLSX.writeFile(workbook, `Purchase_Export_${new Date().toISOString().split('T')[0]}.xlsx`);
+      
+      toast.success("Excel export generated successfully!");
+    } catch (err) {
+      console.error("Export Error:", err);
+      toast.error("Export failed: " + err.message);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const toggleExpanded = (invoiceId) => {
     setExpandedInvoices((prev) => ({
       ...prev,
@@ -96,12 +184,21 @@ const BranchPurchaseInvoices = () => {
                 <p className="text-xs text-gray-500 uppercase tracking-wide">Finalized Records</p>
               </div>
             </div>
-            <button
-              onClick={fetchInvoices}
-              className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition font-bold text-sm"
-            >
-              <FaSync className={loading ? "animate-spin" : ""} /> Refresh
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleExportDetailedExcel}
+                disabled={exporting}
+                className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition font-bold text-sm"
+              >
+                {exporting ? <FaSync className="animate-spin" /> : <FaFileExcel />} Export GST
+              </button>
+              <button
+                onClick={fetchInvoices}
+                className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition font-bold text-sm"
+              >
+                <FaSync className={loading ? "animate-spin" : ""} /> Refresh
+              </button>
+            </div>
           </div>
         </div>
 

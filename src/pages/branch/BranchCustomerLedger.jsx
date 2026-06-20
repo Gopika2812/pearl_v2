@@ -187,24 +187,40 @@ const BranchCustomerLedger = () => {
 
       const pdfWidth = pdf.internal.pageSize.getWidth(); // 148mm
       const pdfHeight = pdf.internal.pageSize.getHeight(); // 210mm
+      
+      const margin = 10; // 10mm margin on all sides
+      const contentWidth = pdfWidth - (margin * 2);
+      const contentHeight = pdfHeight - (margin * 2);
 
-      const imgWidth = pdfWidth;
+      const imgWidth = contentWidth;
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
 
       let heightLeft = imgHeight;
-      let position = 0;
+      let position = margin;
       let pageNumber = 1;
 
       // First Page
-      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight, undefined, 'FAST');
-      heightLeft -= pdfHeight;
+      pdf.addImage(imgData, 'PNG', margin, position, imgWidth, imgHeight, undefined, 'FAST');
+      heightLeft -= contentHeight;
+      
+      // Cover the bottom margin on the first page if it spills over
+      if (heightLeft > 0) {
+        pdf.setFillColor(255, 255, 255);
+        pdf.rect(0, pdfHeight - margin, pdfWidth, margin, 'F');
+      }
 
       // Subsequent Pages
       while (heightLeft > 0) {
-        position = heightLeft - imgHeight;
+        position = position - contentHeight;
         pdf.addPage();
-        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight, undefined, 'FAST');
-        heightLeft -= pdfHeight;
+        pdf.addImage(imgData, 'PNG', margin, position, imgWidth, imgHeight, undefined, 'FAST');
+        
+        // Cover top and bottom margins with white rectangles so the shifted image doesn't show in the margins
+        pdf.setFillColor(255, 255, 255);
+        pdf.rect(0, 0, pdfWidth, margin, 'F'); // Top margin
+        pdf.rect(0, pdfHeight - margin, pdfWidth, margin, 'F'); // Bottom margin
+        
+        heightLeft -= contentHeight;
         pageNumber++;
       }
 
