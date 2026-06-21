@@ -106,6 +106,18 @@ const branchSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.Mixed,
       default: {},
     },
+    latitude: {
+      type: Number,
+      default: null,
+    },
+    longitude: {
+      type: Number,
+      default: null,
+    },
+    attendanceRadius: {
+      type: Number,
+      default: 500, // Radius in meters
+    },
   },
   { timestamps: true }
 );

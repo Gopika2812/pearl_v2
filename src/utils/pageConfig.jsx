@@ -87,7 +87,7 @@ export const PAGE_CONFIG = [
         ]
       },
       { id: "spotted-ledger", name: "Spotted Customers Ledger", path: "/branch/spotted-customer-ledger", icon: "list" },
-      { id: "customers", name: "Customers (Debtors)", path: "/branch/customers", icon: "users", permissionFields: ["name", "gstin", "margin", "debit", "credit", "action_receipt", "action_return", "action_ledger"] },
+      { id: "customers", name: "Customers (Debtors)", path: "/branch/customers", icon: "users", hideInSidebar: true, permissionFields: ["name", "gstin", "margin", "debit", "credit", "action_receipt", "action_return", "action_ledger"] },
     ]
   },
   {
@@ -133,7 +133,7 @@ export const PAGE_CONFIG = [
     category: "Accounts",
     items: [
       { id: "locked-prices", name: "Locked Prices", path: "/branch/locked-prices", icon: "lock", permissionFields: ["productInfo", "customer", "cost", "stdPrice", "lockedPrice", "margin", "action_edit", "action_delete"] },
-      { id: "ledgers", name: "Ledger", path: "/branch/ledger", icon: "book", permissionFields: ["details", "hierarchy", "nature", "tax", "debit", "credit", "net"] },
+      { id: "ledgers", name: "Ledger", path: "/branch/ledger", icon: "book", hideInSidebar: true, permissionFields: ["details", "hierarchy", "nature", "tax", "debit", "credit", "net"] },
 
       { id: "journals", name: "Journal Master", path: "/branch/journals", icon: "book", permissionFields: ["name", "group", "gstin", "type", "debit", "credit", "action_edit"] },
 

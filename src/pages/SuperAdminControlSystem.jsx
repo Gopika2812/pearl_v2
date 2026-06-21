@@ -16,7 +16,7 @@ import {
   FaTrash,
   FaTruck,
   FaUndo,
-  FaUsers, FaUsersCog
+  FaUsers, FaUsersCog, FaMapMarkerAlt
 } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
@@ -170,7 +170,7 @@ export default function SuperAdminControlSystem() {
 
   const toggleActionPermission = (action) => {
     setActionPermissions(prev => {
-      const isCurrentlyEnabled = (action === "bypassSalesOrderLock" || action === "allowDummyBills" || action === "action_move_date")
+      const isCurrentlyEnabled = (action === "bypassSalesOrderLock" || action === "allowDummyBills" || action === "action_move_date" || action === "allowRemoteAttendance")
         ? prev[action] === true
         : prev[action] !== false;
       const newVal = !isCurrentlyEnabled;
@@ -365,7 +365,7 @@ export default function SuperAdminControlSystem() {
 
       // 2. Actions
       const newActionPerms = {};
-      ["edit", "delete", "restock", "editPreviousDay", "action_pdf", "action_ewb", "action_cancel", "action_return", "create_shortcuts", "export", "editInvoiceItems", "editSellingPrice", "allowDummyBills", "action_move_date"].forEach(a => newActionPerms[a] = true);
+      ["edit", "delete", "restock", "editPreviousDay", "action_pdf", "action_ewb", "action_cancel", "action_return", "create_shortcuts", "export", "editInvoiceItems", "editSellingPrice", "allowDummyBills", "action_move_date", "allowRemoteAttendance"].forEach(a => newActionPerms[a] = true);
       setActionPermissions(newActionPerms);
 
       // 3. Field Visibility
@@ -386,7 +386,7 @@ export default function SuperAdminControlSystem() {
       setUserPermissions([]);
 
       const newActionPerms = {};
-      ["edit", "delete", "restock", "editPreviousDay", "action_pdf", "action_ewb", "action_cancel", "action_return", "create_shortcuts", "export", "editInvoiceItems", "editSellingPrice", "allowDummyBills", "action_move_date"].forEach(a => newActionPerms[a] = false);
+      ["edit", "delete", "restock", "editPreviousDay", "action_pdf", "action_ewb", "action_cancel", "action_return", "create_shortcuts", "export", "editInvoiceItems", "editSellingPrice", "allowDummyBills", "action_move_date", "allowRemoteAttendance"].forEach(a => newActionPerms[a] = false);
       setActionPermissions(newActionPerms);
 
       const newFieldPerms = {};
@@ -714,9 +714,10 @@ export default function SuperAdminControlSystem() {
                         { id: "editSellingPrice", name: "Edit Selling Price", icon: <FaDollarSign /> },
                         { id: "bypassSalesOrderLock", name: "Bypass SO Lock", icon: <FaLock /> },
                         { id: "allowDummyBills", name: "Allow Dummy Bills", icon: <FaFileInvoice /> },
-                        { id: "action_move_date", name: "Move Date (SO)", icon: <FaCalendar /> }
+                        { id: "action_move_date", name: "Move Date (SO)", icon: <FaCalendar /> },
+                        { id: "allowRemoteAttendance", name: "Remote Attendance", icon: <FaMapMarkerAlt /> }
                       ].map(action => {
-                        const isEnabled = (action.id === "bypassSalesOrderLock" || action.id === "allowDummyBills" || action.id === "action_move_date")
+                        const isEnabled = (action.id === "bypassSalesOrderLock" || action.id === "allowDummyBills" || action.id === "action_move_date" || action.id === "allowRemoteAttendance")
                           ? actionPermissions[action.id] === true
                           : actionPermissions[action.id] !== false;
                         return (

@@ -26,6 +26,46 @@ export const markAttendance = async (req, res) => {
       return res.status(400).json({ success: false, message: "Invalid ID format for employee or branch" });
     }
 
+    const branch = await Branch.findById(branchId);
+    if (!branch) {
+      return res.status(404).json({ success: false, message: "Branch not found" });
+    }
+
+    // Check if employee is exempt from geo-fencing
+    const employee = await BranchUser.findById(employeeId);
+    let isExempt = false;
+    if (employee && employee.actionPermissions && employee.actionPermissions.get("allowRemoteAttendance")) {
+      isExempt = true;
+    }
+
+    // Geo-fencing check
+    if (branch.latitude && branch.longitude && !isExempt) {
+      const userLat = Number(location?.lat);
+      const userLng = Number(location?.lng);
+      
+      if (isNaN(userLat) || isNaN(userLng) || userLat === 0 || userLng === 0) {
+        return res.status(400).json({ success: false, message: "Location required. Cannot verify office proximity." });
+      }
+
+      const R = 6371e3; // Earth radius in metres
+      const φ1 = branch.latitude * Math.PI/180;
+      const φ2 = userLat * Math.PI/180;
+      const Δφ = (userLat - branch.latitude) * Math.PI/180;
+      const Δλ = (userLng - branch.longitude) * Math.PI/180;
+
+      const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+                Math.cos(φ1) * Math.cos(φ2) *
+                Math.sin(Δλ/2) * Math.sin(Δλ/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+      const distance = R * c; // in metres
+      const radius = branch.attendanceRadius || 500;
+
+      if (distance > radius) {
+        return res.status(403).json({ success: false, message: "You are out of your office." });
+      }
+    }
+
     let markStr;
     try {
       markStr = new Date(date).toISOString().split("T")[0];

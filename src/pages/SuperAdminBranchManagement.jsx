@@ -16,6 +16,7 @@ const SuperAdminBranchManagement = () => {
   const [loading, setLoading] = useState(true);
   const [showBranchModal, setShowBranchModal] = useState(false);
   const [editingBranch, setEditingBranch] = useState(null);
+  const [resolvedAddressPreview, setResolvedAddressPreview] = useState("");
 
   const [branchForm, setBranchForm] = useState({
     name: "",
@@ -32,6 +33,9 @@ const SuperAdminBranchManagement = () => {
     isMainBranch: false,
     manager: "",
     status: "ACTIVE",
+    latitude: "",
+    longitude: "",
+    attendanceRadius: 500,
   });
 
   useEffect(() => {
@@ -73,8 +77,12 @@ const SuperAdminBranchManagement = () => {
       isMainBranch: false,
       manager: "",
       status: "ACTIVE",
+      latitude: "",
+      longitude: "",
+      attendanceRadius: 500,
     });
     setEditingBranch(null);
+    setResolvedAddressPreview("");
   };
 
   const handleCreateBranch = async (e) => {
@@ -115,7 +123,11 @@ const SuperAdminBranchManagement = () => {
     setBranchForm({
       ...branch,
       tokenBlockTime: branch.tokenBlockTime || 120,
+      latitude: branch.latitude || "",
+      longitude: branch.longitude || "",
+      attendanceRadius: branch.attendanceRadius || 500,
     });
+    setResolvedAddressPreview("");
     setShowBranchModal(true);
   };
 
@@ -299,6 +311,13 @@ const SuperAdminBranchManagement = () => {
                         <div className="w-7 h-7 rounded-lg bg-white shadow-sm flex items-center justify-center text-gray-400 shrink-0"><FaMapMarkerAlt size={10} /></div>
                         {selectedBranch.address || "No address provided"}
                       </div>
+                      {(selectedBranch.latitude || selectedBranch.longitude) && (
+                        <div className="mt-2 flex gap-4 text-[10px] font-bold text-gray-500 uppercase tracking-widest">
+                          <span>Lat: {selectedBranch.latitude}</span>
+                          <span>Lng: {selectedBranch.longitude}</span>
+                          <span>Radius: {selectedBranch.attendanceRadius || 500}m</span>
+                        </div>
+                      )}
                     </div>
 
                     <div className="space-y-1">
@@ -482,6 +501,119 @@ const SuperAdminBranchManagement = () => {
                   className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary focus:bg-white transition-all outline-none font-bold text-sm"
                 />
               </div>
+
+              <div className="flex items-center justify-between">
+                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Geo-Fencing Boundaries</label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (branchForm.latitude && branchForm.longitude) {
+                        toast.info("Resolving address...");
+                        try {
+                          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${branchForm.latitude}&lon=${branchForm.longitude}&zoom=18&addressdetails=1`);
+                          const data = await res.json();
+                          if (data && data.display_name) {
+                            setResolvedAddressPreview(data.display_name);
+                            toast.success("Address resolved!");
+                          } else {
+                            toast.error("Could not find address for these coordinates");
+                          }
+                        } catch (e) {
+                          console.warn("Could not fetch address details", e);
+                          toast.error("Failed to fetch address");
+                        }
+                      } else {
+                        toast.warning("Please enter both latitude and longitude first");
+                      }
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-secondary/10 text-secondary hover:bg-secondary hover:text-white rounded-lg text-[9px] font-black uppercase tracking-widest transition-all"
+                  >
+                    <FaGlobe /> Resolve Address
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (navigator.geolocation) {
+                        toast.info("Fetching location...");
+                        navigator.geolocation.getCurrentPosition(
+                          async (pos) => {
+                            const lat = pos.coords.latitude;
+                            const lng = pos.coords.longitude;
+                            
+                            try {
+                              const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`);
+                              const data = await res.json();
+                              if (data && data.display_name) {
+                                setResolvedAddressPreview(data.display_name);
+                              }
+                            } catch (e) {
+                              console.warn("Could not fetch address details", e);
+                            }
+
+                            setBranchForm({
+                              ...branchForm,
+                              latitude: lat,
+                              longitude: lng
+                            });
+                            toast.success("Location captured successfully");
+                          },
+                          (err) => {
+                            toast.error("Failed to get location: " + err.message);
+                          },
+                          { enableHighAccuracy: true }
+                        );
+                      } else {
+                        toast.error("Geolocation is not supported by your browser");
+                      }
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 text-primary hover:bg-primary hover:text-white rounded-lg text-[9px] font-black uppercase tracking-widest transition-all"
+                  >
+                    <FaMapMarkerAlt /> Use My Location
+                  </button>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Latitude</label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={branchForm.latitude}
+                    onChange={(e) => setBranchForm({ ...branchForm, latitude: parseFloat(e.target.value) || "" })}
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary focus:bg-white transition-all outline-none font-bold text-sm"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Longitude</label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={branchForm.longitude}
+                    onChange={(e) => setBranchForm({ ...branchForm, longitude: parseFloat(e.target.value) || "" })}
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary focus:bg-white transition-all outline-none font-bold text-sm"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Radius (meters)</label>
+                  <input
+                    type="number"
+                    value={branchForm.attendanceRadius}
+                    onChange={(e) => setBranchForm({ ...branchForm, attendanceRadius: parseInt(e.target.value) || 500 })}
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary focus:bg-white transition-all outline-none font-bold text-sm"
+                  />
+                </div>
+              </div>
+
+              {resolvedAddressPreview && (
+                <div className="p-3 bg-indigo-50 border border-indigo-100 rounded-xl flex gap-3 text-indigo-700 text-[10px] font-bold leading-relaxed items-start">
+                  <FaMapMarkerAlt className="shrink-0 mt-0.5" />
+                  <div>
+                    <span className="text-indigo-400 uppercase tracking-widest text-[8px] font-black block mb-0.5">Map Reference</span>
+                    {resolvedAddressPreview}
+                  </div>
+                </div>
+              )}
 
               <div className="flex items-center gap-3 bg-gray-50 p-4 rounded-xl border border-gray-100">
                  <input

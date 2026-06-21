@@ -88,7 +88,7 @@ const BranchSidebar = ({ isOpen, onClose, isBlocked }) => {
   };
 
   const renderMenuItem = (item, isMobile = false) => {
-    if (!isAllowed(item)) return null;
+    if (!isAllowed(item) || item.hideInSidebar) return null;
     const active = location.pathname === item.path;
     const isDisabled = isBlocked && item.id !== "tokenization";
     
