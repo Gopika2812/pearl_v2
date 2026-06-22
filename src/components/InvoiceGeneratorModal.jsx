@@ -83,7 +83,8 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
     unit: "",
     gst: 0,
     mrp: 0,
-    discountPercent: 0
+    discountPercent: 0,
+    isIgst: false
   });
 
   useEffect(() => {
@@ -303,6 +304,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
       gst: product.gst || 0,
       mrp: product.mrp || 0,
       qty: 1,
+      isIgst: product.igst > 0 || false,
     });
     setItemSearch(product.name);
     setShowItemDropdown(false);
@@ -339,9 +341,9 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
       sellingPrice: newItem.sellingPrice,
       unit: newItem.unit,
       gst: newItem.gst,
-      cgst: newItem.gst / 2,
-      sgst: newItem.gst / 2,
-      igst: 0,
+      cgst: newItem.isIgst ? 0 : newItem.gst / 2,
+      sgst: newItem.isIgst ? 0 : newItem.gst / 2,
+      igst: newItem.isIgst ? newItem.gst : 0,
       qty: Number(newItem.qty),
       confirmedQty: Number(newItem.qty),
       backOrderQty: 0,
@@ -363,7 +365,8 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
       unit: "",
       gst: 0,
       mrp: 0,
-      discountPercent: 0
+      discountPercent: 0,
+      isIgst: false
     });
     setItemSearch("");
     toast.success(`Added ${itemToAdd.name}`);
@@ -432,9 +435,21 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
   const handleGstChange = (index, newGst) => {
     const updated = [...editedItems];
     const gst = Math.max(0, parseFloat(newGst) || 0);
+    const isIgst = updated[index].igst > 0;
     updated[index].gst = gst;
-    updated[index].cgst = gst / 2;
-    updated[index].sgst = gst / 2;
+    updated[index].cgst = isIgst ? 0 : gst / 2;
+    updated[index].sgst = isIgst ? 0 : gst / 2;
+    updated[index].igst = isIgst ? gst : 0;
+    setEditedItems(updated);
+  };
+
+  const handleGstTypeChange = (index, type) => {
+    const updated = [...editedItems];
+    const isIgst = type === 'igst';
+    const gst = updated[index].gst || 0;
+    updated[index].cgst = isIgst ? 0 : gst / 2;
+    updated[index].sgst = isIgst ? 0 : gst / 2;
+    updated[index].igst = isIgst ? gst : 0;
     setEditedItems(updated);
   };
 
@@ -1491,13 +1506,20 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
                       </span>
                       <span className="font-bold text-gray-500">HSN: <span className="text-gray-700">{newItem.hsn}</span></span>
                       <span className="font-bold text-gray-500 flex items-center gap-1">
-                        GST:
+                        <select
+                          value={newItem.isIgst ? 'igst' : 'gst'}
+                          onChange={(e) => setNewItem({ ...newItem, isIgst: e.target.value === 'igst' })}
+                          className="p-1 border rounded bg-white font-black text-gray-700 outline-none focus:ring-1 focus:ring-green-400 uppercase"
+                        >
+                          <option value="gst">GST</option>
+                          <option value="igst">IGST</option>
+                        </select>
                         <input
                           type="number"
                           value={newItem.gst}
                           onChange={(e) => setNewItem({ ...newItem, gst: parseFloat(e.target.value) || 0 })}
                           className="w-14 p-1 border rounded bg-white font-black text-gray-700 outline-none focus:ring-1 focus:ring-green-400"
-                          placeholder="GST"
+                          placeholder="GST %"
                         />
                         %
                       </span>
@@ -1543,16 +1565,30 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
                           />
                         </td>
                         <td className="p-3 text-center">
-                          <input
-                            type="number"
-                            value={item.gst || 0}
-                            onChange={(e) => handleGstChange(idx, e.target.value)}
-                            onBlur={() => syncGstToProduct(idx)}
-                            placeholder="GST"
-                            className="w-14 p-1.5 text-[10px] font-black border-2 border-slate-100 rounded text-center text-blue-600 focus:border-blue-400 focus:outline-none transition-all"
-                            title="Edit GST % (Updates Product Master on blur)"
-                            disabled={!canEditGst}
-                          />
+                          <div className="flex flex-col items-center gap-1">
+                            <select
+                              value={item.igst > 0 ? 'igst' : 'gst'}
+                              onChange={(e) => handleGstTypeChange(idx, e.target.value)}
+                              className="w-16 p-1 text-[9px] font-black border-2 border-slate-100 rounded text-center text-gray-600 focus:border-blue-400 focus:outline-none transition-all uppercase"
+                              disabled={!canEditGst}
+                            >
+                              <option value="gst">GST</option>
+                              <option value="igst">IGST</option>
+                            </select>
+                            <div className="flex items-center gap-0.5">
+                              <input
+                                type="number"
+                                value={item.gst || 0}
+                                onChange={(e) => handleGstChange(idx, e.target.value)}
+                                onBlur={() => syncGstToProduct(idx)}
+                                placeholder="GST"
+                                className="w-12 p-1 text-[10px] font-black border-2 border-slate-100 rounded text-center text-blue-600 focus:border-blue-400 focus:outline-none transition-all"
+                                title="Edit GST % (Updates Product Master on blur)"
+                                disabled={!canEditGst}
+                              />
+                              <span className="text-[9px] font-bold text-gray-400">%</span>
+                            </div>
+                          </div>
                         </td>
                         <td className="p-3 text-right text-gray-500">
                           <div className="flex flex-col items-end gap-1">

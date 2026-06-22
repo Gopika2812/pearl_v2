@@ -133,7 +133,7 @@ const AttendanceRecordPage = () => {
   };
 
   return (
-    <div className="space-y-8 pt-10 md:pt-14 px-4 md:px-0 max-w-7xl mx-auto">
+    <div className="space-y-8 pt-10 md:pt-14 px-4 md:px-8 w-full">
       {/* Header Section */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
         <div>
@@ -220,7 +220,7 @@ const AttendanceRecordPage = () => {
                     </td>
                     <td className="px-8 py-6">
                       <span className={`px-3 py-1.5 rounded-lg border text-[10px] font-black uppercase tracking-widest ${getStatusColor(log.status)}`}>
-                        {log.status}
+                        {log.status === "Leave" ? "OUT" : log.status}
                       </span>
                     </td>
                     <td className="px-8 py-6">

@@ -48,11 +48,11 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
       setCustomer({
         _id: editingItem._id || null,
         name: editingItem.name || "",
-        customerCategories: Array.isArray(editingItem.customerCategories) 
-          ? editingItem.customerCategories.map(c => typeof c === 'object' ? c._id : c) 
+        customerCategories: Array.isArray(editingItem.customerCategories)
+          ? editingItem.customerCategories.map(c => typeof c === 'object' ? c._id : c)
           : (editingItem.customerCategory ? [typeof editingItem.customerCategory === 'object' ? editingItem.customerCategory._id : editingItem.customerCategory] : []),
-        customerGroups: Array.isArray(editingItem.customerGroups) 
-          ? editingItem.customerGroups.map(g => typeof g === 'object' ? g._id : g) 
+        customerGroups: Array.isArray(editingItem.customerGroups)
+          ? editingItem.customerGroups.map(g => typeof g === 'object' ? g._id : g)
           : (editingItem.customerGroup ? [typeof editingItem.customerGroup === 'object' ? editingItem.customerGroup._id : editingItem.customerGroup] : []),
         whatsapp: editingItem.whatsapp || "",
         email: editingItem.email || "",
@@ -126,7 +126,7 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
       const defaultCategories = customerCategories
         .filter(c => c.name && c.name.toLowerCase() === "new customer")
         .map(c => c._id);
-        
+
       const defaultGroups = customerGroups
         .filter(g => g.name && g.name.toLowerCase() === "new customer")
         .map(g => g._id);
@@ -193,14 +193,14 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     const roundedCustomer = {
       ...customer,
       credit: Math.round(Number(customer.credit || 0)),
       debit: Math.round(Number(customer.debit || 0)),
       margin: Math.round(Number(customer.margin || 0) * 100) / 100,
     };
-    
+
     console.log("📝 CUSTOMER FORM DATA BEING SENT:");
     console.log("Name:", roundedCustomer.name);
     console.log("State:", roundedCustomer.state);
@@ -208,7 +208,7 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
     console.log("Pincode:", roundedCustomer.pincode);
     console.log("Full Data:", roundedCustomer);
     console.log("");
-    
+
     await onSave(roundedCustomer);
     onClose();
   };
@@ -254,14 +254,14 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
     return (
       <div className="fixed inset-0 bg-[#f8fafc] z-[160] flex flex-col p-6 overflow-y-auto animate-in zoom-in-95 duration-300">
         <div className="max-w-3xl mx-auto w-full space-y-8 pb-20">
-          
+
           <div className="bg-white rounded-3xl p-8 shadow-2xl border border-gray-100 text-center">
             <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-6">
               <FaCloudUploadAlt className="text-4xl" />
             </div>
             <h2 className="text-3xl font-black text-gray-900 tracking-tight">Bulk Upload Summary</h2>
             <p className="text-gray-400 font-bold uppercase tracking-widest text-xs mt-2">Data Processed Successfully</p>
-            
+
             <div className="grid grid-cols-3 gap-4 mt-10">
               <div className="bg-green-50/50 p-6 rounded-2xl border border-green-100">
                 <p className="text-3xl font-black text-green-700">{uploadResults.inserted}</p>
@@ -287,7 +287,7 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
                 </div>
                 <span className="px-3 py-1 bg-white text-red-600 rounded-full text-[10px] font-black">{uploadResults.skipped} FOUND</span>
               </div>
-              
+
               <div className="max-h-[400px] overflow-y-auto">
                 <table className="w-full text-left">
                   <thead className="bg-gray-50 sticky top-0">
@@ -320,7 +320,7 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
           )}
 
           <div className="flex gap-4">
-            <button 
+            <button
               onClick={() => {
                 setUploadResults(null);
                 onClose();
@@ -339,7 +339,7 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
 
   return (
     <div className="fixed inset-0 bg-[#f8fafc] z-[150] flex flex-col animate-in fade-in slide-in-from-bottom-5 duration-300">
-      
+
       {/* HEADER SECTION --- Sticky */}
       <div className="sticky top-0 z-20 bg-white/80 backdrop-blur-md border-b border-gray-100 px-6 py-4 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-4">
@@ -353,7 +353,7 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
             <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">Customer Relationship Management</p>
           </div>
         </div>
-        <button 
+        <button
           onClick={onClose}
           className="p-3 bg-gray-50 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-all duration-200 group active:scale-95 shadow-sm border border-gray-100"
         >
@@ -364,10 +364,10 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
       {/* MAIN CONTENT --- Full Screen Scrollable */}
       <div className="flex-1 overflow-y-auto px-6 py-8">
         <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
-          
+
           {/* LEFT SIDE: PRIMARY INFO & CONFIG */}
           <div className="lg:col-span-8 space-y-8">
-            
+
             {/* BULK UPLOAD INTEGRATION */}
             <div className="bg-white rounded-3xl p-1 shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
               <input
@@ -377,7 +377,7 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
                 id="customerBulkUpload"
                 onChange={handleBulkUpload}
               />
-              
+
               {/* Safe Mode Toggle */}
               <div className="px-8 pt-4 flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -400,7 +400,7 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
                 </button>
               </div>
 
-              <div 
+              <div
                 onClick={() => {
                   if (!isSafeMode) {
                     const confirmBal = window.confirm("⚠️ You are in BALANCING MODE. This will adjust Debit/Credit balances. Enable SAFE MODE for info-only updates. Proceed?");
@@ -411,15 +411,15 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
                 className="group flex flex-col md:flex-row items-center gap-6 p-8 cursor-pointer rounded-2xl relative overflow-hidden transition-all duration-300"
               >
                 <div className="absolute inset-0 bg-gradient-to-br from-green-50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                
+
                 <div className="bg-green-100 p-6 rounded-2xl text-green-600 group-hover:scale-110 group-hover:rotate-3 transition-all duration-500 shadow-inner z-10">
                   <FaCloudUploadAlt className="text-4xl" />
                 </div>
-                
+
                 <div className="flex-1 text-center md:text-left z-10">
                   <h4 className="text-green-800 font-black text-xl leading-tight">Fast-Track Bulk Upload</h4>
                   <p className="text-green-600/70 text-sm mt-1 font-medium">Instantly add hundreds of customers via Excel (.xlsx, .xls)</p>
-                  
+
                   <div className="mt-4 flex flex-wrap gap-2 justify-center md:justify-start">
                     {['Name', 'WhatsApp', 'Email', 'Address', 'Pincode', 'State Code', 'GSTIN', 'Margin', 'Debit'].map(tag => (
                       <span key={tag} className="px-3 py-1 bg-white/80 border border-green-100 text-green-700 rounded-lg text-[10px] font-bold shadow-sm">{tag}</span>
@@ -432,7 +432,7 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
 
             {/* MAIN FORM */}
             <form onSubmit={handleSubmit} id="customerForm" className="space-y-8">
-              
+
               {/* SECTION: BASIC IDENTITY */}
               <div className="bg-white rounded-3xl p-8 shadow-sm border border-gray-100 space-y-6">
                 <div className="flex items-center gap-3 pb-4 border-b border-gray-50">
@@ -496,7 +496,7 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
                       <span className="p-2 bg-purple-50 text-purple-500 rounded-lg"><FaPhoneAlt size={16} /></span>
                       <h4 className="text-gray-900 font-black text-sm tracking-widest uppercase">Connectivity</h4>
                     </div>
-                    
+
                     <div className="grid grid-cols-1 gap-6">
                       <div>
                         <label className={labelClass}>WhatsApp Number *</label>
@@ -528,7 +528,7 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
                       <span className="p-2 bg-orange-50 text-orange-500 rounded-lg"><FaMapMarkedAlt size={16} /></span>
                       <h4 className="text-gray-900 font-black text-sm tracking-widest uppercase">Physical Address</h4>
                     </div>
-                    
+
                     <div className="grid grid-cols-1 gap-6">
                       <div>
                         <label className={labelClass}>Street Address / Area</label>
@@ -616,9 +616,8 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
                         type="button"
                         onClick={handleFetchGstDetails}
                         disabled={isFetchingGst || !customer.gstin}
-                        className={`px-4 rounded-xl font-bold text-[10px] uppercase transition-all shadow-sm flex items-center gap-2 ${
-                          isFetchingGst ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-orange-500 text-white hover:bg-orange-600 active:scale-95 shadow-orange-200"
-                        }`}
+                        className={`px-4 rounded-xl font-bold text-[10px] uppercase transition-all shadow-sm flex items-center gap-2 ${isFetchingGst ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-orange-500 text-white hover:bg-orange-600 active:scale-95 shadow-orange-200"
+                          }`}
                       >
                         {isFetchingGst ? "..." : "🔍 Auto-Fill"}
                       </button>
@@ -660,11 +659,11 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
                     </div>
                     <div className="bg-blue-50/50 p-3 rounded-2xl border border-blue-100">
                       <label className={`${labelClass} !text-blue-600`}>🔒 Fixed 31st Mar Bal</label>
-                      <input 
-                          type="number" 
-                          className={`${inputClass} !bg-white !p-2 !h-10`} 
-                          value={customer.openingBalance} 
-                          onChange={(e) => setCustomer({ ...customer, openingBalance: e.target.value })} 
+                      <input
+                        type="number"
+                        className={`${inputClass} !bg-white !p-2 !h-10`}
+                        value={customer.openingBalance}
+                        onChange={(e) => setCustomer({ ...customer, openingBalance: e.target.value })}
                       />
                       <p className="text-[8px] text-blue-400 font-bold mt-1 leading-none uppercase">Static Vault</p>
                     </div>
@@ -682,22 +681,22 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-gray-50">
                   <div>
                     <label className={labelClass}>Credit Limit (₹)</label>
-                    <input 
-                      type="number" 
-                      className={`${inputClass} !bg-indigo-50/50 !border-indigo-100 focus:!border-indigo-500`} 
+                    <input
+                      type="number"
+                      className={`${inputClass} !bg-indigo-50/50 !border-indigo-100 focus:!border-indigo-500`}
                       placeholder="Default: 200,000"
-                      value={customer.creditLimit} 
-                      onChange={(e) => setCustomer({ ...customer, creditLimit: e.target.value })} 
+                      value={customer.creditLimit}
+                      onChange={(e) => setCustomer({ ...customer, creditLimit: e.target.value })}
                     />
                   </div>
                   <div>
                     <label className={labelClass}>Credit Limit Days</label>
-                    <input 
-                      type="number" 
-                      className={`${inputClass} !bg-indigo-50/50 !border-indigo-100 focus:!border-indigo-500`} 
+                    <input
+                      type="number"
+                      className={`${inputClass} !bg-indigo-50/50 !border-indigo-100 focus:!border-indigo-500`}
                       placeholder="e.g., 30"
-                      value={customer.creditLimitDays} 
-                      onChange={(e) => setCustomer({ ...customer, creditLimitDays: e.target.value })} 
+                      value={customer.creditLimitDays}
+                      onChange={(e) => setCustomer({ ...customer, creditLimitDays: e.target.value })}
                     />
                   </div>
                 </div>
@@ -709,7 +708,7 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
           <div className="lg:col-span-4 space-y-8">
             <div className="bg-white rounded-3xl p-8 shadow-sm border border-gray-100 space-y-6 sticky top-28">
               <h4 className="text-gray-900 font-black text-lg tracking-tight uppercase border-b border-gray-50 pb-4">Assignment</h4>
-              
+
               <div>
                 <label className={labelClass}>Sales Relationship Manager</label>
                 <FilterableSelect
@@ -726,7 +725,7 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
 
               <div className="bg-gray-50/50 rounded-2xl p-6 border border-gray-100 space-y-6">
                 <h5 className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Bank Details (Optional)</h5>
-                
+
                 <div className="space-y-4">
                   <input type="text" className={inputClass} placeholder="Account Holder Name" value={customer.accountHolder} onChange={(e) => setCustomer({ ...customer, accountHolder: e.target.value })} />
                   <input type="text" className={inputClass} placeholder="Account Number" value={customer.accountNumber} onChange={(e) => setCustomer({ ...customer, accountNumber: e.target.value })} />
@@ -737,7 +736,7 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
                   <input type="text" className={inputClass} placeholder="UPI ID (optional)" value={customer.upi} onChange={(e) => setCustomer({ ...customer, upi: e.target.value })} />
                 </div>
               </div>
-              
+
               <div className="bg-blue-600 rounded-2xl p-6 text-white text-center shadow-xl shadow-blue-200">
                 <p className="text-xs font-bold opacity-80 uppercase tracking-widest mb-1 shadow-sm">Registration Status</p>
                 <p className="font-black text-lg">{editingItem ? "MODIFICATION MODE" : "INITIAL REGISTRATION"}</p>

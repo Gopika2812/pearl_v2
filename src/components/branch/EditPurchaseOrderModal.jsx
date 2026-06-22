@@ -429,7 +429,21 @@ const EditPurchaseOrderModal = ({ order, branchId, onClose, onSave }) => {
                         />
                       </td>
                       <td className="px-4 py-3 text-center text-xs text-gray-600 font-semibold">
-                        {item.gst}%
+                        <select
+                          value={item.igst ? 'igst' : 'gst'}
+                          onChange={(e) => {
+                            const isIgst = e.target.value === 'igst';
+                            const updated = [...items];
+                            updated[idx].igst = isIgst;
+                            updated[idx].cgst = isIgst ? 0 : (item.gst / 2);
+                            updated[idx].sgst = isIgst ? 0 : (item.gst / 2);
+                            setItems(updated);
+                          }}
+                          className="border border-gray-200 rounded px-1 py-1 text-center font-bold outline-none focus:border-[#319bab] bg-white text-[10px]"
+                        >
+                          <option value="gst">GST {item.gst}%</option>
+                          <option value="igst">IGST {item.gst}%</option>
+                        </select>
                       </td>
                       <td className="px-4 py-3 text-right font-black text-gray-800">
                         ₹{calculateItemTotal(item).toLocaleString()}
@@ -560,13 +574,32 @@ const EditPurchaseOrderModal = ({ order, branchId, onClose, onSave }) => {
                     />
                   </div>
                    <div>
-                    <label className="block text-xs font-bold text-gray-500 uppercase mb-2">GST %</label>
-                    <input
-                      type="number"
-                      value={newItem.gst}
-                      readOnly
-                      className="w-full bg-gray-100 border border-gray-200 rounded-lg px-4 py-2 text-sm outline-none font-bold text-gray-500"
-                    />
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-2">GST Type & %</label>
+                    <div className="flex gap-1 border border-gray-200 rounded-lg p-1 bg-white focus-within:border-green-500 transition-all">
+                      <select
+                        value={newItem.igst ? 'igst' : 'gst'}
+                        onChange={(e) => {
+                          const isIgst = e.target.value === 'igst';
+                          setNewItem({
+                            ...newItem,
+                            igst: isIgst,
+                            cgst: isIgst ? 0 : (newItem.gst / 2),
+                            sgst: isIgst ? 0 : (newItem.gst / 2)
+                          });
+                        }}
+                        className="w-full bg-transparent text-sm outline-none font-bold text-gray-700"
+                        disabled={!newItem.productId}
+                      >
+                        <option value="gst">GST</option>
+                        <option value="igst">IGST</option>
+                      </select>
+                      <input
+                        type="number"
+                        value={newItem.gst}
+                        readOnly
+                        className="w-12 bg-gray-100 rounded px-1 py-1 text-sm outline-none font-bold text-gray-500 text-center"
+                      />
+                    </div>
                   </div>
                 </div>
                 <div className="flex gap-2">

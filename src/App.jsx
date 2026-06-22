@@ -826,6 +826,7 @@ function AppContent() {
 
               {/* BRANCH-SPECIFIC ROUTES - Protected */}
               <Route path="/branch-home" element={<ProtectedRoute element={<BranchHome />} />} />
+              <Route path="/branch/hr/attendance-report" element={<ProtectedRoute element={<AttendanceReportPage />} />} />
               <Route path="/branch/po" element={<ProtectedRoute element={<BranchPO />} />} />
               <Route path="/branch/purchase-orders" element={<ProtectedRoute element={<BranchPurchaseOrders />} />} />
               <Route path="/branch/purchase-invoices" element={<ProtectedRoute element={<BranchPurchaseInvoices />} />} />

@@ -246,7 +246,7 @@ const AttendanceReportPage = () => {
   };
 
   return (
-    <div className="space-y-8 pt-6 px-4 md:px-0 max-w-7xl mx-auto font-poppins">
+    <div className="space-y-8 pt-6 px-4 md:px-8 w-full font-poppins">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
         <div className="flex items-center gap-5">
@@ -450,7 +450,7 @@ const AttendanceReportPage = () => {
                           log.status === "Absent" ? "bg-rose-50 text-rose-600 border-rose-100" :
                           "bg-amber-50 text-amber-600 border-amber-100"
                         }`}>
-                          {log.status}
+                          {log.status === "Leave" ? "OUT" : log.status}
                         </span>
                       </td>
                       <td className="px-8 py-6">
