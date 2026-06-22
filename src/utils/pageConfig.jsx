@@ -87,7 +87,7 @@ export const PAGE_CONFIG = [
         ]
       },
       { id: "spotted-ledger", name: "Spotted Customers Ledger", path: "/branch/spotted-customer-ledger", icon: "list" },
-      { id: "customers", name: "Customers (Debtors)", path: "/branch/customers", icon: "users", hideInSidebar: true, permissionFields: ["name", "gstin", "margin", "debit", "credit", "action_receipt", "action_return", "action_ledger"] },
+      { id: "customers", name: "Customers (Debtors)", path: "/branch/customers", icon: "users", permissionFields: ["name", "gstin", "margin", "debit", "credit", "action_receipt", "action_return", "action_ledger"] },
     ]
   },
   {

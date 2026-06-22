@@ -1231,7 +1231,7 @@ const BranchSalesInvoices = () => {
                                 </button>
                               ) : (
                                 <>
-                                  {isFieldAllowed("action_ewb") && inv.einvoiceStatus === "GENERATED" && !inv.ewayBillNo && inv.grandTotal > 10000 && (
+                                  {isFieldAllowed("action_ewb") && inv.status !== "CANCELLED" && inv.einvoiceStatus === "GENERATED" && !inv.ewayBillNo && inv.grandTotal > 10000 && (
                                     <button
                                       onClick={() => handleGenerateEWayBillOnly(inv)}
                                       disabled={requestingAction === inv._id}
@@ -1240,7 +1240,7 @@ const BranchSalesInvoices = () => {
                                       {requestingAction === inv._id ? <FaSync className="animate-spin" /> : <><FaSync size={12} /> GEN EWB</>}
                                     </button>
                                   )}
-                                  {isFieldAllowed("action_ewb") && (
+                                  {isFieldAllowed("action_ewb") && inv.status !== "CANCELLED" && (
                                     <button
                                       onClick={() => handleGenerateEInvoice(inv)}
                                       disabled={requestingAction === inv._id}
