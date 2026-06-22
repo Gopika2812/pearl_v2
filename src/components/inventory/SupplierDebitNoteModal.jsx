@@ -30,6 +30,9 @@ const SupplierDebitNoteModal = ({ isOpen, onClose, preselectedVendor = null, edi
 
   const [invoices, setInvoices] = useState([]);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
+  const [invoiceSearch, setInvoiceSearch] = useState("");
+  const [invoiceFromDate, setInvoiceFromDate] = useState("");
+  const [invoiceToDate, setInvoiceToDate] = useState("");
   
   const [productSearch, setProductSearch] = useState("");
   const [productsList, setProductsList] = useState([]);
@@ -128,7 +131,12 @@ const SupplierDebitNoteModal = ({ isOpen, onClose, preselectedVendor = null, edi
     if (!vendor?._id) return;
     setLoading(true);
     try {
-      const response = await fetchWithAuth(`${API_BASE}/purchase-orders?vendorId=${vendor._id}&statuses=INVOICED,PARTIALLY_RETURNED&branchId=${currentBranch._id}`);
+      let url = `${API_BASE}/purchase-orders?vendorId=${vendor._id}&vendorName=${encodeURIComponent(vendor.name)}&statuses=INVOICED,PARTIALLY_RETURNED&branchId=${currentBranch._id}&limit=500`;
+      if (invoiceSearch) url += `&search=${encodeURIComponent(invoiceSearch)}`;
+      if (invoiceFromDate) url += `&fromDate=${invoiceFromDate}`;
+      if (invoiceToDate) url += `&toDate=${invoiceToDate}`;
+
+      const response = await fetchWithAuth(url);
       const data = await response.json();
       setInvoices(data.data || data || []);
     } catch (error) { 
@@ -379,9 +387,47 @@ const SupplierDebitNoteModal = ({ isOpen, onClose, preselectedVendor = null, edi
             <div className="bg-white rounded-2xl p-8 border border-gray-100 shadow-sm space-y-6">
               {returnType === "invoice" ? (
                 <div className="space-y-4">
-                  <div className="flex items-center gap-2 pb-2 border-b border-gray-50">
-                    <span className="p-1.5 bg-blue-50 text-blue-500 rounded-lg"><FaFileInvoice size={14} /></span>
-                    <h4 className="text-xs font-black text-gray-900 uppercase tracking-widest">Linked Purchase Invoices</h4>
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-gray-50">
+                    <div className="flex items-center gap-2">
+                      <span className="p-1.5 bg-blue-50 text-blue-500 rounded-lg"><FaFileInvoice size={14} /></span>
+                      <h4 className="text-xs font-black text-gray-900 uppercase tracking-widest">Linked Purchase Invoices</h4>
+                    </div>
+                    {vendor && (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <input
+                          type="date"
+                          value={invoiceFromDate}
+                          onChange={(e) => setInvoiceFromDate(e.target.value)}
+                          className="px-2 py-1 text-xs border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 outline-none"
+                          title="From Date"
+                        />
+                        <span className="text-xs text-gray-400">to</span>
+                        <input
+                          type="date"
+                          value={invoiceToDate}
+                          onChange={(e) => setInvoiceToDate(e.target.value)}
+                          className="px-2 py-1 text-xs border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 outline-none"
+                          title="To Date"
+                        />
+                        <div className="relative">
+                          <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" size={10} />
+                          <input
+                            type="text"
+                            value={invoiceSearch}
+                            onChange={(e) => setInvoiceSearch(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && fetchInvoices()}
+                            placeholder="Search PI No..."
+                            className="pl-6 pr-2 py-1 w-32 text-xs border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 outline-none font-semibold text-gray-800"
+                          />
+                        </div>
+                        <button
+                          onClick={fetchInvoices}
+                          className="px-3 py-1 bg-blue-50 text-blue-600 hover:bg-blue-100 font-bold text-[10px] rounded uppercase tracking-widest"
+                        >
+                          Filter
+                        </button>
+                      </div>
+                    )}
                   </div>
                   {!vendor ? (
                     <p className="text-center py-6 text-xs font-bold text-gray-400 uppercase italic">Select a supplier first to view history</p>

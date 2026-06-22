@@ -117,9 +117,14 @@ router.get("/", async (req, res) => {
       query.branchId = branchId;
     }
 
-    // Filter by vendorId if provided
-    if (vendorId) {
-      query.vendorId = vendorId;
+    // Filter by vendorId if provided (handle legacy string vendor names)
+    if (vendorId || req.query.vendorName) {
+      const vOr = [];
+      if (vendorId) vOr.push({ vendorId: vendorId });
+      if (req.query.vendorName) vOr.push({ vendor: req.query.vendorName });
+      
+      query.$and = query.$and || [];
+      query.$and.push({ $or: vOr });
     }
 
     // Filter by date range
