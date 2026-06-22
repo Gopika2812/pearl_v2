@@ -108,26 +108,38 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
             setEditedItems(prevItems => {
               return prevItems.map(item => {
                 const repairedName = repairName(item.productId, item.name);
+                let finalName = item.name;
                 if (repairedName && repairedName !== item.name) {
-                  return { ...item, name: repairedName };
+                  finalName = repairedName;
                 }
 
-                // Also check freshOrder directly if repair failed
-                if (!item.name || item.name === "Product Name Missing" || item.name === "") {
-                  const freshPool = [
-                    ...(freshOrder.invoiceItems || []),
-                    ...(freshOrder.items || []),
-                    ...(freshOrder.lastInvoicedItems || [])
-                  ];
-                  const match = freshPool.find(f => (f.productId?._id || f.productId)?.toString() === (item.productId?._id || item.productId)?.toString());
+                const freshPool = [
+                  ...(freshOrder.invoiceItems || []),
+                  ...(freshOrder.items || []),
+                  ...(freshOrder.lastInvoicedItems || [])
+                ];
+                const match = freshPool.find(f => (f.productId?._id || f.productId)?.toString() === (item.productId?._id || item.productId)?.toString());
+
+                // Also check freshOrder directly if name repair failed
+                if (!finalName || finalName === "Product Name Missing" || finalName === "") {
                   if (match) {
-                    return {
-                      ...item,
-                      name: match.name || match.productId?.name || item.name
-                    };
+                    finalName = match.name || match.productId?.name || item.name;
                   }
                 }
-                return item;
+
+                // ⚡ SELF-HEALING: Missing HSN
+                let finalHsn = item.hsn;
+                if (!finalHsn) {
+                  if (match) {
+                    finalHsn = match.hsn || match.hsnCode || match.hsncode || match.productId?.hsnCode || match.productId?.hsncode || "";
+                  }
+                }
+
+                return {
+                  ...item,
+                  name: finalName,
+                  hsn: finalHsn
+                };
               });
             });
           }
@@ -198,7 +210,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
             cgst: item.cgst || (item.gst ? item.gst / 2 : (item.productId?.gst ? item.productId.gst / 2 : 0)),
             sgst: item.sgst || (item.gst ? item.gst / 2 : (item.productId?.gst ? item.productId.gst / 2 : 0)),
             igst: item.igst || 0,
-            hsn: item.hsn || item.productId?.hsnCode || "",
+            hsn: item.hsn || item.hsnCode || item.hsncode || item.productId?.hsnCode || item.productId?.hsncode || "",
             total: total
           });
         });
@@ -224,7 +236,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
             cgst: item.cgst || (item.gst ? item.gst / 2 : (item.productId?.gst ? item.productId.gst / 2 : 0)),
             sgst: item.sgst || (item.gst ? item.gst / 2 : (item.productId?.gst ? item.productId.gst / 2 : 0)),
             igst: item.igst || 0,
-            hsn: item.hsn || item.hsnCode || item.productId?.hsnCode || "",
+            hsn: item.hsn || item.hsnCode || item.hsncode || item.productId?.hsnCode || item.productId?.hsncode || "",
             total: Math.round((item.sellingPrice || 0) * (item.qty || 0) * 100) / 100
           });
         });
