@@ -304,8 +304,15 @@ router.get("/", async (req, res) => {
       query.voucherType = voucherType;
     }
 
-    // 3. Invoice Generation Filter
-    if (generated !== undefined && generated !== "") {
+    // Check if 'pendingRestocking' or 'generated' flag is passed
+    if (req.query.pendingRestocking === "true") {
+      // For restocking, we want ANY order that doesn't have a final salesInvoiceId
+      query.$or = [
+        { salesInvoiceId: { $exists: false } },
+        { salesInvoiceId: null },
+        { salesInvoiceId: "" }
+      ];
+    } else if (generated !== undefined && generated !== "") {
       query.invoiceGenerated = generated === "true";
     }
 
@@ -447,8 +454,9 @@ router.get("/", async (req, res) => {
         currentPage: pageNum
       });
     } else {
+      const limitNum = limit ? parseInt(limit) : (search ? 1000 : 200);
       const salesOrders = await salesOrdersQuery
-        .limit(search ? 1000 : 200) // Legacy limit
+        .limit(limitNum)
         .lean();
       
       console.log(`✅ [DEBUG] Found ${salesOrders.length} sales orders for branch ${branchId}`);

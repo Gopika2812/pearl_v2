@@ -430,7 +430,7 @@ export default function BranchRecycling() {
     if (!currentBranch?._id) return null;
 
     try {
-      const res = await fetch(`${API_BASE}/sales-orders?branchId=${currentBranch._id}&generated=false&fromDate=2020-01-01&toDate=2030-12-31&limit=5000`);
+      const res = await fetch(`${API_BASE}/sales-orders?branchId=${currentBranch._id}&pendingRestocking=true&fromDate=2020-01-01&toDate=2030-12-31&limit=5000`);
       const backOrdersRes = await fetch(`${API_BASE}/invoices/backorders/list?branchId=${currentBranch._id}`, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("token")}`,
@@ -451,7 +451,7 @@ export default function BranchRecycling() {
         }
 
         // Filter only pending (not invoiced) orders
-        const pendingOrders = salesOrders.filter((so) => !so.invoiceGenerated);
+        const pendingOrders = salesOrders.filter((so) => !so.salesInvoiceId);
 
         pendingOrders.forEach((order) => {
           if (Array.isArray(order.items)) {
@@ -2086,6 +2086,7 @@ export default function BranchRecycling() {
             <div 
               onClick={() => {
                 if (soQty > 0) {
+                  setRestockingEditingProduct(product);
                   setShowPendingSalesPopup(true);
                 }
               }}
@@ -2893,7 +2894,14 @@ export default function BranchRecycling() {
                         {isFieldAllowed("pendingSales") && (
                           <td className="px-1 py-2 text-right text-[11px]">
                             {soQty > 0 ? (
-                              <span className="bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded font-bold">
+                              <span 
+                                className="bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded font-bold cursor-pointer hover:bg-amber-100 transition"
+                                title="Click to view pending orders"
+                                onClick={() => {
+                                  setRestockingEditingProduct(product);
+                                  setShowPendingSalesPopup(true);
+                                }}
+                              >
                                 {soQty}
                               </span>
                             ) : (
