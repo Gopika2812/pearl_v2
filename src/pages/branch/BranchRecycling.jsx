@@ -464,7 +464,8 @@ export default function BranchRecycling() {
                   detailsMap[prodId] = [];
                 }
                 const dateVal = order.orderDate || order.createdAt;
-                const daysPending = Math.max(0, Math.floor((new Date() - new Date(dateVal)) / (1000 * 60 * 60 * 24)));
+                // Allow negative values for future dates
+                const daysPending = Math.floor((new Date() - new Date(dateVal)) / (1000 * 60 * 60 * 24));
                 detailsMap[prodId].push({
                   invoiceId: order.invoiceId,
                   customerName: order.customer?.name || "Unknown",
@@ -3201,11 +3202,21 @@ export default function BranchRecycling() {
                             <span className="text-sm font-black text-gray-800 block">
                               {d.qty} <span className="text-xs text-gray-500 font-medium">{restockingEditingProduct.units}</span>
                             </span>
-                            <span className={`text-[9px] font-black px-2 py-0.5 rounded-full inline-block mt-1 ${
-                              d.daysPending > 7 ? 'bg-rose-100 text-rose-700 animate-pulse' : 'bg-amber-100 text-amber-700'
-                            }`}>
-                              ⏳ {d.daysPending} day{d.daysPending !== 1 ? 's' : ''} pending
-                            </span>
+                            {d.daysPending > 0 ? (
+                              <span className={`text-[9px] font-black px-2 py-0.5 rounded-full inline-block mt-1 ${
+                                d.daysPending > 7 ? 'bg-rose-100 text-rose-700 animate-pulse' : 'bg-amber-100 text-amber-700'
+                              }`}>
+                                ⏳ {d.daysPending} day{d.daysPending !== 1 ? 's' : ''} pending
+                              </span>
+                            ) : d.daysPending < 0 ? (
+                              <span className="text-[9px] font-black px-2 py-0.5 rounded-full inline-block mt-1 bg-blue-100 text-blue-700">
+                                📅 Future SO (In {Math.abs(d.daysPending)} days)
+                              </span>
+                            ) : (
+                              <span className="text-[9px] font-black px-2 py-0.5 rounded-full inline-block mt-1 bg-green-100 text-green-700">
+                                ✨ New Order
+                              </span>
+                            )}
                           </div>
                         </div>
                       ))}

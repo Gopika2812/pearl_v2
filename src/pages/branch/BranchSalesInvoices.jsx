@@ -9,6 +9,7 @@ import { useBranch } from "../../context/BranchContext";
 import { getInvoiceHTML } from "../../utils/invoiceUtils";
 import FilterableSelect from "../../components/FilterableSelect";
 import BulkEInvoiceModal from "../../components/branch/BulkEInvoiceModal";
+import SelectedBulkEInvoiceModal from "../../components/branch/SelectedBulkEInvoiceModal";
 import BulkPdfDownloadModal from "../../components/branch/BulkPdfDownloadModal";
 import InvoiceQrModal from "../../components/branch/InvoiceQrModal";
 import DateRangeDropdown from "../../components/common/DateRangeDropdown";
@@ -131,6 +132,7 @@ const BranchSalesInvoices = () => {
   // --- SELECTIVE EXPORT STATE ---
   const [showColumnModal, setShowColumnModal] = useState(false);
   const [showBulkEInvoiceModal, setShowBulkEInvoiceModal] = useState(false);
+  const [showSelectedBulkEInvoiceModal, setShowSelectedBulkEInvoiceModal] = useState(false);
   const [showBulkPdfModal, setShowBulkPdfModal] = useState(false);
   const [selectedColumns, setSelectedColumns] = useState([
     "date", "invoiceNumber", "voucherType", "customerName", "grandTotal", "creator"
@@ -810,6 +812,18 @@ const BranchSalesInvoices = () => {
         />
       )}
 
+      {showSelectedBulkEInvoiceModal && (
+        <SelectedBulkEInvoiceModal
+          show={showSelectedBulkEInvoiceModal}
+          onClose={() => setShowSelectedBulkEInvoiceModal(false)}
+          onRefresh={() => {
+            fetchInvoices();
+            setSelectedInvoices([]);
+          }}
+          selectedInvoicesData={invoices.filter(inv => selectedInvoices.includes(inv._id))}
+        />
+      )}
+
       {showBulkPdfModal && (
         <BulkPdfDownloadModal
           show={showBulkPdfModal}
@@ -853,6 +867,14 @@ const BranchSalesInvoices = () => {
               </div>
               {(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN" || user?.actionPermissions?.export !== false) && (
                 <>
+                  {selectedInvoices.length > 0 && (
+                    <button
+                      onClick={() => setShowSelectedBulkEInvoiceModal(true)}
+                      className="inline-flex items-center gap-2 px-3 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition shadow-lg shadow-indigo-200 text-[10px] font-black animate-in fade-in zoom-in"
+                    >
+                      <FaSync /> GEN E-INV ({selectedInvoices.length})
+                    </button>
+                  )}
                   <button
                     onClick={() => setShowBulkEInvoiceModal(true)}
                     className="inline-flex items-center gap-2 px-3 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition shadow-lg shadow-blue-200 text-[10px] font-black"
