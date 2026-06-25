@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { FaPlus, FaSave, FaTimes, FaTrash } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { API_BASE, fetchWithAuth } from "../../api";
+import SearchableSelect from "../common/SearchableSelect";
 
 const EditPurchaseOrderModal = ({ order, branchId, onClose, onSave }) => {
   const [items, setItems] = useState([]);
@@ -359,7 +360,36 @@ const EditPurchaseOrderModal = ({ order, branchId, onClose, onSave }) => {
                 <tbody className="divide-y">
                   {items.map((item, idx) => (
                     <tr key={idx} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 font-semibold text-gray-800">{item.name}</td>
+                      <td className="px-4 py-3 font-semibold text-gray-800 min-w-[250px]">
+                        <SearchableSelect
+                          options={products.map(p => ({
+                            label: `${p.name} ${p.hsn ? `(HSN: ${p.hsn})` : ''}`,
+                            value: p._id,
+                            product: p
+                          }))}
+                          value={item.productId || ""}
+                          onChange={(val) => {
+                            const selectedProd = products.find(p => String(p._id) === String(val));
+                            if (selectedProd) {
+                              const updated = [...items];
+                              updated[idx] = {
+                                ...updated[idx],
+                                productId: selectedProd._id,
+                                name: selectedProd.name,
+                                hsn: selectedProd.hsn || updated[idx].hsn,
+                                gst: selectedProd.taxRate || selectedProd.gst || updated[idx].gst,
+                                unit: selectedProd.unit || updated[idx].unit,
+                                igst: Boolean(selectedProd.igst),
+                                cgst: selectedProd.igst ? 0 : ((selectedProd.taxRate || selectedProd.gst || updated[idx].gst) / 2),
+                                sgst: selectedProd.igst ? 0 : ((selectedProd.taxRate || selectedProd.gst || updated[idx].gst) / 2),
+                              };
+                              updated[idx].total = calculateItemTotal(updated[idx]);
+                              setItems(updated);
+                            }
+                          }}
+                          placeholder={item.name || "Search Product"}
+                        />
+                      </td>
                       <td className="px-4 py-3 text-center text-gray-600">{item.hsn}</td>
                       <td className="px-4 py-3">
                         <input

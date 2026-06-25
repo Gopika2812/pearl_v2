@@ -35,12 +35,15 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
     openingBalance: 0, // 🔒 Fixed March 31st Balance
     riskStatus: "safe_zone",
     linkedVendorId: null,
+    isBranchCustomer: false,
+    linkedBranchId: null,
   });
 
   const [isSafeMode, setIsSafeMode] = useState(false);
   const [isFetchingGst, setIsFetchingGst] = useState(false);
   const [uploadResults, setUploadResults] = useState(null);
   const [vendors, setVendors] = useState([]);
+  const [branches, setBranches] = useState([]);
 
   // Pre-fill form when editing
   useEffect(() => {
@@ -79,6 +82,8 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
         openingBalance: editingItem.openingBalance || 0,
         riskStatus: editingItem.riskStatus || "safe_zone",
         linkedVendorId: editingItem.linkedVendorId || null,
+        isBranchCustomer: editingItem.isBranchCustomer || false,
+        linkedBranchId: editingItem.linkedBranchId || null,
       });
     } else {
       setCustomer({
@@ -110,6 +115,8 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
         openingBalance: 0,
         riskStatus: "safe_zone",
         linkedVendorId: null,
+        isBranchCustomer: false,
+        linkedBranchId: null,
       });
     }
   }, [editingItem]);
@@ -117,6 +124,7 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
   useEffect(() => {
     if (isOpen && branchId) {
       fetchVendors();
+      fetchBranches();
     }
   }, [isOpen, branchId]);
 
@@ -153,6 +161,18 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
       }
     } catch (err) {
       console.error("Fetch vendors error:", err);
+    }
+  };
+
+  const fetchBranches = async () => {
+    try {
+      const res = await fetchWithAuth(`${API_BASE}/branches`);
+      const result = await res.json();
+      if (result.success) {
+        setBranches(result.data || []);
+      }
+    } catch (err) {
+      console.error("Fetch branches error:", err);
     }
   };
 
@@ -706,6 +726,42 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
 
           {/* RIGHT SIDE: SETTINGS & OWNER --- Sticky */}
           <div className="lg:col-span-4 space-y-8">
+
+            {/* INTER-BRANCH SETTINGS */}
+            <div className="bg-orange-50/30 rounded-3xl p-8 shadow-sm border border-orange-100 space-y-6">
+              <h4 className="text-gray-900 font-black text-lg tracking-tight uppercase border-b border-orange-100 pb-4">Inter-Branch Link</h4>
+              
+              <div className="flex items-center justify-between p-4 bg-white border border-orange-100 rounded-xl shadow-sm">
+                <div>
+                  <label className="text-xs font-black text-gray-800 uppercase tracking-wider block">Internal Branch</label>
+                  <p className="text-[10px] text-gray-500 font-bold uppercase mt-0.5">Link to another branch for auto-POs</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setCustomer({ ...customer, isBranchCustomer: !customer.isBranchCustomer, linkedBranchId: !customer.isBranchCustomer ? customer.linkedBranchId : null })}
+                  className={`w-12 h-6 rounded-full transition-all relative ${customer.isBranchCustomer ? 'bg-orange-500' : 'bg-gray-300'}`}
+                >
+                  <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${customer.isBranchCustomer ? 'left-7' : 'left-1'}`}></div>
+                </button>
+              </div>
+
+              {customer.isBranchCustomer && (
+                <div className="animate-in fade-in slide-in-from-top-2">
+                  <label className={labelClass}>Select Destination Branch *</label>
+                  <FilterableSelect
+                    options={branches.map(b => ({
+                      _id: b._id,
+                      name: `${b.name} (${b.code})`
+                    }))}
+                    value={customer.linkedBranchId}
+                    onChange={(value) => setCustomer({ ...customer, linkedBranchId: value })}
+                    placeholder="Search Branch..."
+                    className={inputClass}
+                  />
+                </div>
+              )}
+            </div>
+
             <div className="bg-white rounded-3xl p-8 shadow-sm border border-gray-100 space-y-6 sticky top-28">
               <h4 className="text-gray-900 font-black text-lg tracking-tight uppercase border-b border-gray-50 pb-4">Assignment</h4>
 

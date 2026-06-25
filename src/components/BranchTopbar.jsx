@@ -452,7 +452,7 @@ export default function BranchTopbar({ onMenuClick }) {
       {/* Expiry & Sold-Out Warning Modal */}
       {showExpiryModal && (expiryAlerts.length > 0 || soldOutAlerts.length > 0) && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4 pointer-events-auto">
-          <div className="bg-white/95 backdrop-blur-md rounded-3xl shadow-2xl border border-slate-100 max-w-lg w-full overflow-hidden transform transition-all duration-300 scale-100 animate-in zoom-in-95 duration-200">
+          <div className="bg-white/95 backdrop-blur-md rounded-3xl shadow-2xl border border-slate-100 max-w-7xl w-full overflow-hidden transform transition-all duration-300 scale-100 animate-in zoom-in-95 duration-200">
             {/* Header */}
             <div className={`p-6 text-white flex items-center justify-between gap-3 ${
               expiryAlerts.length > 0 && soldOutAlerts.length > 0
@@ -498,36 +498,36 @@ export default function BranchTopbar({ onMenuClick }) {
                     <span className="w-1.5 h-1.5 bg-rose-500 rounded-full"></span>
                     Expiring Soon
                   </h4>
-                  <div className="divide-y divide-slate-100 border border-slate-100 rounded-2xl overflow-hidden shadow-sm bg-white">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     {expiryAlerts.map((alert, idx) => (
-                      <div key={idx} className="p-4 bg-slate-50/30 hover:bg-slate-50 transition flex justify-between items-center text-xs">
-                        <div className="text-left pr-2">
-                          <div className="font-black text-slate-800 text-sm">{alert.name}</div>
-                          <div className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-wider">
-                            Batch: <span className="text-slate-600">{alert.batch}</span> | Qty: <span className="text-slate-600">{alert.qty}</span>
+                      <div key={idx} className="p-4 bg-white border border-slate-100 rounded-2xl hover:bg-slate-50 transition shadow-sm flex flex-col justify-between text-xs h-full relative group">
+                        <div className="flex justify-between items-start mb-2">
+                          <div className="text-left pr-6">
+                            <div className="font-black text-slate-800 text-sm line-clamp-2" title={alert.name}>{alert.name}</div>
+                            <div className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-wider">
+                              Batch: <span className="text-slate-600">{alert.batch}</span> | Qty: <span className="text-slate-600">{alert.qty}</span>
+                            </div>
                           </div>
+                          <button
+                            onClick={() => handleDismissAlert(alert, false)}
+                            className="absolute top-3 right-3 p-1.5 rounded-lg text-slate-300 opacity-0 group-hover:opacity-100 hover:text-rose-500 hover:bg-rose-50 transition-all font-black text-sm cursor-pointer"
+                            title="Dismiss Alert"
+                          >
+                            ✕
+                          </button>
                         </div>
-                        <div className="flex items-center gap-4 text-right shrink-0">
-                          <div className="flex flex-col items-end">
+                        <div className="flex items-end justify-between mt-auto pt-3 border-t border-slate-50">
+                          <div className="text-[10px] font-bold text-slate-400">
+                            MRP: ₹{alert.mrp}
+                          </div>
+                          <div className="flex flex-col items-end text-right">
                             <div className="font-black text-rose-600">
                               Exp: {new Date(alert.expiryDate).toLocaleDateString("en-IN")}
                             </div>
                             <div className="text-[10px] font-bold mt-0.5">
                               {getExpiryLabel(alert.expiryDate)}
                             </div>
-                            <div className="text-[10px] font-bold text-slate-400 mt-0.5">
-                              MRP: ₹{alert.mrp}
-                            </div>
                           </div>
-                          
-                          {/* Dismiss cross mark */}
-                          <button
-                            onClick={() => handleDismissAlert(alert, false)}
-                            className="p-1 rounded-lg text-slate-300 hover:text-rose-500 hover:bg-rose-50 transition-all font-black text-sm cursor-pointer"
-                            title="Dismiss Alert"
-                          >
-                            ✕
-                          </button>
                         </div>
                       </div>
                     ))}
@@ -537,46 +537,46 @@ export default function BranchTopbar({ onMenuClick }) {
 
               {soldOutAlerts.length > 0 && (
                 <div>
-                  <h4 className="text-[10px] font-black uppercase tracking-wider text-amber-600 mb-2 flex items-center gap-1.5">
+                  <h4 className="text-[10px] font-black uppercase tracking-wider text-amber-600 mb-2 flex items-center gap-1.5 mt-4">
                     <span className="w-1.5 h-1.5 bg-amber-500 rounded-full"></span>
                     Sold Out Batches
                   </h4>
-                  <div className="divide-y divide-slate-100 border border-slate-100 rounded-2xl overflow-hidden shadow-sm bg-white">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     {soldOutAlerts.map((alert, idx) => (
-                      <div key={idx} className="p-4 bg-slate-50/30 hover:bg-slate-50 transition flex justify-between items-center text-xs">
-                        <div className="text-left pr-2">
-                          <div className="font-black text-slate-800 text-sm">{alert.name}</div>
-                          <div className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-wider">
-                            Batch: <span className="text-slate-600">{alert.batch}</span> | Qty: <span className="text-rose-600 font-black">SOLD OUT</span>
+                      <div key={idx} className="p-4 bg-white border border-slate-100 rounded-2xl hover:bg-slate-50 transition shadow-sm flex flex-col justify-between text-xs h-full relative group">
+                        <div className="flex justify-between items-start mb-2">
+                          <div className="text-left pr-6">
+                            <div className="font-black text-slate-800 text-sm line-clamp-2" title={alert.name}>{alert.name}</div>
+                            <div className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-wider">
+                              Batch: <span className="text-slate-600">{alert.batch}</span> | Qty: <span className="text-rose-600 font-black">SOLD OUT</span>
+                            </div>
                           </div>
+                          <button
+                            onClick={() => handleDismissAlert(alert, true)}
+                            className="absolute top-3 right-3 p-1.5 rounded-lg text-slate-300 opacity-0 group-hover:opacity-100 hover:text-amber-500 hover:bg-amber-50 transition-all font-black text-sm cursor-pointer"
+                            title="Dismiss Alert"
+                          >
+                            ✕
+                          </button>
                         </div>
-                        <div className="flex items-center gap-4 text-right shrink-0">
-                          <div className="flex flex-col items-end">
+                        <div className="flex items-end justify-between mt-auto pt-3 border-t border-slate-50">
+                          <div className="text-[10px] font-bold text-slate-400 flex flex-col justify-end">
+                            MRP: ₹{alert.mrp}
+                          </div>
+                          <div className="flex flex-col items-end text-right">
                             <div className="font-black text-slate-500">
                               Exp: {alert.expiryDate ? new Date(alert.expiryDate).toLocaleDateString("en-IN") : "N/A"}
-                            </div>
-                            <div className="text-[10px] font-bold text-slate-400 mt-0.5">
-                              MRP: ₹{alert.mrp}
                             </div>
                             <button
                               onClick={() => {
                                 handleDismissAlert(alert, true);
                                 navigate("/branch/po");
                               }}
-                              className="mt-1 px-2.5 py-1 text-[9px] font-black uppercase tracking-wider text-white bg-amber-500 hover:bg-amber-600 rounded-lg shadow-sm active:scale-95 transition-all"
+                              className="mt-1.5 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-white bg-amber-500 hover:bg-amber-600 rounded-lg shadow-sm active:scale-95 transition-all"
                             >
                               Make PO
                             </button>
                           </div>
-                          
-                          {/* Dismiss cross mark */}
-                          <button
-                            onClick={() => handleDismissAlert(alert, true)}
-                            className="p-1 rounded-lg text-slate-300 hover:text-amber-500 hover:bg-amber-50 transition-all font-black text-sm cursor-pointer"
-                            title="Dismiss Alert"
-                          >
-                            ✕
-                          </button>
                         </div>
                       </div>
                     ))}

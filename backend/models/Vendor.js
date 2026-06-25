@@ -19,6 +19,15 @@ const vendorSchema = new mongoose.Schema(
     openingBalance: { type: Number, default: 0 },
     manualOpeningDate: { type: Date, default: null },
     isActive: { type: Boolean, default: true },
+    
+    // Inter-Branch Transfer Flags
+    isBranchVendor: { type: Boolean, default: false },
+    linkedBranchId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Branch",
+      default: null,
+      index: true
+    },
   },
   { timestamps: true }
 );

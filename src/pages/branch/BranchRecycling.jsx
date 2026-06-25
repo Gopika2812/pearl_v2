@@ -2215,11 +2215,13 @@ export default function BranchRecycling() {
       return acc;
     }, {});
     
-    const alertGroups = Object.keys(groupedAlerts).sort();
+    const alertGroups = Object.keys(groupedAlerts).sort((a, b) => {
+      return groupedAlerts[b].count - groupedAlerts[a].count;
+    });
 
     return (
       <div className="fixed inset-0 bg-red-950/90 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-fadeIn">
-        <div className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full max-h-[85vh] overflow-hidden flex flex-col border-4 border-red-500 transform scale-100 transition-all duration-300">
+        <div className="bg-white rounded-3xl shadow-2xl max-w-7xl w-full max-h-[85vh] overflow-hidden flex flex-col border-4 border-red-500 transform scale-100 transition-all duration-300">
           
           {/* Header */}
           <div className="bg-gradient-to-r from-red-600 via-red-700 to-rose-600 text-white p-8 text-center relative overflow-hidden">
@@ -2239,37 +2241,39 @@ export default function BranchRecycling() {
           </div>
 
           {/* List of critical product groups */}
-          <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-4">
-            <div className="flex justify-between items-center text-xs font-bold text-gray-400 uppercase tracking-wider border-b pb-2 px-2">
+          <div className="flex-1 overflow-y-auto p-6 md:p-8">
+            <div className="flex justify-between items-center text-xs font-bold text-gray-400 uppercase tracking-wider border-b pb-2 px-2 mb-4">
               <span>Product Group</span>
-              <span className="w-48 text-right">Low Stock Items</span>
+              <span className="text-right">Action</span>
             </div>
 
-            {alertGroups.map((groupName) => {
-              const groupData = groupedAlerts[groupName];
-              return (
-                <div key={groupName} className="flex justify-between items-center py-4 border-b border-gray-100 hover:bg-red-50/30 px-4 rounded-xl transition-colors">
-                  <div className="flex items-center gap-4">
-                    <div className="text-3xl p-2 bg-red-50 text-red-500 rounded-lg shadow-sm border border-red-100">📦</div>
-                    <div>
-                      <h4 className="font-extrabold text-gray-800 text-lg md:text-xl">{groupName}</h4>
-                      <p className="text-sm text-red-500 font-bold mt-0.5">{groupData.count} product{groupData.count > 1 ? 's' : ''} reached critical stock</p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {alertGroups.map((groupName) => {
+                const groupData = groupedAlerts[groupName];
+                return (
+                  <div key={groupName} className="flex justify-between items-center py-4 border border-gray-100 hover:bg-red-50/30 px-4 rounded-xl transition-colors bg-white shadow-sm">
+                    <div className="flex items-center gap-3">
+                      <div className="text-2xl p-2 bg-red-50 text-red-500 rounded-lg shadow-sm border border-red-100">📦</div>
+                      <div>
+                        <h4 className="font-extrabold text-gray-800 text-base md:text-lg line-clamp-1" title={groupName}>{groupName}</h4>
+                        <p className="text-xs text-red-500 font-bold mt-0.5">{groupData.count} item{groupData.count > 1 ? 's' : ''} low</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center ml-2">
+                      <button
+                        onClick={() => {
+                          setSelectedProductGroup(groupName);
+                          dismissAlert();
+                        }}
+                        className="px-4 py-2 bg-red-100 text-red-700 font-extrabold rounded-xl hover:bg-red-200 transition-colors shadow-sm transform hover:scale-105 active:scale-95 duration-150 text-sm whitespace-nowrap"
+                      >
+                        View Group
+                      </button>
                     </div>
                   </div>
-                  <div className="flex items-center">
-                    <button
-                      onClick={() => {
-                        setSelectedProductGroup(groupName);
-                        dismissAlert();
-                      }}
-                      className="px-5 py-2.5 bg-red-100 text-red-700 font-extrabold rounded-xl hover:bg-red-200 transition-colors shadow-sm transform hover:scale-105 active:scale-95 duration-150"
-                    >
-                      View Group
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
 
           {/* Footer actions */}

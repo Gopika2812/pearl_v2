@@ -169,12 +169,14 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       }
 
       // Field normalization
-      if (normalizedRow.whatsapp !== undefined) customerData.whatsapp = normalizedRow.whatsapp;
-      if (normalizedRow.email !== undefined) customerData.email = normalizedRow.email;
-      if (normalizedRow.address !== undefined) customerData.address = normalizedRow.address;
-      if (normalizedRow.district !== undefined) customerData.district = normalizedRow.district;
-      if (normalizedRow.state !== undefined) customerData.state = normalizedRow.state;
-      if (normalizedRow.gstin !== undefined) customerData.gstin = normalizedRow.gstin;
+      // Only update string fields if they are explicitly provided and not empty
+      // to prevent blank cells in Excel from wiping out existing data.
+      if (normalizedRow.whatsapp) customerData.whatsapp = normalizedRow.whatsapp;
+      if (normalizedRow.email) customerData.email = normalizedRow.email;
+      if (normalizedRow.address) customerData.address = normalizedRow.address;
+      if (normalizedRow.district) customerData.district = normalizedRow.district;
+      if (normalizedRow.state) customerData.state = normalizedRow.state;
+      if (normalizedRow.gstin) customerData.gstin = normalizedRow.gstin;
       if (normalizedRow.creditlimit !== undefined) {
         const rawVal = String(normalizedRow.creditlimit).trim();
         if (rawVal === "") {
@@ -1187,7 +1189,9 @@ router.get("/", async (req, res) => {
           lastInvoiceNumber: 1,
           lastReceiptDate: 1,
           linkedVendorId: 1,
-          billAtPurchasePrice: 1
+          billAtPurchasePrice: 1,
+          isBranchCustomer: 1,
+          linkedBranchId: 1
         }
       });
     }
@@ -1589,6 +1593,8 @@ router.post("/", async (req, res) => {
       isLockedPriceEnabled,
       linkedVendorId,
       billAtPurchasePrice,
+      isBranchCustomer,
+      linkedBranchId,
     } = req.body;
 
     // Basic validation - only name and branchId are required
@@ -1634,6 +1640,8 @@ router.post("/", async (req, res) => {
       isLockedPriceEnabled: isLockedPriceEnabled === true || isLockedPriceEnabled === "true",
       billAtPurchasePrice: billAtPurchasePrice === true || billAtPurchasePrice === "true",
       linkedVendorId: linkedVendorId && linkedVendorId !== "" ? linkedVendorId : null,
+      isBranchCustomer: isBranchCustomer === true || isBranchCustomer === "true",
+      linkedBranchId: linkedBranchId && linkedBranchId !== "" ? linkedBranchId : null,
       openingBalance: (Number(debit) || 0) - (Number(credit) || 0),
       manualOpeningDate: new Date(),
     });
@@ -1746,6 +1754,14 @@ router.put("/:id", async (req, res) => {
     // 3️⃣ SANITIZE OBJECTID FIELDS (Prevent CastErrors from empty strings)
     if (updates.salesOwner === "") {
       updates.salesOwner = null;
+    }
+    
+    if (updates.linkedBranchId === "") {
+      updates.linkedBranchId = null;
+    }
+    
+    if (updates.linkedVendorId === "") {
+      updates.linkedVendorId = null;
     }
 
     // Sanitize and Sync Groups
@@ -2070,8 +2086,78 @@ router.get("/:id/check-credit", async (req, res) => {
     const customer = await Customer.findById(id);
     if (!customer) return res.status(404).json({ success: false, message: "Customer not found" });
 
-    // As explicitly requested, use ONLY the closingBalance field from the customer document
-    const currentBalance = customer.closingBalance || 0;
+    // Calculate true dynamic ledger balance to prevent sync discrepancies
+    let totalDebit = 0;
+    let totalCredit = 0;
+    const cid = new mongoose.Types.ObjectId(id);
+
+    const [
+      invoices, receipts, creditNotes, journalsDr, journalsCr
+    ] = await Promise.all([
+      mongoose.model("Invoice").aggregate([
+        { $match: { "customer.customerId": cid, status: { $in: ["FINALIZED", "PRINTED", "SENT"] } } },
+        { $group: { _id: null, total: { $sum: "$grandTotal" } } }
+      ]),
+      mongoose.model("Receipt").aggregate([
+        { $match: { "customer.customerId": cid, status: { $in: ["confirmed", "bounced"] } } },
+        { $group: { _id: "$status", total: { $sum: "$amount" } } }
+      ]),
+      mongoose.model("CreditNote").aggregate([
+        { $match: { "customer.customerId": cid, status: "Created" } },
+        { $group: { _id: null, total: { $sum: "$grandTotal" } } }
+      ]),
+      mongoose.model("ManualJournal").aggregate([
+        { $match: { "by.partyType": "DEBTOR", "by.partyId": cid } },
+        { $group: { _id: null, total: { $sum: "$amount" } } }
+      ]),
+      mongoose.model("ManualJournal").aggregate([
+        { $match: { "to.partyType": "DEBTOR", "to.partyId": cid } },
+        { $group: { _id: null, total: { $sum: "$amount" } } }
+      ])
+    ]);
+
+    totalDebit += invoices[0]?.total || 0;
+    totalCredit += receipts.find(r => r._id === "confirmed")?.total || 0;
+    totalDebit += receipts.find(r => r._id === "bounced")?.total || 0;
+    totalCredit += creditNotes[0]?.total || 0;
+    totalDebit += journalsDr[0]?.total || 0;
+    totalCredit += journalsCr[0]?.total || 0;
+
+    if (customer.linkedVendorId) {
+      const vid = new mongoose.Types.ObjectId(customer.linkedVendorId);
+      const [
+        vendorInvoices, vendorPayments, vendorDebitNotes, vJournalsDr, vJournalsCr
+      ] = await Promise.all([
+        mongoose.model("PurchaseInvoice").aggregate([
+          { $match: { $or: [{ "vendor.vendorId": vid }, { vendorId: vid }] } },
+          { $group: { _id: null, total: { $sum: "$grandTotal" } } }
+        ]),
+        mongoose.model("Payment").aggregate([
+          { $match: { status: { $ne: "cancelled" }, $or: [{ "vendor.vendorId": vid }, { vendorId: vid }] } },
+          { $group: { _id: null, total: { $sum: "$amount" } } }
+        ]),
+        mongoose.model("DebitNote").aggregate([
+          { $match: { status: "Created", $or: [{ "vendor.vendorId": vid }, { vendorId: vid }] } },
+          { $group: { _id: null, total: { $sum: "$grandTotal" } } }
+        ]),
+        mongoose.model("ManualJournal").aggregate([
+          { $match: { "by.partyType": "VENDOR", "by.partyId": vid } },
+          { $group: { _id: null, total: { $sum: "$amount" } } }
+        ]),
+        mongoose.model("ManualJournal").aggregate([
+          { $match: { "to.partyType": "VENDOR", "to.partyId": vid } },
+          { $group: { _id: null, total: { $sum: "$amount" } } }
+        ])
+      ]);
+
+      totalCredit += vendorInvoices[0]?.total || 0;
+      totalDebit += vendorPayments[0]?.total || 0;
+      totalDebit += vendorDebitNotes[0]?.total || 0;
+      totalDebit += vJournalsDr[0]?.total || 0;
+      totalCredit += vJournalsCr[0]?.total || 0;
+    }
+
+    const currentBalance = (customer.openingBalance || 0) + totalDebit - totalCredit;
     const creditLimit = customer.creditLimit || 0;
     const creditLimitDays = customer.creditLimitDays || 0;
 

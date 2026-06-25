@@ -11,6 +11,7 @@ import Product from "../models/Product.js";
 import SalesMan from "../models/SalesMan.js";
 import SalesOrder from "../models/SalesOrder.js";
 import SalesOwner from "../models/SalesOwner.js";
+import PurchaseOrder from "../models/PurchaseOrder.js";
 import VoucherType from "../models/VoucherType.js";
 import Vendor from "../models/Vendor.js";
 import BranchUser from "../models/BranchUser.js";
@@ -538,10 +539,10 @@ router.post("/preview/:salesOrderId", async (req, res) => {
       const sellingPrice = Number(item.sellingPrice || (originalItem ? originalItem.sellingPrice : 0));
 
       // FALLBACK GST LOGIC: Use originalItem values, but if 0, check productId master data
-      const gstPercent = Number(item.gst || (originalItem ? (originalItem.gst || originalItem.productId?.gst || 0) : 0));
-      const cgstPercent = Number(item.cgst || (originalItem ? (originalItem.cgst || (gstPercent ? gstPercent / 2 : 0)) : (gstPercent / 2)));
-      const sgstPercent = Number(item.sgst || (originalItem ? (originalItem.sgst || (gstPercent ? gstPercent / 2 : 0)) : (gstPercent / 2)));
-      const igstPercent = Number(item.igst || (originalItem ? (originalItem.igst || 0) : 0));
+      const gstPercent = item.gst !== undefined ? Number(item.gst) : (originalItem ? Number(originalItem.gst !== undefined ? originalItem.gst : (originalItem.productId?.gst || 0)) : 0);
+      const cgstPercent = item.cgst !== undefined ? Number(item.cgst) : (originalItem && originalItem.cgst !== undefined ? Number(originalItem.cgst) : gstPercent / 2);
+      const sgstPercent = item.sgst !== undefined ? Number(item.sgst) : (originalItem && originalItem.sgst !== undefined ? Number(originalItem.sgst) : gstPercent / 2);
+      const igstPercent = item.igst !== undefined ? Number(item.igst) : (originalItem && originalItem.igst !== undefined ? Number(originalItem.igst) : 0);
       const discountPercent = Number(item.discountPercent || 0);
       const discountAmount = Number(item.discountAmount || 0);
 
@@ -1117,9 +1118,9 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
             discountAmount,
             sellingPrice,
             gst: gstPercent,
-            cgst: item.cgst !== undefined ? Number(item.cgst) : (originalItem ? (originalItem.cgst || (item.igst ? 0 : gstPercent / 2)) : (item.igst ? 0 : gstPercent / 2)),
-            sgst: item.sgst !== undefined ? Number(item.sgst) : (originalItem ? (originalItem.sgst || (item.igst ? 0 : gstPercent / 2)) : (item.igst ? 0 : gstPercent / 2)),
-            igst: item.igst !== undefined ? Number(item.igst) : (originalItem ? (originalItem.igst || 0) : 0),
+            cgst: item.cgst !== undefined ? Number(item.cgst) : (originalItem && originalItem.cgst !== undefined ? Number(originalItem.cgst) : (item.igst ? 0 : gstPercent / 2)),
+            sgst: item.sgst !== undefined ? Number(item.sgst) : (originalItem && originalItem.sgst !== undefined ? Number(originalItem.sgst) : (item.igst ? 0 : gstPercent / 2)),
+            igst: item.igst !== undefined ? Number(item.igst) : (originalItem && originalItem.igst !== undefined ? Number(originalItem.igst) : 0),
             name: item.name || (originalItem ? originalItem.name : "Unknown Product"),
             hsn: item.hsn || item.hsnCode || (originalItem ? (originalItem.hsn || originalItem.hsnCode) : "")
           };
@@ -1540,6 +1541,140 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
         }
 
         await salesOrder.save({ session });
+
+        // ==========================================
+        // 🚀 AUTO-GENERATE PURCHASE ORDER FOR BRANCH CUSTOMERS
+        // ==========================================
+        if (invoiceType === "TAX_INVOICE" && customer.isBranchCustomer && customer.linkedBranchId) {
+          const destBranchId = customer.linkedBranchId;
+          
+          let destVendor = await Vendor.findOne({ branchId: destBranchId, linkedBranchId: salesOrder.branchId }).session(session);
+          
+          const sourceBranch = await Branch.findById(salesOrder.branchId).session(session);
+          const branchName = sourceBranch ? sourceBranch.name : "Internal Branch";
+
+          // --- AUTO-SWITCH LINKING LOGIC ---
+          // If the user manually created or renamed an existing ledger to EXACTLY match the branch name, 
+          // we switch the link to this exact ledger. This allows the user to link their preferred existing ledger.
+          const perfectMatchVendor = await Vendor.findOne({ 
+            branchId: destBranchId, 
+            name: { $regex: new RegExp(`^${branchName}$`, 'i') } 
+          }).session(session);
+
+          if (perfectMatchVendor && destVendor && perfectMatchVendor._id.toString() !== destVendor._id.toString()) {
+            // Unlink the old incorrectly linked vendor
+            destVendor.linkedBranchId = null;
+            destVendor.isBranchVendor = false;
+            await destVendor.save({ session });
+            
+            // Link the new perfectly matched vendor
+            destVendor = perfectMatchVendor;
+            destVendor.isBranchVendor = true;
+            destVendor.linkedBranchId = salesOrder.branchId;
+            await destVendor.save({ session });
+          } else if (perfectMatchVendor && !destVendor) {
+            // If not linked yet, but a perfect match exists
+            destVendor = perfectMatchVendor;
+            destVendor.isBranchVendor = true;
+            destVendor.linkedBranchId = salesOrder.branchId;
+            await destVendor.save({ session });
+          }
+
+          if (!destVendor) {
+            const allVendors = await Vendor.find({ branchId: destBranchId }).select('_id name gstin').session(session);
+            
+            let matchedVendor = null;
+
+            // 1. Try matching by GSTIN (most reliable)
+            if (sourceBranch && sourceBranch.gstin) {
+              matchedVendor = allVendors.find(v => v.gstin && v.gstin.trim().toUpperCase() === sourceBranch.gstin.trim().toUpperCase());
+            }
+
+            // 2. Try aggressive fuzzy matching (ignoring all spaces and special characters)
+            if (!matchedVendor) {
+              const cleanBranchName = branchName.replace(/[^a-z0-9]/gi, '').toLowerCase();
+              matchedVendor = allVendors.find(v => v.name.replace(/[^a-z0-9]/gi, '').toLowerCase() === cleanBranchName);
+            }
+
+            if (matchedVendor) {
+              destVendor = await Vendor.findById(matchedVendor._id).session(session);
+              // Merge/Link existing vendor
+              destVendor.isBranchVendor = true;
+              destVendor.linkedBranchId = salesOrder.branchId;
+              await destVendor.save({ session });
+            } else {
+              destVendor = new Vendor({
+                branchId: destBranchId,
+                name: branchName,
+                isBranchVendor: true,
+                linkedBranchId: salesOrder.branchId,
+                phone: sourceBranch ? sourceBranch.phone : "",
+                address: sourceBranch ? sourceBranch.address : "",
+                gstin: sourceBranch ? sourceBranch.gstin : "",
+                gstRegistrationType: sourceBranch?.gstin ? "Regular" : "Unregistered/Consumer",
+              });
+              await destVendor.save({ session });
+            }
+          }
+
+          const poItems = [];
+          for (const item of processedItems) {
+             let destProduct = await Product.findOne({ branchId: destBranchId, name: item.name }).session(session);
+             if (!destProduct) {
+                const sourceProduct = await Product.findById(item.productId).session(session);
+                if (sourceProduct) {
+                  destProduct = new Product({
+                    ...sourceProduct.toObject(),
+                    _id: new mongoose.Types.ObjectId(),
+                    branchId: destBranchId,
+                    totalQty: 0,
+                    openingQty: 0,
+                    batches: [],
+                    batch1: { qty: 0 },
+                    batch2: { qty: 0 }
+                  });
+                  await destProduct.save({ session });
+                }
+             }
+             if (destProduct) {
+               poItems.push({
+                 productId: destProduct._id,
+                 name: item.name,
+                 qty: item.qty,
+                 purchasePrice: item.sellingPrice,
+                 sellingPrice: destProduct.sellingPrice || item.sellingPrice,
+                 rowPrice: item.total,
+                 discountPercent: item.discountPercent,
+                 discountAmount: item.discountAmount,
+                 taxableAmount: item.total - (item.gstAmount || 0),
+                 hsn: item.hsn,
+                 gst: item.gst,
+                 cgst: item.cgst,
+                 sgst: item.sgst,
+                 igst: item.igst,
+                 unit: item.unit,
+                 total: item.total,
+               });
+             }
+          }
+
+          const po = new PurchaseOrder({
+            branchId: destBranchId,
+            invoiceId: `PO-${invoiceNumber}`,
+            vendorBillNo: invoiceNumber,
+            vendorDate: salesOrder.orderDate || salesOrder.createdAt || new Date(),
+            vendor: destVendor.name,
+            vendorId: destVendor._id,
+            items: poItems,
+            subtotal: grossSubtotal,
+            totalTax: totalTax.total,
+            grandTotal: grandTotal,
+            status: "PLACED",
+            date: new Date(),
+          });
+          
+          await po.save({ session });
+        }
 
         // ✅ LOG SUCCESSFUL INVOICE FINALIZATION
         console.log(`📡 AUDIT LOG DEBUG: alreadyInvoiced=${alreadyInvoiced}, editHistory=${salesOrder.editHistory.length}`);

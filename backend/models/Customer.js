@@ -86,6 +86,15 @@ const customerSchema = new mongoose.Schema(
       default: null,
       index: true
     },
+    
+    // Inter-Branch Transfer Flags
+    isBranchCustomer: { type: Boolean, default: false },
+    linkedBranchId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Branch",
+      default: null,
+      index: true
+    },
   },
   { timestamps: true }
 );

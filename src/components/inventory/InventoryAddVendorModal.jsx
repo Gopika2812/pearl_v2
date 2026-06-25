@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { FaTimes, FaHandshake, FaPhoneAlt, FaMapMarkedAlt, FaFileAlt, FaWallet, FaCloudUploadAlt } from "react-icons/fa";
-import { API_BASE, fetchWithAuth } from "../../api";
+import { API_BASE, fetchWithAuth } from "../../api";import FilterableSelect from "../FilterableSelect";
 
 const InventoryAddVendorModal = ({ isOpen, onClose, onSave, branchId: propBranchId, editingItem, user }) => {
   const getBranchId = () => {
@@ -22,10 +22,12 @@ const InventoryAddVendorModal = ({ isOpen, onClose, onSave, branchId: propBranch
     _id: null, name: "", phone: "", email: "",
     address: "", stateName: "", gstRegistrationType: "Regular",
     gstin: "", debit: 0, credit: 0, openingBalance: 0,
+    isBranchVendor: false, linkedBranchId: null,
   };
 
   const [vendor, setVendor] = useState(emptyVendor);
   const [isFetchingGst, setIsFetchingGst] = useState(false);
+  const [branches, setBranches] = useState([]);
 
   useEffect(() => {
     if (editingItem) {
@@ -41,11 +43,30 @@ const InventoryAddVendorModal = ({ isOpen, onClose, onSave, branchId: propBranch
         debit: editingItem.debit || 0,
         credit: editingItem.credit || 0,
         openingBalance: editingItem.openingBalance || 0,
+        isBranchVendor: editingItem.isBranchVendor || false,
+        linkedBranchId: editingItem.linkedBranchId || null,
       });
     } else {
       setVendor(emptyVendor);
     }
   }, [editingItem]);
+
+  useEffect(() => {
+    if (isOpen && actualBranchId) {
+      const fetchBranches = async () => {
+        try {
+          const res = await fetchWithAuth(`${API_BASE}/branches`);
+          const result = await res.json();
+          if (result.success) {
+            setBranches(result.data || []);
+          }
+        } catch (err) {
+          console.error("Fetch branches error:", err);
+        }
+      };
+      fetchBranches();
+    }
+  }, [isOpen, actualBranchId]);
 
   if (!isOpen) return null;
 
@@ -274,6 +295,42 @@ const InventoryAddVendorModal = ({ isOpen, onClose, onSave, branchId: propBranch
                   <p className="text-xs font-bold opacity-80 uppercase tracking-widest mb-1">Registration Status</p>
                   <p className="font-black text-lg">{editingItem ? "MODIFICATION MODE" : "INITIAL REGISTRATION"}</p>
                 </div>
+                
+                {/* INTER-BRANCH SETTINGS */}
+                <div className="bg-orange-50/30 rounded-3xl p-6 shadow-sm border border-orange-100 space-y-5">
+                  <h4 className="text-gray-900 font-black text-sm tracking-widest uppercase border-b border-orange-100 pb-3">Inter-Branch Link</h4>
+                  
+                  <div className="flex items-center justify-between p-4 bg-white border border-orange-100 rounded-xl shadow-sm">
+                    <div>
+                      <label className="text-xs font-black text-gray-800 uppercase tracking-wider block">Internal Branch</label>
+                      <p className="text-[10px] text-gray-500 font-bold uppercase mt-0.5">Link to another branch</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setVendor({ ...vendor, isBranchVendor: !vendor.isBranchVendor, linkedBranchId: !vendor.isBranchVendor ? vendor.linkedBranchId : null })}
+                      className={`w-12 h-6 rounded-full transition-all relative ${vendor.isBranchVendor ? 'bg-orange-500' : 'bg-gray-300'}`}
+                    >
+                      <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${vendor.isBranchVendor ? 'left-7' : 'left-1'}`}></div>
+                    </button>
+                  </div>
+
+                  {vendor.isBranchVendor && (
+                    <div className="animate-in fade-in slide-in-from-top-2">
+                      <label className={lc}>Select Destination Branch *</label>
+                      <FilterableSelect
+                        options={branches.map(b => ({
+                          _id: b._id,
+                          name: `${b.name} (${b.code})`
+                        }))}
+                        value={vendor.linkedBranchId}
+                        onChange={(value) => setVendor({ ...vendor, linkedBranchId: value })}
+                        placeholder="Search Branch..."
+                        className={ic}
+                      />
+                    </div>
+                  )}
+                </div>
+
               </div>
             </div>
           </form>

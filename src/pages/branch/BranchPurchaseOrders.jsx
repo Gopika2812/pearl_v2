@@ -7,6 +7,7 @@ import { API_BASE, fetchWithAuth } from "../../api";
 import EditPurchaseOrderModal from "../../components/branch/EditPurchaseOrderModal";
 import { useBranch } from "../../context/BranchContext";
 import DateRangeDropdown from "../../components/common/DateRangeDropdown";
+import SearchableSelect from "../../components/common/SearchableSelect";
 
 const BranchPurchaseOrders = () => {
   const { currentBranch, user } = useBranch();
@@ -35,6 +36,7 @@ const BranchPurchaseOrders = () => {
   const [vendorDate, setVendorDate] = useState("");
   const [filterFromDate, setFilterFromDate] = useState(new Date().toISOString().split('T')[0]);
   const [filterToDate, setFilterToDate] = useState(new Date().toISOString().split('T')[0]);
+  const [branchProducts, setBranchProducts] = useState([]);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -107,6 +109,23 @@ const BranchPurchaseOrders = () => {
   useEffect(() => {
     fetchPurchaseOrders();
   }, [currentBranch?._id, debouncedSearch, filterFromDate, filterToDate, currentPage, pageSize]);
+
+  useEffect(() => {
+    if (showInvoiceModal && currentBranch?._id && branchProducts.length === 0) {
+      const fetchProducts = async () => {
+        try {
+          const res = await fetchWithAuth(`${API_BASE}/products?branchId=${currentBranch._id}&limit=10000`);
+          const result = await res.json();
+          if (result.success) {
+            setBranchProducts(result.data || []);
+          }
+        } catch (err) {
+          console.error("Failed to fetch branch products", err);
+        }
+      };
+      fetchProducts();
+    }
+  }, [showInvoiceModal, currentBranch]);
 
   const toggleExpanded = (orderId) => {
     setExpandedOrders((prev) => ({
@@ -187,6 +206,9 @@ const BranchPurchaseOrders = () => {
       toast.error("Please enter Vendor Bill Number and Bill Date");
       return;
     }
+
+    // The product mapping validation is removed because the user now maps products in the Edit Purchase Order modal instead.
+
     try {
       setLoading(true);
       const res = await fetchWithAuth(`${API_BASE}/purchase-orders/${editingOrder._id}/generate-invoice`, {
@@ -209,16 +231,16 @@ const BranchPurchaseOrders = () => {
   };
 
   const handleRequestEdit = async (orderId) => {
-    if (!window.confirm("Request admin permission to re-edit this invoiced Purchase Order?")) return;
+    if (!window.confirm("Are you sure you want to RE-EDIT this invoiced Purchase Order? This will unlock it for modifications.")) return;
     try {
       setLoading(true);
-      const res = await fetchWithAuth(`${API_BASE}/purchase-orders/${orderId}/request-edit`, {
+      const res = await fetchWithAuth(`${API_BASE}/purchase-orders/${orderId}/approve-edit`, {
         method: "PATCH",
-        body: JSON.stringify({ requestedBy: "Current User" }) // In a real app, use actual user name
+        body: JSON.stringify({ requestedBy: user?.username || "Current User" })
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Failed to submit request");
-      toast.success("Edit request submitted to admin");
+      if (!res.ok) throw new Error(data.message || "Failed to unlock order for editing");
+      toast.success("Order unlocked for editing");
       fetchPurchaseOrders();
     } catch (err) {
       toast.error(err.message);
@@ -228,16 +250,17 @@ const BranchPurchaseOrders = () => {
   };
 
   const handleRequestCancel = async (orderId) => {
-    if (!window.confirm("Request admin permission to CANCEL this invoiced Purchase Order? This will revert stock and vendor balance if approved.")) return;
+    if (!window.confirm("Are you sure you want to CANCEL this invoiced Purchase Order? This will immediately revert stock and vendor balance.")) return;
     try {
       setLoading(true);
-      const res = await fetchWithAuth(`${API_BASE}/purchase-orders/${orderId}/request-cancel`, {
+      const res = await fetchWithAuth(`${API_BASE}/purchase-orders/${orderId}/approve-cancel`, {
         method: "PATCH",
-        body: JSON.stringify({ requestedBy: "Current User" })
+        body: JSON.stringify({ requestedBy: user?.username || "Current User" })
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Failed to submit request");
-      toast.success("Cancel request submitted to admin");
+      if (!res.ok) throw new Error(data.message || "Failed to process cancellation");
+      
+      toast.success("Order cancelled and stock reverted successfully");
       fetchPurchaseOrders();
     } catch (err) {
       toast.error(err.message);
@@ -340,7 +363,7 @@ const BranchPurchaseOrders = () => {
                 </div>
               </div>
 
-              <div className="overflow-hidden border border-gray-100 rounded-2xl shadow-sm">
+              <div className="overflow-visible border border-gray-100 rounded-2xl shadow-sm bg-white">
                 <table className="w-full text-xs">
                   <thead className="bg-[#319bab]/10 border-b border-gray-100">
                     <tr>
@@ -355,7 +378,9 @@ const BranchPurchaseOrders = () => {
                   <tbody className="divide-y divide-gray-50">
                     {editItems.map((item, idx) => (
                       <tr key={idx} className="hover:bg-gray-50 transition drop-shadow-sm">
-                        <td className="px-4 py-4 font-bold text-gray-700">{item.name}</td>
+                        <td className="px-4 py-4 min-w-[250px] font-semibold text-gray-800">
+                          {item.name}
+                        </td>
                         <td className="px-4 py-4">
                           <input
                             type="number"
@@ -622,7 +647,9 @@ const BranchPurchaseOrders = () => {
                         {(isFieldAllowed("action_edit") || isFieldAllowed("action_delete") || isFieldAllowed("action_invoice")) && (
                           <td className="px-6 py-4 text-center">
                             <div className="flex items-center justify-center gap-2">
-                              {order.status !== 'INVOICED' ? (
+                              {order.status === 'CANCELLED' ? (
+                                <span className="text-gray-400 text-[10px] font-bold uppercase tracking-wider bg-gray-100 px-2 py-1 rounded cursor-not-allowed">Disabled</span>
+                              ) : order.status !== 'INVOICED' ? (
                                 <>
                                   {isFieldAllowed("action_edit") && (
                                     <button
@@ -671,7 +698,7 @@ const BranchPurchaseOrders = () => {
                                   )}
                                   {isFieldAllowed("action_delete") && (
                                     <button
-                                      onClick={() => handleDeleteOrder(order._id)}
+                                      onClick={() => handleRequestCancel(order._id)}
                                       className="bg-red-500 hover:bg-red-600 text-white p-2 rounded-lg transition shadow-md shadow-red-100 flex items-center gap-1 text-xs font-bold"
                                       title="Cancel Invoiced Order"
                                     >

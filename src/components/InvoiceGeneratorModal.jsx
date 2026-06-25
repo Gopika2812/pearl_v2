@@ -207,9 +207,9 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
             discountPercent: item.discountPercent || 0,
             discountAmount: item.discountAmount || 0,
             gst: item.gst || item.productId?.gst || 0,
-            cgst: item.cgst || (item.gst ? item.gst / 2 : (item.productId?.gst ? item.productId.gst / 2 : 0)),
-            sgst: item.sgst || (item.gst ? item.gst / 2 : (item.productId?.gst ? item.productId.gst / 2 : 0)),
-            igst: item.igst || 0,
+            cgst: item.cgst !== undefined ? item.cgst : (item.gst ? item.gst / 2 : (item.productId?.gst ? item.productId.gst / 2 : 0)),
+            sgst: item.sgst !== undefined ? item.sgst : (item.gst ? item.gst / 2 : (item.productId?.gst ? item.productId.gst / 2 : 0)),
+            igst: item.igst !== undefined ? item.igst : 0,
             hsn: item.hsn || item.hsnCode || item.hsncode || item.productId?.hsnCode || item.productId?.hsncode || "",
             total: total
           });
@@ -233,9 +233,9 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
             discountPercent: item.discountPercent || 0,
             discountAmount: item.discountAmount || 0,
             gst: item.gst || item.productId?.gst || 0,
-            cgst: item.cgst || (item.gst ? item.gst / 2 : (item.productId?.gst ? item.productId.gst / 2 : 0)),
-            sgst: item.sgst || (item.gst ? item.gst / 2 : (item.productId?.gst ? item.productId.gst / 2 : 0)),
-            igst: item.igst || 0,
+            cgst: item.cgst !== undefined ? item.cgst : (item.gst ? item.gst / 2 : (item.productId?.gst ? item.productId.gst / 2 : 0)),
+            sgst: item.sgst !== undefined ? item.sgst : (item.gst ? item.gst / 2 : (item.productId?.gst ? item.productId.gst / 2 : 0)),
+            igst: item.igst !== undefined ? item.igst : 0,
             hsn: item.hsn || item.hsnCode || item.hsncode || item.productId?.hsnCode || item.productId?.hsncode || "",
             total: Math.round((item.sellingPrice || 0) * (item.qty || 0) * 100) / 100
           });

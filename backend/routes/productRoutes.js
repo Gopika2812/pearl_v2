@@ -2057,7 +2057,7 @@ router.get("/stock-group-summary", async (req, res) => {
 
     const [purchases, sales, debitNotes, creditNotes, psvTotals] = await Promise.all([
       PurchaseInvoice.aggregate([
-        { $match: { branchId: branchOid, invoiceDate: { $gt: HARD_ANCHOR_DATE } } },
+        { $match: { branchId: branchOid, status: { $ne: "CANCELLED" }, invoiceDate: { $gt: HARD_ANCHOR_DATE } } },
         { $unwind: "$items" },
         {
           $group: {
@@ -2209,7 +2209,7 @@ router.get("/stock-journal", async (req, res) => {
 
     const [purchases, sales, debitNotes, creditNotes, psvTotals] = await Promise.all([
       PurchaseInvoice.aggregate([
-        { $match: { branchId: branchOid, invoiceDate: { $gt: HARD_ANCHOR_DATE } } },
+        { $match: { branchId: branchOid, status: { $ne: "CANCELLED" }, invoiceDate: { $gt: HARD_ANCHOR_DATE } } },
         { $unwind: "$items" },
         {
           $group: {
@@ -2396,7 +2396,7 @@ router.get("/:id/ledger", auth, async (req, res) => {
     // 🧮 1. Calculate Movements BEFORE Report Start (Post-Anchor)
     const [pBefore, sBefore, dnBefore, cnBefore, psvBefore] = await Promise.all([
       PurchaseInvoice.aggregate([
-        { $match: { branchId: branchOid, invoiceDate: { $gt: HARD_ANCHOR_DATE, $lt: start } } },
+        { $match: { branchId: branchOid, status: { $ne: "CANCELLED" }, invoiceDate: { $gt: HARD_ANCHOR_DATE, $lt: start } } },
         { $unwind: "$items" },
         { $match: { "items.productId": productOid } },
         { $group: { _id: null, total: { $sum: "$items.qty" } } }
@@ -2445,7 +2445,7 @@ router.get("/:id/ledger", auth, async (req, res) => {
         { $project: { type: "OUTWARD", date: "$invoiceDate", voucherType: { $literal: "Sales Invoice" }, invoiceId: "$invoiceNumber", particulars: "$customer.name", qty: "$items.qty", rate: "$items.sellingPrice", value: { $multiply: ["$items.qty", "$items.sellingPrice"] } } }
       ]),
       PurchaseInvoice.aggregate([
-        { $match: { branchId: branchOid, invoiceDate: { $gte: start, $lte: end } } },
+        { $match: { branchId: branchOid, status: { $ne: "CANCELLED" }, invoiceDate: { $gte: start, $lte: end } } },
         { $unwind: "$items" },
         { $match: { "items.productId": productOid } },
         { $project: { type: "INWARD", date: "$invoiceDate", voucherType: { $literal: "Purchase Invoice" }, invoiceId: "$purchaseInvoiceId", particulars: "$vendor", qty: "$items.qty", rate: "$items.purchasePrice", value: { $multiply: ["$items.qty", "$items.purchasePrice"] } } }
