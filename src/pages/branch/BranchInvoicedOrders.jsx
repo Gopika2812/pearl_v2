@@ -1655,11 +1655,23 @@ const BranchInvoicedOrders = () => {
                                           <tr key={idx} className="bg-white">
                                             <td className="py-2 px-3 font-semibold">
                                               <div>{item.name}</div>
-                                              {item.batch && (
-                                                <div className="text-[10px] text-gray-500 font-bold mt-0.5">
-                                                  Batch {item.batch}{item.expiryDate ? ` | Exp: ${new Date(item.expiryDate).toLocaleDateString("en-IN")}` : ""}
-                                                </div>
-                                              )}
+                                              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                                {item.batch && (
+                                                  <span className="text-[10px] text-gray-500 font-bold bg-gray-100 px-1.5 py-0.5 rounded">
+                                                    Batch: {item.batch}
+                                                  </span>
+                                                )}
+                                                {item.mrp > 0 && (
+                                                  <span className="text-[10px] text-gray-500 font-bold bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded">
+                                                    MRP: ₹{item.mrp}
+                                                  </span>
+                                                )}
+                                                {item.expiryDate && (
+                                                  <span className="text-[10px] text-red-500 font-bold bg-red-50 px-1.5 py-0.5 rounded">
+                                                    Exp: {new Date(item.expiryDate).toLocaleDateString("en-IN")}
+                                                  </span>
+                                                )}
+                                              </div>
                                             </td>
                                             <td className="py-2 px-3 text-center text-gray-600">
                                               {item.hsn}

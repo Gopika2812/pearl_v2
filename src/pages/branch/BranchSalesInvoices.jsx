@@ -1384,6 +1384,8 @@ const BranchSalesInvoices = () => {
                                       <tr className="text-slate-400 font-black border-b border-slate-50">
                                         <th className="text-left py-3">DESCRIPTION</th>
                                         <th className="text-center py-3">QTY</th>
+                                        <th className="text-center py-3">P. PRICE</th>
+                                        <th className="text-center py-3">S. PRICE</th>
                                         <th className="text-center py-3">TAX</th>
                                         <th className="text-right py-3">DISCOUNT</th>
                                         <th className="text-right py-3">TOTAL</th>
@@ -1403,6 +1405,8 @@ const BranchSalesInvoices = () => {
                                               )}
                                             </td>
                                             <td className="py-3 text-center font-black text-indigo-600 bg-indigo-50/50 rounded-lg">{item.qty || 0} {item.unit || "Units"}</td>
+                                            <td className="py-3 text-center font-bold text-slate-500">₹{(item.productId?.purchasingPrice || 0).toLocaleString()}</td>
+                                            <td className="py-3 text-center font-bold text-slate-500">₹{(item.sellingPrice || item.productId?.sellingPrice || 0).toLocaleString()}</td>
                                             <td className="py-3 text-center">
                                               <div className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded inline-block">
                                                 {item.igst > 0 ? `IGST ${item.igst}%` : `GST ${item.gst || 0}%`}

@@ -1619,7 +1619,14 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
 
           const poItems = [];
           for (const item of processedItems) {
-             let destProduct = await Product.findOne({ branchId: destBranchId, name: item.name }).session(session);
+             let destProduct = await Product.findOne({
+               branchId: destBranchId,
+               $or: [
+                 { name: item.name },
+                 { aliases: item.name }
+               ]
+             }).session(session);
+
              if (!destProduct) {
                 const sourceProduct = await Product.findById(item.productId).session(session);
                 if (sourceProduct) {
@@ -1639,7 +1646,7 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
              if (destProduct) {
                poItems.push({
                  productId: destProduct._id,
-                 name: item.name,
+                 name: destProduct.name || item.name,
                  qty: item.qty,
                  purchasePrice: item.sellingPrice,
                  sellingPrice: destProduct.sellingPrice || item.sellingPrice,
@@ -1654,13 +1661,32 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
                  igst: item.igst,
                  unit: item.unit,
                  total: item.total,
+                 mrp: item.mrp,
+                 expiryDate: item.expiryDate,
                });
              }
           }
 
+          let poVoucher = await VoucherType.findOne({ branchId: destBranchId, orderType: "PO" }).session(session);
+          if (!poVoucher) {
+            poVoucher = new VoucherType({
+              branchId: destBranchId,
+              name: "Purchase Order",
+              orderType: "PO",
+              prefix: "PO",
+              counter: 1,
+              financialYear
+            });
+          }
+          
+          let poInvoiceId = `${poVoucher.prefix}/${String(poVoucher.counter).padStart(3, "0")}/${financialYear}`;
+          poVoucher.counter += 1;
+          await poVoucher.save({ session });
+
           const po = new PurchaseOrder({
             branchId: destBranchId,
-            invoiceId: `PO-${invoiceNumber}`,
+            invoiceId: poInvoiceId,
+            voucherType: poVoucher.name,
             vendorBillNo: invoiceNumber,
             vendorDate: salesOrder.orderDate || salesOrder.createdAt || new Date(),
             vendor: destVendor.name,

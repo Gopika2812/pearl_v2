@@ -28,6 +28,7 @@ const EditPurchaseOrderModal = ({ order, branchId, onClose, onSave }) => {
   const [productSearch, setProductSearch] = useState("");
   const [showProductDropdown, setShowProductDropdown] = useState(false);
 
+  const [invoiceId, setInvoiceId] = useState("");
   const [vendors, setVendors] = useState([]);
   const [vendorSearch, setVendorSearch] = useState("");
   const [selectedVendor, setSelectedVendor] = useState("");
@@ -36,9 +37,14 @@ const EditPurchaseOrderModal = ({ order, branchId, onClose, onSave }) => {
   const [customDiscount, setCustomDiscount] = useState("");
   const [customDiscountType, setCustomDiscountType] = useState("amount");
 
+  const [voucherTypes, setVoucherTypes] = useState([]);
+  const [selectedVoucherType, setSelectedVoucherType] = useState("");
+
   // Initialize items from order
   useEffect(() => {
     if (order) {
+      setInvoiceId(order.invoiceId || "");
+      setSelectedVoucherType(order.voucherType || "");
       setItems(order.items || []);
       setWarehouse(order.warehouse || "");
       setSelectedVendor(order.vendor || "");
@@ -47,8 +53,43 @@ const EditPurchaseOrderModal = ({ order, branchId, onClose, onSave }) => {
       setCustomDiscountType("amount");
       fetchProducts();
       fetchVendors();
+      fetchVoucherTypes();
     }
   }, [order, branchId]);
+
+  const fetchVoucherTypes = async () => {
+    try {
+      const branch = order?.branchId || branchId;
+      if (!branch) return;
+      const res = await fetchWithAuth(`${API_BASE}/voucher-types?branchId=${branch}`);
+      if (res.ok) {
+        const data = await res.json();
+        const poVouchers = (data.data || []).filter(v => v.orderType === "PO");
+        setVoucherTypes(poVouchers);
+      }
+    } catch (err) {
+      console.error("Error fetching voucher types:", err);
+    }
+  };
+
+  const handleVoucherTypeChange = async (e) => {
+    const vType = e.target.value;
+    setSelectedVoucherType(vType);
+    if (!vType) return;
+    
+    try {
+      const branch = order?.branchId || branchId;
+      const res = await fetchWithAuth(`${API_BASE}/purchase-orders/next-invoice/${encodeURIComponent(vType)}?branchId=${branch}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.nextInvoiceId) {
+          setInvoiceId(data.nextInvoiceId);
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching next invoice id:", err);
+    }
+  };
 
   const fetchVendors = async () => {
     try {
@@ -243,10 +284,13 @@ const EditPurchaseOrderModal = ({ order, branchId, onClose, onSave }) => {
       const totals = calculateTotals();
       
       const payload = {
+        invoiceId,
+        voucherType: selectedVoucherType,
         items,
         warehouse,
         vendor: selectedVendor,
         ...totals,
+        totalDiscount: customDiscount ? Number(customDiscount) : 0,
         transportCharge: order?.transportCharge || 0,
       };
 
@@ -278,12 +322,35 @@ const EditPurchaseOrderModal = ({ order, branchId, onClose, onSave }) => {
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[95vw] max-h-[90vh] overflow-y-auto">
         {/* HEADER */}
         <div className="sticky top-0 bg-gradient-to-r from-[#319bab] to-[#257f87] text-white p-6 flex items-center justify-between rounded-t-2xl">
           <div>
             <h2 className="text-2xl font-bold">Edit Purchase Order</h2>
-            <p className="text-blue-100 text-sm">Invoice: {order?.invoiceId}</p>
+            <div className="flex items-center gap-4 mt-2">
+              <div className="flex items-center gap-2">
+                <span className="text-blue-100 text-sm">Voucher:</span>
+                <select
+                  value={selectedVoucherType}
+                  onChange={handleVoucherTypeChange}
+                  className="bg-white bg-opacity-20 text-white border border-blue-300 border-opacity-30 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-white"
+                >
+                  <option value="" className="text-black">Select Voucher</option>
+                  {voucherTypes.map((v) => (
+                    <option key={v._id} value={v.name} className="text-black">{v.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-blue-100 text-sm">Invoice ID:</span>
+                <input
+                  type="text"
+                  value={invoiceId}
+                  onChange={(e) => setInvoiceId(e.target.value)}
+                  className="bg-white bg-opacity-20 text-white placeholder-blue-200 border border-blue-300 border-opacity-30 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-white min-w-[150px]"
+                />
+              </div>
+            </div>
           </div>
           <button
             onClick={onClose}
@@ -361,21 +428,23 @@ const EditPurchaseOrderModal = ({ order, branchId, onClose, onSave }) => {
                   {items.map((item, idx) => (
                     <tr key={idx} className="hover:bg-gray-50">
                       <td className="px-4 py-3 font-semibold text-gray-800 min-w-[250px]">
-                        <SearchableSelect
-                          options={products.map(p => ({
-                            label: `${p.name} ${p.hsn ? `(HSN: ${p.hsn})` : ''}`,
-                            value: p._id,
-                            product: p
-                          }))}
-                          value={item.productId || ""}
-                          onChange={(val) => {
-                            const selectedProd = products.find(p => String(p._id) === String(val));
-                            if (selectedProd) {
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1">
+                            <SearchableSelect
+                              options={products.map(p => ({
+                                label: `${p.name} ${p.hsn ? `(HSN: ${p.hsn})` : ''}`,
+                                value: p._id,
+                                product: p
+                              }))}
+                              value={item.productId || ""}
+                              onChange={(val) => {
+                                const selectedProd = products.find(p => String(p._id) === String(val));
+                                if (selectedProd) {
                               const updated = [...items];
                               updated[idx] = {
                                 ...updated[idx],
                                 productId: selectedProd._id,
-                                name: selectedProd.name,
+                                // name: selectedProd.name, // 🚨 Do NOT overwrite! We want to keep the original PO item name so the backend can rename the local product to this.
                                 hsn: selectedProd.hsn || updated[idx].hsn,
                                 gst: selectedProd.taxRate || selectedProd.gst || updated[idx].gst,
                                 unit: selectedProd.unit || updated[idx].unit,
@@ -387,8 +456,17 @@ const EditPurchaseOrderModal = ({ order, branchId, onClose, onSave }) => {
                               setItems(updated);
                             }
                           }}
-                          placeholder={item.name || "Search Product"}
-                        />
+                              placeholder={item.name || "Search Product"}
+                            />
+                          </div>
+                          {item.productId && (
+                            <span className="text-green-500 text-lg flex-shrink-0" title="Product Mapped Successfully">
+                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+                                <path fillRule="evenodd" d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12Zm13.36-1.814a.75.75 0 1 0-1.22-.872l-3.236 4.53L9.53 12.22a.75.75 0 0 0-1.06 1.06l2.25 2.25a.75.75 0 0 0 1.14-.094l3.75-5.25Z" clipRule="evenodd" />
+                              </svg>
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-center text-gray-600">{item.hsn}</td>
                       <td className="px-4 py-3">

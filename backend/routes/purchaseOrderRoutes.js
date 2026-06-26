@@ -862,10 +862,33 @@ router.post("/", auth, async (req, res) => {
 router.put("/:id", auth, async (req, res) => {
   try {
     const { id } = req.params;
-    const { items, warehouse, subtotal, totalTax, totalDiscount, grandTotal, transportCharge, vendor } = req.body;
+    const { invoiceId, voucherType, items, warehouse, subtotal, totalTax, totalDiscount, grandTotal, transportCharge, vendor } = req.body;
 
     const order = await PurchaseOrder.findById(id);
     if (!order) return res.status(404).json({ message: "Purchase Order not found" });
+
+    let isVoucherTypeChanged = false;
+    if (voucherType && voucherType !== order.voucherType) {
+      order.voucherType = voucherType;
+      isVoucherTypeChanged = true;
+    }
+
+    if (invoiceId && invoiceId !== order.invoiceId) {
+      // Check for uniqueness
+      const existing = await PurchaseOrder.findOne({ branchId: order.branchId, invoiceId });
+      if (existing) {
+        return res.status(400).json({ message: "Purchase Order with this Invoice ID already exists" });
+      }
+      order.invoiceId = invoiceId;
+      
+      if (isVoucherTypeChanged) {
+        const v = await VoucherType.findOne({ branchId: order.branchId, name: voucherType.toLowerCase(), orderType: "PO" });
+        if (v) {
+          v.counter += 1;
+          await v.save();
+        }
+      }
+    }
 
     const oldState = {
       items: order.items.map(i => i.toObject()),
@@ -892,7 +915,34 @@ router.put("/:id", auth, async (req, res) => {
     }
 
     // Update warehouse & items fields
-    if (items) order.items = items;
+    if (items) {
+      for (let i = 0; i < items.length; i++) {
+        const newItem = items[i];
+        if (newItem.productId && newItem.name) {
+          const localProduct = await Product.findById(newItem.productId);
+          if (localProduct && localProduct.name !== newItem.name) {
+            // User requested: Rename the local product to match the sender's product name
+            try {
+              localProduct.name = newItem.name;
+              await localProduct.save();
+            } catch (err) {
+              if (err.code === 11000) {
+                // A duplicate product exists (likely auto-created). If it has 0 stock, delete it and retry.
+                const duplicate = await Product.findOne({ branchId: localProduct.branchId, name: newItem.name });
+                if (duplicate && duplicate._id.toString() !== localProduct._id.toString() && duplicate.totalQty === 0) {
+                  await Product.deleteOne({ _id: duplicate._id });
+                  localProduct.name = newItem.name;
+                  await localProduct.save();
+                }
+              } else {
+                console.error("Error renaming product:", err);
+              }
+            }
+          }
+        }
+      }
+      order.items = items;
+    }
     if (warehouse) order.warehouse = warehouse;
     
     // FORCED SERVER-SIDE RECALCULATION
@@ -987,6 +1037,29 @@ router.put("/:id", auth, async (req, res) => {
         pi.vendor = order.vendor;
         pi.vendorId = order.vendorId;
         await pi.save();
+      }
+    }
+    // ⚡ AUTO-RENAME MATCHED PRODUCTS TO MATCH PO ITEM NAME
+    if (items) {
+      for (const item of items) {
+        if (item.productId && item.name) {
+          try {
+            // Check if another product already exists with this exact name in this branch
+            const existing = await Product.findOne({ 
+              branchId: order.branchId, 
+              name: { $regex: new RegExp(`^${item.name}$`, 'i') }, 
+              _id: { $ne: item.productId } 
+            });
+            if (!existing) {
+              await Product.updateOne(
+                { _id: item.productId, branchId: order.branchId },
+                { $set: { name: item.name } }
+              );
+            }
+          } catch(err) {
+            console.error(`Failed to auto-rename product ${item.productId}:`, err);
+          }
+        }
       }
     }
 

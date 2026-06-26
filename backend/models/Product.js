@@ -46,6 +46,7 @@ const productSchema = new mongoose.Schema(
       mrp: { type: Number, default: 0 },
       manufacturingDate: { type: Date, default: null }
     },
+    aliases: { type: [String], default: [] },
     batches: {
       type: [
         {

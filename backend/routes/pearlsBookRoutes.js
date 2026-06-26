@@ -369,7 +369,14 @@ async function generateInvoiceOrderPage(sale, copyTitle = "ORIGINAL INVOICE", is
   
   const itemsHTML = sale.items.map((item) => `
     <tr>
-      <td style="padding: 10px; border: 1px solid #999; font-size: 11px; color: #000;">${item.name}</td>
+      <td style="padding: 10px; border: 1px solid #999; font-size: 11px; color: #000;">
+        ${item.name}
+        ${item.batch || item.mrp || item.expiryDate ? `<div style="font-size: 9px; color: #555; margin-top: 4px; font-weight: 600;">
+          ${item.batch ? `<span style="background: #f1f5f9; padding: 2px 4px; border-radius: 2px;">Batch: ${item.batch}</span>` : ''}
+          ${item.mrp > 0 ? `<span style="background: #eff6ff; color: #2563eb; padding: 2px 4px; border-radius: 2px; margin-left: 4px;">MRP: ₹${item.mrp}</span>` : ''}
+          ${item.expiryDate ? `<span style="background: #fef2f2; color: #dc2626; padding: 2px 4px; border-radius: 2px; margin-left: 4px;">Exp: ${new Date(item.expiryDate).toLocaleDateString("en-IN")}</span>` : ''}
+        </div>` : ''}
+      </td>
       <td style="padding: 10px; border: 1px solid #999; text-align: center; font-size: 11px; color: #000;">${item.hsn}</td>
       <td style="padding: 10px; border: 1px solid #999; text-align: center; font-size: 11px; color: #000;">${item.gst}%</td>
       <td style="padding: 10px; border: 1px solid #999; text-align: center; font-size: 11px; color: #000;">${item.qty}</td>
@@ -392,7 +399,14 @@ async function generateInvoiceOrderPage(sale, copyTitle = "ORIGINAL INVOICE", is
         </tr>
         ${sale.sampleItems.map((item) => `
           <tr>
-            <td style="padding: 8px; border: 1px solid #999; font-size: 9px; color: #000;">${item.name}</td>
+            <td style="padding: 8px; border: 1px solid #999; font-size: 9px; color: #000;">
+              ${item.name}
+              ${item.batch || item.mrp || item.expiryDate ? `<div style="font-size: 8px; color: #555; margin-top: 2px;">
+                ${item.batch ? `<span style="background: #f1f5f9; padding: 1px 3px; border-radius: 2px;">Batch: ${item.batch}</span>` : ''}
+                ${item.mrp > 0 ? `<span style="background: #eff6ff; color: #2563eb; padding: 1px 3px; border-radius: 2px; margin-left: 2px;">MRP: ₹${item.mrp}</span>` : ''}
+                ${item.expiryDate ? `<span style="background: #fef2f2; color: #dc2626; padding: 1px 3px; border-radius: 2px; margin-left: 2px;">Exp: ${new Date(item.expiryDate).toLocaleDateString("en-IN")}</span>` : ''}
+              </div>` : ''}
+            </td>
             <td style="padding: 8px; border: 1px solid #999; text-align: center; font-size: 9px; color: #000;">${item.hsn}</td>
             <td style="padding: 8px; border: 1px solid #999; text-align: center; font-size: 9px; color: #000;">${item.qty}</td>
             <td style="padding: 8px; border: 1px solid #999; text-align: right; font-size: 9px; color: #000;">₹${item.sellingPrice.toFixed(2)}</td>
