@@ -54,7 +54,7 @@ const FilterableSelect = ({
 
       {isOpen && (
         <div 
-          className="absolute left-0 top-full mt-1 bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200"
+          className="absolute left-0 w-full top-full mt-1 bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200"
           style={{ 
             zIndex: 9999, 
             minWidth: '220px',

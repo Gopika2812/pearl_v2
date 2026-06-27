@@ -1122,7 +1122,10 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
             sgst: item.sgst !== undefined ? Number(item.sgst) : (originalItem && originalItem.sgst !== undefined ? Number(originalItem.sgst) : (item.igst ? 0 : gstPercent / 2)),
             igst: item.igst !== undefined ? Number(item.igst) : (originalItem && originalItem.igst !== undefined ? Number(originalItem.igst) : 0),
             name: item.name || (originalItem ? originalItem.name : "Unknown Product"),
-            hsn: item.hsn || item.hsnCode || (originalItem ? (originalItem.hsn || originalItem.hsnCode) : "")
+            hsn: item.hsn || item.hsnCode || (originalItem ? (originalItem.hsn || originalItem.hsnCode) : ""),
+            batch: item.batch || (originalItem ? originalItem.batch : "1"),
+            mrp: Number(item.mrp || (originalItem ? originalItem.mrp : 0)),
+            expiryDate: item.expiryDate || (originalItem ? originalItem.expiryDate : null)
           };
 
           if (originalItem) {
@@ -1661,8 +1664,9 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
                  igst: item.igst,
                  unit: item.unit,
                  total: item.total,
-                 mrp: item.mrp,
-                 expiryDate: item.expiryDate,
+                 mrp: item.mrp || 0,
+                 expiryDate: item.expiryDate || null,
+                 batch: item.batch || "1"
                });
              }
           }
@@ -1679,27 +1683,55 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
             });
           }
           
-          let poInvoiceId = `${poVoucher.prefix}/${String(poVoucher.counter).padStart(3, "0")}/${financialYear}`;
-          poVoucher.counter += 1;
-          await poVoucher.save({ session });
+          let existingPo = await PurchaseOrder.findOne({ branchId: destBranchId, vendorBillNo: invoiceNumber }).session(session);
 
-          const po = new PurchaseOrder({
-            branchId: destBranchId,
-            invoiceId: poInvoiceId,
-            voucherType: poVoucher.name,
-            vendorBillNo: invoiceNumber,
-            vendorDate: salesOrder.orderDate || salesOrder.createdAt || new Date(),
-            vendor: destVendor.name,
-            vendorId: destVendor._id,
-            items: poItems,
-            subtotal: grossSubtotal,
-            totalTax: totalTax.total,
-            grandTotal: grandTotal,
-            status: "PLACED",
-            date: new Date(),
-          });
-          
-          await po.save({ session });
+          if (existingPo) {
+            existingPo.vendorDate = salesOrder.orderDate || salesOrder.createdAt || new Date();
+            existingPo.vendor = destVendor.name;
+            existingPo.vendorId = destVendor._id;
+            existingPo.items = poItems;
+            existingPo.subtotal = grossSubtotal;
+            existingPo.totalTax = totalTax.total;
+            existingPo.grandTotal = grandTotal;
+            // status can remain PLACED or whatever it was
+            
+            await existingPo.save({ session });
+          } else {
+            const existingPOs = await PurchaseOrder.find({ branchId: destBranchId, invoiceId: new RegExp(`^${poVoucher.prefix}/`) }).select('invoiceId').session(session);
+            let highestPoNum = 0;
+            existingPOs.forEach(p => {
+              if (p.invoiceId) {
+                const parts = p.invoiceId.split('/');
+                if (parts.length >= 2) {
+                  const num = parseInt(parts[1], 10);
+                  if (!isNaN(num) && num > highestPoNum) highestPoNum = num;
+                }
+              }
+            });
+
+            const nextPoNum = Math.max(poVoucher.counter || 1, highestPoNum + 1);
+            let poInvoiceId = `${poVoucher.prefix}/${String(nextPoNum).padStart(3, "0")}/${financialYear}`;
+            poVoucher.counter = nextPoNum + 1;
+            await poVoucher.save({ session });
+
+            const po = new PurchaseOrder({
+              branchId: destBranchId,
+              invoiceId: poInvoiceId,
+              voucherType: poVoucher.name,
+              vendorBillNo: invoiceNumber,
+              vendorDate: salesOrder.orderDate || salesOrder.createdAt || new Date(),
+              vendor: destVendor.name,
+              vendorId: destVendor._id,
+              items: poItems,
+              subtotal: grossSubtotal,
+              totalTax: totalTax.total,
+              grandTotal: grandTotal,
+              status: "PLACED",
+              date: new Date(),
+            });
+            
+            await po.save({ session });
+          }
         }
 
         // ✅ LOG SUCCESSFUL INVOICE FINALIZATION

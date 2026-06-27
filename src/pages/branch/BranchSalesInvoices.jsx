@@ -1374,8 +1374,8 @@ const BranchSalesInvoices = () => {
                                 <p className="text-[10px] font-black uppercase tracking-widest text-indigo-400">Loading Items Details...</p>
                               </div>
                             ) : (
-                              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                                <div className="bg-white p-6 rounded-2xl shadow-sm border border-indigo-50">
+                              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                                <div className="bg-white p-6 rounded-2xl shadow-sm border border-indigo-50 lg:col-span-2 overflow-x-auto">
                                   <h4 className="font-black text-[10px] uppercase text-slate-400 mb-4 tracking-widest flex items-center gap-2">
                                     <FaFileAlt className="text-indigo-500" /> Billed Items
                                   </h4>
@@ -1422,7 +1422,7 @@ const BranchSalesInvoices = () => {
                                     </tbody>
                                   </table>
                                 </div>
-                                <div className="bg-white p-6 rounded-2xl shadow-sm border border-indigo-50 flex flex-col justify-between">
+                                <div className="bg-white p-6 rounded-2xl shadow-sm border border-indigo-50 flex flex-col justify-between lg:col-span-1">
                                   <div>
                                     <h4 className="font-black text-[10px] uppercase text-slate-400 mb-4 tracking-widest flex items-center gap-2">
                                       <FaHistory className="text-indigo-500" /> Administrative Info
