@@ -49,7 +49,7 @@ const POPaymentModal = ({ po, isOpen, onClose, onPaymentSuccess }) => {
     try {
       // Fetch all vendors for the branch
       const vendorResponse = await fetchWithAuth(
-        `${API_BASE}/vendors?branchId=${branchId}`
+        `${API_BASE}/vendors?branchId=${branchId}&includeLinked=true&limit=9999`
       );
       const vendorData = await vendorResponse.json();
       const vendors = vendorData.data || [];

@@ -93,7 +93,7 @@ export default function VendorCreditPaymentModal({
   const fetchVendors = async () => {
     setLoading(true);
     try {
-      const res = await fetchWithAuth(`${API_BASE}/vendors?branchId=${currentBranch._id}&limit=9999`);
+      const res = await fetchWithAuth(`${API_BASE}/vendors?branchId=${currentBranch._id}&limit=9999&includeLinked=true`);
       const data = await res.json();
       setVendors((data?.data || data || []).sort((a, b) => a.name.localeCompare(b.name)));
     } catch { toast.error("Failed to load vendors"); }

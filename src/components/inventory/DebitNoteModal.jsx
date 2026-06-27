@@ -120,7 +120,7 @@ const DebitNoteModal = ({ po, isOpen, onClose, onDebitNoteSuccess }) => {
   const updateVendorDebit = async (vendorName, debitAmount, branchId) => {
     try {
       // Fetch all vendors for the branch
-      const vendorResponse = await fetchWithAuth(`${API_BASE}/vendors?branchId=${branchId}`);
+      const vendorResponse = await fetchWithAuth(`${API_BASE}/vendors?branchId=${branchId}&includeLinked=true&limit=9999`);
       const vendorData = await vendorResponse.json();
       const vendors = vendorData.data || [];
 

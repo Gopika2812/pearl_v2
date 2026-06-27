@@ -113,7 +113,7 @@ const SupplierDebitNoteModal = ({ isOpen, onClose, preselectedVendor = null, edi
 
   const fetchVendors = async (query = "") => {
     try {
-      const res = await fetchWithAuth(`${API_BASE}/vendors?search=${query}&branchId=${currentBranch._id}&limit=50`);
+      const res = await fetchWithAuth(`${API_BASE}/vendors?search=${query}&branchId=${currentBranch._id}&limit=50&includeLinked=true`);
       const data = await res.json();
       if (data.success) setVendorsList(data.data || []);
     } catch (err) { console.error("Fetch Vendors Error:", err); }
