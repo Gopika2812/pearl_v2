@@ -26,7 +26,6 @@ const InventoryPurchaseOrderEntry = ({
   const { warehouses } = useInventory();
   const { currentBranch, user } = useBranch();
 
-  // Check if the user has this new feature explicitly disabled by Super Admin. (Defaults to true)
   const canUseQuickLinks = user?.role === "SUPER_ADMIN" || user?.actionPermissions?.create_shortcuts !== false;
 
   // Header State
@@ -165,7 +164,7 @@ const InventoryPurchaseOrderEntry = ({
   const [fetchedProducts, setFetchedProducts] = useState(products || []);
   const [searchingProducts, setSearchingProducts] = useState(false);
   const itemDropdownRef = useRef(null);
-  
+
   const [filteredProducts, setFilteredProducts] = useState([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -384,7 +383,7 @@ const InventoryPurchaseOrderEntry = ({
         // Construct search URL with optional product group filter (limit reduced to 15 for max performance)
         let url = `${API_BASE}/products?search=${encodeURIComponent(itemSearch)}&branchId=${branchId}&limit=15`;
         if (productGroup) url += `&productGroup=${productGroup}`;
-        
+
         const res = await fetchWithAuth(url);
         const data = await res.json();
 
@@ -416,7 +415,7 @@ const InventoryPurchaseOrderEntry = ({
 
       // Filter products that actually need stock syncing (not in cache or matches current search)
       // LIMIT to 30 to prevent network flooding and backend lockups
-      const productsToFetch = fetchedProducts.filter(p => 
+      const productsToFetch = fetchedProducts.filter(p =>
         newCache[p._id] === undefined || (itemSearch && p.name.toLowerCase().includes(itemSearch.toLowerCase()))
       ).slice(0, 30);
 
@@ -506,7 +505,7 @@ const InventoryPurchaseOrderEntry = ({
 
   const proceedAddItem = (product, finalPurchasePrice, finalSellingPrice, finalMarketCapPrice) => {
     const rowPrice = (parseFloat(finalPurchasePrice) || 0) * (parseFloat(qty) || 0);
-    
+
     let rowDiscount = 0;
     let finalDiscountPercent = 0;
     const discountVal = parseFloat(discountPercent) || 0;
@@ -591,7 +590,7 @@ const InventoryPurchaseOrderEntry = ({
   // Totals
   const subtotal = items.reduce((sum, item) => sum + (item.rowPrice || 0), 0);
   const calculatedDiscount = items.reduce((sum, item) => sum + (item.discountAmount || 0), 0);
-  
+
   let totalDiscount = calculatedDiscount;
   if (customDiscount !== "") {
     const val = parseFloat(customDiscount) || 0;
@@ -627,7 +626,7 @@ const InventoryPurchaseOrderEntry = ({
     (acc, exp) => acc + (exp.totalPrice || 0),
     0
   );
-  
+
   const exactGrandTotal = baseTaxable + totalTax;
   const grandTotal = enableRoundOff ? Math.round(exactGrandTotal) : exactGrandTotal;
   const roundOff = enableRoundOff ? (Math.round((grandTotal - exactGrandTotal) * 100) / 100) : 0;
@@ -1030,7 +1029,7 @@ const InventoryPurchaseOrderEntry = ({
                 />
                 {showItemDropdown && (
                   <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-50 flex overflow-hidden max-w-[800px]" onMouseLeave={() => setHoveredItem(null)}>
-                    
+
                     {/* LEFT PANEL - Main Search Results */}
                     <div className="max-h-60 overflow-y-auto w-full md:w-80 border-r border-gray-100 divide-y divide-gray-100">
                       {searchingProducts && (
@@ -1077,16 +1076,16 @@ const InventoryPurchaseOrderEntry = ({
                         {(() => {
                           const tokens = hoveredItem.name.toLowerCase().split(/[\s-]+/).filter(t => t.length > 2);
                           const threshold = Math.min(2, tokens.length);
-                          
+
                           const alternatives = products.filter(p => {
                             if (p._id === hoveredItem._id) return false;
-                            
+
                             const pTokens = p.name.toLowerCase().split(/[\s-]+/);
                             let matchCount = 0;
                             for (const t of tokens) {
                               if (pTokens.includes(t)) matchCount++;
                             }
-                            
+
                             return matchCount >= threshold && p.productGroup !== hoveredItem.productGroup;
                           }).slice(0, 6);
 
@@ -1097,7 +1096,7 @@ const InventoryPurchaseOrderEntry = ({
                           return alternatives.map(alt => {
                             const altStock = availableQtyCache[alt._id] ?? alt.availableQty ?? alt.totalQty ?? 0;
                             const isAltLowStock = altStock <= 0;
-                            
+
                             return (
                               <div
                                 key={alt._id}
@@ -1129,30 +1128,30 @@ const InventoryPurchaseOrderEntry = ({
                   </div>
                 )}
               </div>
-              
+
               <div className="flex items-center gap-2 lg:mt-6">
-                 <input 
-                   type="checkbox" 
-                   id="isSample" 
-                   checked={isSample} 
-                   onChange={(e) => {
-                     const checked = e.target.checked;
-                     setIsSample(checked);
-                     if (checked) {
-                       setPurchasePrice(0);
-                       setMarketCapPrice(0);
-                       setSellingPrice(0);
-                     } else if (selectedProductData) {
-                       setPurchasePrice(selectedProductData.purchasingPrice || selectedProductData.rate || 0);
-                       setMarketCapPrice(selectedProductData.marketCapPrice || 0);
-                       setSellingPrice(selectedProductData.sellingPrice || selectedProductData.rate || 0);
-                     }
-                   }} 
-                   className="w-3.5 h-3.5 text-[#319bab] rounded border-gray-300 focus:ring-[#319bab] cursor-pointer" 
-                 />
-                 <label htmlFor="isSample" className="text-[11px] font-bold text-gray-600 uppercase tracking-tight cursor-pointer">
-                   Sample Product (No Price Sync)
-                 </label>
+                <input
+                  type="checkbox"
+                  id="isSample"
+                  checked={isSample}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setIsSample(checked);
+                    if (checked) {
+                      setPurchasePrice(0);
+                      setMarketCapPrice(0);
+                      setSellingPrice(0);
+                    } else if (selectedProductData) {
+                      setPurchasePrice(selectedProductData.purchasingPrice || selectedProductData.rate || 0);
+                      setMarketCapPrice(selectedProductData.marketCapPrice || 0);
+                      setSellingPrice(selectedProductData.sellingPrice || selectedProductData.rate || 0);
+                    }
+                  }}
+                  className="w-3.5 h-3.5 text-[#319bab] rounded border-gray-300 focus:ring-[#319bab] cursor-pointer"
+                />
+                <label htmlFor="isSample" className="text-[11px] font-bold text-gray-600 uppercase tracking-tight cursor-pointer">
+                  Sample Product (No Price Sync)
+                </label>
               </div>
             </div>
 
@@ -1177,13 +1176,12 @@ const InventoryPurchaseOrderEntry = ({
                 <div className="relative">
                   <input
                     type="number"
-                    className={`${inputClass} ${
-                      selectedProductData && purchasePrice > (selectedProductData.purchasingPrice || 0) 
-                        ? "border-red-300 bg-red-50" 
+                    className={`${inputClass} ${selectedProductData && purchasePrice > (selectedProductData.purchasingPrice || 0)
+                        ? "border-red-300 bg-red-50"
                         : selectedProductData && purchasePrice < (selectedProductData.purchasingPrice || 0)
-                        ? "border-green-300 bg-green-50"
-                        : ""
-                    }`}
+                          ? "border-green-300 bg-green-50"
+                          : ""
+                      }`}
                     value={purchasePrice}
                     onChange={(e) => {
                       const val = +e.target.value;
@@ -1196,9 +1194,8 @@ const InventoryPurchaseOrderEntry = ({
                     }}
                   />
                   {selectedProductData && purchasePrice !== (selectedProductData.purchasingPrice || 0) && (
-                    <div className={`absolute -top-6 right-0 text-[10px] font-black uppercase px-2 py-0.5 rounded-md shadow-sm ${
-                      purchasePrice > (selectedProductData.purchasingPrice || 0) ? "bg-red-500 text-white" : "bg-green-500 text-white"
-                    }`}>
+                    <div className={`absolute -top-6 right-0 text-[10px] font-black uppercase px-2 py-0.5 rounded-md shadow-sm ${purchasePrice > (selectedProductData.purchasingPrice || 0) ? "bg-red-500 text-white" : "bg-green-500 text-white"
+                      }`}>
                       {purchasePrice > (selectedProductData.purchasingPrice || 0) ? "📈 Internal Rate Increased" : "📉 Rate Decreased"}
                     </div>
                   )}
@@ -1553,7 +1550,7 @@ const InventoryPurchaseOrderEntry = ({
           {/* ORDER SUMMARY FOOTER (Same as Sales Order) */}
           <div className="bg-[#319bab] text-white p-6 rounded-3xl shadow-xl relative overflow-hidden group">
             <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 group-hover:scale-110 transition-transform"></div>
-            
+
             <h3 className="text-xl font-black mb-4 flex items-center gap-2">
               <span className="w-8 h-1 bg-white rounded-full"></span>
               ORDER SUMMARY
@@ -1580,11 +1577,10 @@ const InventoryPurchaseOrderEntry = ({
                           setCustomDiscount(converted);
                         }
                       }}
-                      className={`px-2 py-0.5 text-[10px] font-black rounded transition-all ${
-                        customDiscountType === "amount"
+                      className={`px-2 py-0.5 text-[10px] font-black rounded transition-all ${customDiscountType === "amount"
                           ? "bg-white text-[#319bab] shadow-sm"
                           : "text-white hover:bg-white/10"
-                      }`}
+                        }`}
                     >
                       ₹
                     </button>
@@ -1598,11 +1594,10 @@ const InventoryPurchaseOrderEntry = ({
                           setCustomDiscount(converted);
                         }
                       }}
-                      className={`px-2 py-0.5 text-[10px] font-black rounded transition-all ${
-                        customDiscountType === "percentage"
+                      className={`px-2 py-0.5 text-[10px] font-black rounded transition-all ${customDiscountType === "percentage"
                           ? "bg-white text-[#319bab] shadow-sm"
                           : "text-white hover:bg-white/10"
-                      }`}
+                        }`}
                     >
                       %
                     </button>
@@ -1684,7 +1679,7 @@ const InventoryPurchaseOrderEntry = ({
                     ₹{enableRoundOff ? grandTotal.toLocaleString() : Number(grandTotal.toFixed(2)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </div>
-                <button 
+                <button
                   onClick={handleFinalAction}
                   disabled={saving}
                   className={`px-10 py-4 bg-white text-[#319bab] rounded-2xl font-black hover:bg-gray-100 transition shadow-lg active:scale-95 flex items-center gap-2 ${saving ? 'opacity-50 cursor-not-allowed' : ''}`}
@@ -1756,12 +1751,12 @@ const InventoryPurchaseOrderEntry = ({
           setFilteredProducts(prev => [...prev, product]);
           setSelectedItem(product._id);
           setItemSearch(product.name);
-          
+
           const pGroupId = product.productGroup?._id || product.productGroup || product.groupId?._id || product.groupId;
           if (pGroupId && pGroupId !== productGroup) {
             setProductGroup(pGroupId);
           }
-          
+
           setSelectedProductData(product);
           setQty("");
           setPurchasePrice(product.purchasingPrice || product.rate || 0);
@@ -1811,7 +1806,7 @@ const InventoryPurchaseOrderEntry = ({
               </div>
 
               <p className="mb-6 text-center text-[11px] font-bold uppercase leading-relaxed text-gray-500">
-                Are you sure you want to purchase this item? <br/>
+                Are you sure you want to purchase this item? <br />
                 <span className="text-red-500 tracking-tighter">The cost is higher than your current selling price.</span>
               </p>
 
@@ -1855,7 +1850,7 @@ const InventoryPurchaseOrderEntry = ({
               <div>
                 <div className="flex justify-between items-center mb-1">
                   <label className={labelClass}>Expense Name</label>
-                  <button 
+                  <button
                     onClick={() => {
                       setIsCustomExpense(!isCustomExpense);
                       setExpenseName("");
@@ -1865,7 +1860,7 @@ const InventoryPurchaseOrderEntry = ({
                     {isCustomExpense ? "← Back to List" : "+ Add"}
                   </button>
                 </div>
-                
+
                 {isCustomExpense ? (
                   <input
                     type="text"
