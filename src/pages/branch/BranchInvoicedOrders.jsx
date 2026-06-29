@@ -61,6 +61,11 @@ const BranchInvoicedOrders = () => {
   const [currentSpottedOrder, setCurrentSpottedOrder] = useState(null);
   const [triggerSpottedOnSuccess, setTriggerSpottedOnSuccess] = useState(false);
 
+  // Delayed Order Alert Modal State
+  const [showDelayedAlertModal, setShowDelayedAlertModal] = useState(false);
+  const [delayedOrdersCount, setDelayedOrdersCount] = useState(0);
+  const [delayedOrdersList, setDelayedOrdersList] = useState([]);
+
   // Filter states
   const [filterVoucherType, setFilterVoucherType] = useState("");
   const [filterGenerated, setFilterGenerated] = useState(""); // ALL, GENERATED, NOT_GENERATED
@@ -339,6 +344,37 @@ const BranchInvoicedOrders = () => {
   useEffect(() => {
     fetchVoucherTypes();
   }, [currentBranch?._id]);
+
+  // Check for delayed orders and show alert modal
+  useEffect(() => {
+    let count = 0;
+    const delayed = [];
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    salesOrders.forEach(order => {
+      // Order is no longer delayed if it's cancelled or if the SI bill has been printed
+      if (order.status === "CANCELLED" || order.printCount > 0) return;
+      const orderDateStart = new Date(order.orderDate || order.createdAt);
+      orderDateStart.setHours(0, 0, 0, 0);
+      
+      if (todayStart >= orderDateStart) {
+        const hoursSinceCreation = (new Date() - new Date(order.createdAt)) / (1000 * 60 * 60);
+        if (hoursSinceCreation >= 3) {
+          count++;
+          delayed.push(order);
+        }
+      }
+    });
+
+    setDelayedOrdersCount(count);
+    setDelayedOrdersList(delayed);
+    
+    // Only show modal if there are delayed orders AND we haven't dismissed it in this session
+    if (count > 0 && !sessionStorage.getItem('delayedAlertDismissed')) {
+      setShowDelayedAlertModal(true);
+    }
+  }, [salesOrders]);
 
   // 🌍 HANDLE URL SEARCH PARAMS (Teleport from Audit Logs)
   // Only apply if the term is different to prevent infinite loops or resets
@@ -1389,23 +1425,51 @@ const BranchInvoicedOrders = () => {
                         )}
                         {isFieldAllowed("status") && (
                           <td className="px-6 py-4 text-center">
-                            {order.status === "CANCELLED" ? (
-                              <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border border-red-200">
-                                Cancelled
-                              </span>
-                            ) : order.editHistory?.some(h => h.editType === 'RE_INVOICED') ? (
-                              <span className="bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border border-indigo-200">
-                                ✓ Re-Invoiced (V2)
-                              </span>
-                            ) : order.invoiceGenerated ? (
-                              <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider">
-                                ✓ Invoiced (V1)
-                              </span>
-                            ) : (
-                              <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider">
-                                Pending Order
-                              </span>
-                            )}
+                            <div className="flex flex-col items-center justify-center gap-1.5">
+                              {order.status === "CANCELLED" ? (
+                                <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border border-red-200">
+                                  Cancelled
+                                </span>
+                              ) : order.editHistory?.some(h => h.editType === 'RE_INVOICED') ? (
+                                <span className="bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border border-indigo-200">
+                                  ✓ Re-Invoiced (V2)
+                                </span>
+                              ) : order.invoiceGenerated ? (
+                                <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider">
+                                  ✓ Invoiced (V1)
+                                </span>
+                              ) : (
+                                <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider">
+                                  Pending Order
+                                </span>
+                              )}
+                              
+                              {/* DELAYED ALERT */}
+                              {(() => {
+                                // Order is no longer delayed if it's cancelled or if the SI bill has been printed
+                                if (order.status === "CANCELLED" || order.printCount > 0) return null;
+                                
+                                const todayStart = new Date();
+                                todayStart.setHours(0, 0, 0, 0);
+                                
+                                const orderDateStart = new Date(order.orderDate || order.createdAt);
+                                orderDateStart.setHours(0, 0, 0, 0);
+                                
+                                // Only alert if the order date is today or earlier
+                                if (todayStart >= orderDateStart) {
+                                  const hoursSinceCreation = (new Date() - new Date(order.createdAt)) / (1000 * 60 * 60);
+                                  
+                                  if (hoursSinceCreation >= 3) {
+                                    return (
+                                      <span className="bg-red-600 text-white px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest shadow-sm animate-pulse flex items-center gap-1">
+                                        ⚠️ DELIVER THE ORDER {order.invoiceId}
+                                      </span>
+                                    );
+                                  }
+                                }
+                                return null;
+                              })()}
+                            </div>
                           </td>
                         )}
                         {isFieldAllowed("date") && (
@@ -2439,6 +2503,58 @@ const BranchInvoicedOrders = () => {
                 className="w-full bg-[#319bab] hover:bg-[#257f87] disabled:bg-gray-200 disabled:text-gray-400 text-white py-5 rounded-2xl font-black uppercase tracking-widest transition-all shadow-xl shadow-[#319bab]/20 active:scale-95 flex items-center justify-center gap-3"
               >
                 Complete Payment & Save Record
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══ DELAYED ORDERS ALERT MODAL ══ */}
+      {showDelayedAlertModal && delayedOrdersCount > 0 && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[10000] p-4">
+          <div className="w-full max-w-sm bg-white rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300 flex flex-col max-h-[90vh]">
+            <div className="bg-red-50 p-6 flex flex-col items-center text-center shrink-0">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-4">
+                <span className="text-3xl">⚠️</span>
+              </div>
+              <h2 className="text-xl font-black text-red-700 tracking-tight mb-2">Attention Required</h2>
+              <p className="text-red-900 font-medium text-sm">
+                You have <strong className="text-red-600 text-base">{delayedOrdersCount}</strong> delayed {delayedOrdersCount === 1 ? 'order' : 'orders'} that have been pending for more than 3 hours today.
+              </p>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto bg-white p-4">
+              <div className="space-y-2">
+                {delayedOrdersList.map(order => (
+                  <div key={order._id} className="bg-red-50 border border-red-100 rounded-lg px-3 py-2 flex items-center justify-between">
+                    <span className="font-black text-red-700 text-xs tracking-wider">{order.invoiceId}</span>
+                    <span className="text-[10px] text-red-500 font-bold uppercase">{order.customer?.name || "-"}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="p-4 bg-white border-t border-gray-100 flex flex-col gap-3 shrink-0">
+              <button
+                onClick={() => {
+                  setShowDelayedAlertModal(false);
+                  // Not saving to session storage so it reminds them again on next action
+                }}
+                className="w-full bg-red-600 hover:bg-red-700 text-white py-3 rounded-xl font-bold uppercase tracking-widest text-xs transition-colors shadow-lg shadow-red-200"
+              >
+                Take Action
+              </button>
+              <button
+                onClick={() => {
+                  setShowDelayedAlertModal(false);
+                  // Briefly dismiss, but it will come back on reload to ensure they don't forget
+                  sessionStorage.setItem('delayedAlertDismissed', 'true');
+                  // We'll clear it after 1 hour so it reminds them again
+                  setTimeout(() => sessionStorage.removeItem('delayedAlertDismissed'), 60 * 60 * 1000);
+                }}
+                className="w-full bg-gray-100 hover:bg-gray-200 text-gray-600 py-3 rounded-xl font-bold uppercase tracking-widest text-xs transition-colors"
+              >
+                Ask Me Later (Snooze 1h)
               </button>
             </div>
           </div>

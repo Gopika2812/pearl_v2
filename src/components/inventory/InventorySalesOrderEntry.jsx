@@ -216,6 +216,7 @@ export default function InventorySalesOrderEntry({
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   const [showProductGroupDropdown, setShowProductGroupDropdown] = useState(false);
   const [showItemDropdown, setShowItemDropdown] = useState(false);
+  const [hoveredItem, setHoveredItem] = useState(null);
   const [fetchedCustomers, setFetchedCustomers] = useState([]);
   const [fetchedProducts, setFetchedProducts] = useState([]);
   const [searchingCustomers, setSearchingCustomers] = useState(false);
@@ -2015,7 +2016,7 @@ export default function InventorySalesOrderEntry({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 mt-4">
 
         {/* LEFT: ADD ITEM */}
-        <div className="lg:col-span-4 bg-primary/5 p-4 rounded-xl border border-primary/10 space-y-3 h-fit min-h-[400px] flex flex-col relative overflow-hidden">
+        <div className="lg:col-span-4 bg-primary/5 p-4 rounded-xl border border-primary/10 space-y-3 h-fit min-h-[400px] flex flex-col relative">
           <h3 className="text-[#319bab] font-black uppercase text-xs tracking-widest border-b pb-2 border-[#319bab]/30">
             Add Item
           </h3>
@@ -2103,28 +2104,95 @@ export default function InventorySalesOrderEntry({
                 />
 
                 {showItemDropdown && warehouse && (
-                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto w-full md:w-80">
-                    {searchingProducts && (
-                      <div className="px-3 py-2 text-gray-500 text-sm text-center">🔍 Searching...</div>
-                    )}
-                    {!searchingProducts && fetchedProducts
-                      .map((p) => {
-                        const currentStock = availableQtyCache[p._id] ?? productsWithStock?.find(prod => prod._id === p._id)?.availableQty ?? p.availableQty ?? p.totalQty ?? 0;
-                        return (
-                          <div
-                            key={p._id}
-                            onClick={() => handleItemSelection(p._id)}
-                            className={`px-3 py-2 border-b text-sm hover:bg-blue-50 cursor-pointer`}
-                          >
-                            <div className="font-semibold">{p.name} ({p.perQty || 1}:{p.units || ""})</div>
-                            <div className="text-xs text-gray-500">
-                              Available Qty: {currentStock}
+                  <div className="absolute top-full left-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-xl z-50 flex overflow-hidden" onMouseLeave={() => setHoveredItem(null)}>
+                    
+                    {/* LEFT PANEL - Main Search Results */}
+                    <div className="max-h-64 overflow-y-auto w-full md:w-80 border-r border-gray-100">
+                      {searchingProducts && (
+                        <div className="px-3 py-2 text-gray-500 text-sm text-center">🔍 Searching...</div>
+                      )}
+                      {!searchingProducts && fetchedProducts
+                        .map((p) => {
+                          const currentStock = availableQtyCache[p._id] ?? productsWithStock?.find(prod => prod._id === p._id)?.availableQty ?? p.availableQty ?? p.totalQty ?? 0;
+                          return (
+                            <div
+                              key={p._id}
+                              onClick={() => {
+                                handleItemSelection(p._id);
+                                setShowItemDropdown(false);
+                                setHoveredItem(null);
+                              }}
+                              onMouseEnter={() => setHoveredItem(p)}
+                              className={`px-3 py-2 border-b border-gray-50 text-sm hover:bg-blue-50 cursor-pointer transition-colors ${hoveredItem?._id === p._id ? "bg-blue-50 border-l-4 border-l-blue-500" : "border-l-4 border-l-transparent"}`}
+                            >
+                              <div className="font-semibold text-gray-800">{p.name} ({p.perQty || 1}:{p.units || ""})</div>
+                              <div className="text-[11px] text-gray-500 font-medium">
+                                Available Qty: <span className={currentStock > 0 ? "text-emerald-600" : "text-rose-500"}>{currentStock}</span>
+                              </div>
                             </div>
-                          </div>
-                        );
-                      })}
-                    {!searchingProducts && fetchedProducts.length === 0 && (
-                      <div className="px-3 py-2 text-gray-500 text-sm">No items found</div>
+                          );
+                        })}
+                      {!searchingProducts && fetchedProducts.length === 0 && (
+                        <div className="px-3 py-2 text-gray-500 text-sm">No items found</div>
+                      )}
+                    </div>
+
+                    {/* RIGHT PANEL - Alternative Suggestions */}
+                    {hoveredItem && (
+                      <div className="max-h-64 overflow-y-auto w-full md:w-[350px] bg-slate-50 p-2 shrink-0 animate-in slide-in-from-left-2 duration-200">
+                        <div className="text-[10px] font-black text-slate-400 mb-2 uppercase tracking-widest px-1">Alternative Brands / Groups</div>
+                        {(() => {
+                          // Very basic matching logic for alternatives
+                          const tokens = hoveredItem.name.toLowerCase().split(/[\s-]+/).filter(t => t.length > 2);
+                          const threshold = Math.min(2, tokens.length);
+                          
+                          const alternatives = localProducts.filter(p => {
+                            if (p._id === hoveredItem._id) return false;
+                            
+                            const pTokens = p.name.toLowerCase().split(/[\s-]+/);
+                            let matchCount = 0;
+                            for (const t of tokens) {
+                              if (pTokens.includes(t)) matchCount++;
+                            }
+                            
+                            // To be considered an alternative, it must share some words but have a different productGroup
+                            // or if productGroup is not available, just different ID.
+                            return matchCount >= threshold && p.productGroup !== hoveredItem.productGroup;
+                          }).slice(0, 6);
+
+                          if (alternatives.length === 0) {
+                            return <div className="px-2 py-4 text-xs text-slate-400 text-center italic bg-slate-100 rounded-lg border border-slate-200 border-dashed">No direct alternatives found for this item.</div>;
+                          }
+
+                          return alternatives.map(alt => {
+                            const altStock = availableQtyCache[alt._id] ?? productsWithStock?.find(prod => prod._id === alt._id)?.availableQty ?? alt.availableQty ?? alt.totalQty ?? 0;
+                            
+                            // Find the product group name
+                            const groupObj = localProductGroups.find(g => g._id === alt.productGroup);
+                            const groupName = groupObj ? groupObj.name : "Other Brand";
+
+                            return (
+                              <div
+                                key={alt._id}
+                                onClick={() => {
+                                  handleItemSelection(alt._id);
+                                  setShowItemDropdown(false);
+                                  setHoveredItem(null);
+                                }}
+                                className="px-3 py-2 bg-white rounded-lg mb-1.5 text-sm cursor-pointer shadow-[0_2px_4px_rgba(0,0,0,0.02)] border border-slate-200 hover:border-blue-400 hover:shadow-md transition-all group"
+                              >
+                                <div className="font-bold text-slate-700 group-hover:text-blue-700 truncate" title={alt.name}>{alt.name}</div>
+                                <div className="text-[10px] flex items-center justify-between mt-1">
+                                  <span className="font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">{groupName}</span>
+                                  <span className={`font-bold ${altStock > 0 ? "text-emerald-600" : "text-rose-500"}`}>
+                                    Stock: {altStock}
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          });
+                        })()}
+                      </div>
                     )}
                   </div>
                 )}

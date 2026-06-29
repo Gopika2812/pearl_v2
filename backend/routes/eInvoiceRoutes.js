@@ -53,26 +53,50 @@ router.post("/generate/:invoiceId", async (req, res) => {
     try {
       eInvoiceResult = await gstzenService.generateEInvoice(invoice);
     } catch (gstError) {
+      let errorMessage = gstError.message;
+      if (errorMessage.includes('HSN/SAC')) {
+        const match = errorMessage.match(/'(\d+)'/);
+        if (match && match[1]) {
+          const hsnCode = match[1];
+          const item = invoice.items.find(i => i.hsn === hsnCode);
+          if (item) {
+            errorMessage += ` (Product: ${item.name})`;
+          }
+        }
+      }
+
       invoice.einvoiceStatus = "FAILED";
-      invoice.einvoiceError = gstError.message;
+      invoice.einvoiceError = errorMessage;
       await invoice.save();
 
       return res.status(400).json({
         success: false,
         message: "E-Invoice generation failed",
-        error: gstError.message
+        error: errorMessage
       });
     }
 
     if (!eInvoiceResult || !eInvoiceResult.success) {
+      let errorMessage = eInvoiceResult?.message || "Unknown error";
+      if (errorMessage.includes('HSN/SAC')) {
+        const match = errorMessage.match(/'(\d+)'/);
+        if (match && match[1]) {
+          const hsnCode = match[1];
+          const item = invoice.items.find(i => i.hsn === hsnCode);
+          if (item) {
+            errorMessage += ` (Product: ${item.name})`;
+          }
+        }
+      }
+
       invoice.einvoiceStatus = "FAILED";
-      invoice.einvoiceError = eInvoiceResult?.message || "Unknown error";
+      invoice.einvoiceError = errorMessage;
       await invoice.save();
 
       return res.status(400).json({
         success: false,
         message: "Failed to generate E-Invoice",
-        error: eInvoiceResult?.message || "Unknown error"
+        error: errorMessage
       });
     }
 
@@ -319,16 +343,28 @@ router.post("/bulk-generate", async (req, res) => {
 
           results.push({ invoiceId, invoiceNumber: invoice.invoiceNumber, success: true });
         } else {
+          let errorMessage = eInvoiceResult?.message || "Failed";
+          if (errorMessage.includes('HSN/SAC')) {
+            const match = errorMessage.match(/'(\d+)'/);
+            if (match && match[1]) {
+              const hsnCode = match[1];
+              const item = invoice.items.find(i => i.hsn === hsnCode);
+              if (item) {
+                errorMessage += ` (Product: ${item.name})`;
+              }
+            }
+          }
+          
           await Invoice.updateOne(
             { _id: invoiceId },
             { 
               $set: { 
                 einvoiceStatus: "FAILED", 
-                einvoiceError: eInvoiceResult?.message || "Failed" 
+                einvoiceError: errorMessage 
               } 
             }
           );
-          results.push({ invoiceId, invoiceNumber: invoice.invoiceNumber, success: false, message: eInvoiceResult?.message || "Failed" });
+          results.push({ invoiceId, invoiceNumber: invoice.invoiceNumber, success: false, message: errorMessage });
         }
       } catch (err) {
         // 🛡️ GUARANTEED PERSISTENCE: Use direct update to bypass full document validation
@@ -345,10 +381,25 @@ router.post("/bulk-generate", async (req, res) => {
         } catch (saveErr) {
           console.error("Failed to update error status for invoice:", invoiceId, saveErr);
         }
+        
+        let errorMessage = err.message;
+        // Try to find product name if it's an HSN error
+        if (errorMessage.includes('HSN/SAC')) {
+          const match = errorMessage.match(/'(\d+)'/);
+          if (match && match[1]) {
+            const hsnCode = match[1];
+            const item = invoice.items.find(i => i.hsn === hsnCode);
+            if (item) {
+              errorMessage += ` (Product: ${item.name})`;
+            }
+          }
+        }
+
         results.push({ 
           invoiceId, 
+          invoiceNumber: invoice?.invoiceNumber,
           success: false, 
-          message: err.message 
+          message: errorMessage 
         });
       }
     }

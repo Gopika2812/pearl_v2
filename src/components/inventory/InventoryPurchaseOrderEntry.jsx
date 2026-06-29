@@ -84,6 +84,7 @@ const InventoryPurchaseOrderEntry = ({
   const [selectedItem, setSelectedItem] = useState("");
   const [itemSearch, setItemSearch] = useState("");
   const [showItemDropdown, setShowItemDropdown] = useState(false);
+  const [hoveredItem, setHoveredItem] = useState(null);
   const [qty, setQty] = useState("");
   const [purchasePrice, setPurchasePrice] = useState(0);
   const [marketCapPrice, setMarketCapPrice] = useState(0);
@@ -1028,36 +1029,97 @@ const InventoryPurchaseOrderEntry = ({
                   className={inputClass}
                 />
                 {showItemDropdown && (
-                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-50 max-h-60 overflow-y-auto w-full divide-y divide-gray-100">
-                    {searchingProducts && (
-                      <div className="px-4 py-3 text-gray-400 text-xs text-center italic flex items-center justify-center gap-2">
-                        <span className="animate-spin h-3.5 w-3.5 border-2 border-[#319bab] border-t-transparent rounded-full"></span>
-                        Searching products...
-                      </div>
-                    )}
-                    {!searchingProducts && fetchedProducts.map((p) => {
-                      const currentStock = availableQtyCache[p._id] ?? p.availableQty ?? p.totalQty ?? 0;
-                      const isLowStock = currentStock <= 0;
-                      return (
-                        <div
-                          key={p._id}
-                          onClick={() => handleItemSelection(p._id)}
-                          className="px-4 py-2.5 hover:bg-gray-50 cursor-pointer text-xs transition flex flex-col gap-1"
-                        >
-                          <div className="font-bold text-gray-800 line-clamp-1">
-                            {p.name} <span className="text-[10px] text-gray-400 font-normal">({p.perQty || 1}:{p.units || ""})</span>
-                          </div>
-                          <div className="flex justify-between items-center text-[10px] mt-0.5">
-                            <span className={`px-2 py-0.5 rounded-full font-semibold ${isLowStock ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
-                              Stock: {currentStock} {p.units || ""}
-                            </span>
-                            <span className="font-extrabold text-[#319bab] text-xs">₹{p.purchasingPrice || p.rate || 0}</span>
-                          </div>
+                  <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-50 flex overflow-hidden max-w-[800px]" onMouseLeave={() => setHoveredItem(null)}>
+                    
+                    {/* LEFT PANEL - Main Search Results */}
+                    <div className="max-h-60 overflow-y-auto w-full md:w-80 border-r border-gray-100 divide-y divide-gray-100">
+                      {searchingProducts && (
+                        <div className="px-4 py-3 text-gray-400 text-xs text-center italic flex items-center justify-center gap-2">
+                          <span className="animate-spin h-3.5 w-3.5 border-2 border-[#319bab] border-t-transparent rounded-full"></span>
+                          Searching products...
                         </div>
-                      );
-                    })}
-                    {!searchingProducts && fetchedProducts.length === 0 && (
-                      <div className="px-4 py-3 text-gray-400 text-xs text-center italic">No products found</div>
+                      )}
+                      {!searchingProducts && fetchedProducts.map((p) => {
+                        const currentStock = availableQtyCache[p._id] ?? p.availableQty ?? p.totalQty ?? 0;
+                        const isLowStock = currentStock <= 0;
+                        return (
+                          <div
+                            key={p._id}
+                            onClick={() => {
+                              handleItemSelection(p._id);
+                              setShowItemDropdown(false);
+                              setHoveredItem(null);
+                            }}
+                            onMouseEnter={() => setHoveredItem(p)}
+                            className={`px-4 py-2.5 hover:bg-blue-50 cursor-pointer text-xs transition flex flex-col gap-1 ${hoveredItem?._id === p._id ? "bg-blue-50 border-l-4 border-l-blue-500" : "border-l-4 border-l-transparent"}`}
+                          >
+                            <div className="font-bold text-gray-800 line-clamp-1">
+                              {p.name} <span className="text-[10px] text-gray-400 font-normal">({p.perQty || 1}:{p.units || ""})</span>
+                            </div>
+                            <div className="flex justify-between items-center text-[10px] mt-0.5">
+                              <span className={`px-2 py-0.5 rounded-full font-semibold ${isLowStock ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
+                                Stock: {currentStock} {p.units || ""}
+                              </span>
+                              <span className="font-extrabold text-[#319bab] text-xs">₹{p.purchasingPrice || p.rate || 0}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {!searchingProducts && fetchedProducts.length === 0 && (
+                        <div className="px-4 py-3 text-gray-400 text-xs text-center italic">No products found</div>
+                      )}
+                    </div>
+
+                    {/* RIGHT PANEL - Alternative Suggestions */}
+                    {hoveredItem && (
+                      <div className="max-h-60 overflow-y-auto w-full md:w-[350px] bg-slate-50 p-3 shrink-0 animate-in slide-in-from-left-2 duration-200">
+                        <div className="text-[10px] font-black text-slate-400 mb-2 uppercase tracking-widest px-1">Alternative Brands / Groups</div>
+                        {(() => {
+                          const tokens = hoveredItem.name.toLowerCase().split(/[\s-]+/).filter(t => t.length > 2);
+                          const threshold = Math.min(2, tokens.length);
+                          
+                          const alternatives = products.filter(p => {
+                            if (p._id === hoveredItem._id) return false;
+                            
+                            const pTokens = p.name.toLowerCase().split(/[\s-]+/);
+                            let matchCount = 0;
+                            for (const t of tokens) {
+                              if (pTokens.includes(t)) matchCount++;
+                            }
+                            
+                            return matchCount >= threshold && p.productGroup !== hoveredItem.productGroup;
+                          }).slice(0, 6);
+
+                          if (alternatives.length === 0) {
+                            return <div className="px-2 py-4 text-xs text-slate-400 text-center italic bg-slate-100 rounded-lg border border-slate-200 border-dashed">No direct alternatives found for this item.</div>;
+                          }
+
+                          return alternatives.map(alt => {
+                            const altStock = availableQtyCache[alt._id] ?? alt.availableQty ?? alt.totalQty ?? 0;
+                            const isAltLowStock = altStock <= 0;
+                            
+                            return (
+                              <div
+                                key={alt._id}
+                                onClick={() => {
+                                  handleItemSelection(alt._id);
+                                  setShowItemDropdown(false);
+                                  setHoveredItem(null);
+                                }}
+                                className="px-3 py-2 bg-white rounded-lg mb-1.5 text-xs cursor-pointer shadow-[0_2px_4px_rgba(0,0,0,0.02)] border border-slate-200 hover:border-[#319bab] hover:shadow-md transition-all group"
+                              >
+                                <div className="font-bold text-slate-700 group-hover:text-[#319bab] truncate" title={alt.name}>{alt.name}</div>
+                                <div className="text-[10px] flex items-center justify-between mt-1">
+                                  <span className={`font-semibold ${isAltLowStock ? 'text-rose-500' : 'text-emerald-600'}`}>
+                                    Stock: {altStock}
+                                  </span>
+                                  <span className="font-extrabold text-[#319bab]">₹{alt.purchasingPrice || alt.rate || 0}</span>
+                                </div>
+                              </div>
+                            );
+                          });
+                        })()}
+                      </div>
                     )}
                   </div>
                 )}
