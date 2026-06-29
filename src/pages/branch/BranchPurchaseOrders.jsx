@@ -284,6 +284,8 @@ const BranchPurchaseOrders = () => {
           "Vendor": order.vendor || "-",
           "PO Number": order.invoiceId || "-",
           "PI Number": order.purchaseInvoiceId || "-",
+          "Vendor Bill No": order.vendorBillNo || "-",
+          "Vendor Bill Date": order.vendorDate ? new Date(order.vendorDate).toLocaleDateString("en-IN") : "-",
           "Subtotal": order.subtotal || 0,
           "Tax Amount": order.totalTax || 0,
           "Extra Charges": order.extraExpenseAmount || 0,
