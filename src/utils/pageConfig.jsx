@@ -147,6 +147,7 @@ export const PAGE_CONFIG = [
       { id: "gst-reports", name: "GST Filing Records", path: "/branch/gst-reports", icon: "invoice" },
       { id: "stock-summary", name: "Stock Summary (Tally)", path: "/branch/stock-summary", icon: "bookOpen", permissionFields: ["groupName", "opening", "inwards", "outwards", "closingQty", "closingValue"] },
       { id: "batch-inventory", name: "Batch Aging & Value", path: "/branch/batch-inventory", icon: "inventory" },
+      { id: "incentive-intelligence", name: "Incentive Intelligence", path: "/branch/incentive-intelligence", icon: "chart" },
     ]
   },
   {

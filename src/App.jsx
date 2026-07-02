@@ -22,6 +22,7 @@ import ARAgingPage from "./pages/ARAgingPage";
 import BalanceSheetPage from "./pages/BalanceSheetPage";
 import BranchCreditNote from "./pages/branch/BranchCreditNote";
 import BranchClaims from "./pages/branch/BranchClaims";
+import IncentiveIntelligence from "./pages/branch/IncentiveIntelligence";
 import BranchCustomers from "./pages/branch/BranchCustomers";
 import BranchDebitNote from "./pages/branch/BranchDebitNote";
 import BranchDispatch from "./pages/branch/BranchDispatch";
@@ -838,6 +839,7 @@ function AppContent() {
               <Route path="/branch/sales-invoices" element={<ProtectedRoute element={<BranchSalesInvoices />} />} />
               <Route path="/branch/credit-note" element={<ProtectedRoute element={<BranchCreditNote />} />} />
               <Route path="/branch/claims" element={<ProtectedRoute element={<BranchClaims />} />} />
+              <Route path="/branch/incentive-intelligence" element={<ProtectedRoute element={<IncentiveIntelligence />} />} />
               <Route path="/branch/dispatch" element={<ProtectedRoute element={<BranchDispatch />} />} />
               <Route path="/branch/suppliers" element={<ProtectedRoute element={<BranchSuppliers />} />} />
               <Route path="/branch/supplier-transactions" element={<ProtectedRoute element={<BranchSupplierTransactions />} />} />

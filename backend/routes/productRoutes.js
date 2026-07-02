@@ -237,6 +237,7 @@ router.get("/search", async (req, res) => {
 
         return {
           ...product,
+          totalQty: Math.round(closingStock * 100) / 100,
           availableQty: Math.round(closingStock * 100) / 100
         };
       });
@@ -544,6 +545,7 @@ router.get("/", async (req, res) => {
       return {
         ...product,
         restockingConfig,
+        totalQty: Math.round(closingStock * 100) / 100,
         availableQty: Math.round(closingStock * 100) / 100,
         lastPurchaseDate: purchaseDateMap.get(pId) || null,
         lastSalesDate: salesDateMap.get(pId) || null
@@ -1673,14 +1675,6 @@ router.get("/batch-inventory", auth, async (req, res) => {
         { batchNo: "0", qty: p.batch1?.qty || 0, expiryDate: p.batch1?.expiryDate || null, mrp: p.batch1?.mrp || 0, manufacturingDate: p.batch1?.manufacturingDate || null }
       ];
 
-      // Sum stock qty of newer batches (non-Batch 0 batches)
-      const newerBatchesQty = activeBatches
-        .filter(b => b.batchNo !== "0")
-        .reduce((sum, b) => sum + (b.qty || 0), 0);
-
-      // Batch 0 closing quantity is calculated as overall stock minus newer batches stock
-      const batch0ClosingQty = Math.max(0, totalClosingQty - newerBatchesQty);
-
       activeBatches.forEach(b => {
         // Calculate age: days remaining to expiry
         let ageDays = null;
@@ -1704,8 +1698,8 @@ router.get("/batch-inventory", auth, async (req, res) => {
         // Purchased Qty is strictly the PO quantity for this batch (no fallbacks!)
         const purchasingQty = poQty;
 
-        // Closing Qty for Batch 0 is calculated dynamically; other batches use b.qty
-        const closingQty = b.batchNo === "0" ? batch0ClosingQty : (b.qty || 0);
+        // DB is now synced perfectly to Ledger, so we just use the true db qty
+        const closingQty = b.qty || 0;
 
         rows.push({
           productId: p._id,

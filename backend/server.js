@@ -60,6 +60,7 @@ import followUpRoutes from "./routes/followUpRoutes.js";
 import deliveryReceiptRoutes from "./routes/deliveryReceiptRoutes.js";
 import hrPayrollRoutes from "./modules/hr-payroll/index.js";
 import crmOrderRoutes from "./modules/crm-orders/index.js";
+import incentiveRoutes from "./routes/incentiveRoutes.js";
 import physicalStockRoutes from "./routes/physicalStockRoutes.js";
 import manualJournalRoutes from "./routes/manualJournalRoutes.js";
 import aiBotRoutes from "./modules/ai-bot/index.js";
@@ -159,6 +160,7 @@ app.use("/api/ledgers", ledgerRoutes);
 app.use("/api/tokens", tokenRoutes);
 app.use("/api/follow-ups", followUpRoutes);
 app.use("/api/delivery-receipts", deliveryReceiptRoutes);
+app.use("/api/incentive", incentiveRoutes);
 // HR module moved to top
 app.get("/api/hr-ping", (req, res) => res.json({ msg: "HR module reachable" }));
 app.use("/api/physical-stock", physicalStockRoutes);

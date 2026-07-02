@@ -104,7 +104,7 @@ const InvoicePreviewModal = ({ order, onClose }) => {
                 <style>
                   body { margin: 0; padding: 0; }
                   img { width: 100%; margin: 20px 0; page-break-after: always; }
-                  @media print { body { margin: 0; } img { margin: 0; padding: 0; } }
+                  @media print { @page { size: auto; margin: 0mm; } body { margin: 0; } img { margin: 0; padding: 0; } }
                 </style>
               </head>
               <body>
@@ -144,7 +144,7 @@ const InvoicePreviewModal = ({ order, onClose }) => {
             <style>
               body { margin: 0; padding: 0; }
               img { width: 100%; margin: 20px 0; }
-              @media print { body { margin: 0; } }
+              @media print { @page { size: auto; margin: 0mm; } body { margin: 0; } }
             </style>
           </head>
           <body>

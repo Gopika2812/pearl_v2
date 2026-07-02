@@ -67,6 +67,7 @@ export const getOriginalInvoiceHTML = (previewData, order) => {
       }
       
       @media print { 
+        @page { size: auto; margin: 0mm; }
         body { margin: 0; padding: 0; } 
         .page { margin: 0 auto; padding: 5mm; page-break-after: always !important; position: relative; }
       }
@@ -149,7 +150,6 @@ export const getOriginalInvoiceHTML = (previewData, order) => {
           </thead>
           <tbody>
             ${previewData?.items?.filter(item => (item.confirmedQty || item.qty) > 0)
-              .sort((a, b) => a.name.localeCompare(b.name))
               .map((item, idx) => `
               <tr>
                 <td style="text-align: center; color: #64748b; font-size: 11px; font-weight: bold;">${idx + 1}</td>

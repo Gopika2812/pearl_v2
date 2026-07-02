@@ -135,9 +135,15 @@ productSchema.pre("save", function () {
     this.batches = [];
   }
 
+  // Initialize batch 0 with openingQty for new products
+  if (this.isNew && this.openingQty && (!this.batch1 || !this.batch1.qty)) {
+    if (!this.batch1) this.batch1 = {};
+    this.batch1.qty = this.openingQty;
+  }
+
   // 1. Sync legacy fields (batch1) to batches array if they are modified
   // Map batch1 to batchNo: "0" for existing/opening stock compatibility
-  if (this.isModified("batch1.qty") || this.isModified("batch1.expiryDate") || this.isModified("batch1.mrp") || this.isModified("batch1.manufacturingDate")) {
+  if (this.isNew || this.isModified("batch1.qty") || this.isModified("batch1.expiryDate") || this.isModified("batch1.mrp") || this.isModified("batch1.manufacturingDate")) {
     let b0 = this.batches.find(b => b.batchNo === "0");
     if (!b0) {
       this.batches.push({ batchNo: "0", qty: this.batch1?.qty || 0, expiryDate: this.batch1?.expiryDate || null, mrp: this.batch1?.mrp || 0, manufacturingDate: this.batch1?.manufacturingDate || null });

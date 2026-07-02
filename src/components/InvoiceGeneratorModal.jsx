@@ -36,12 +36,14 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
 
   // Lifecycle guard
   const isMounted = useRef(false);
+  const initializationRef = useRef(false);
+  const searchProductsController = useRef(null);
+  const searchCustomersController = useRef(null);
+
   useEffect(() => {
     isMounted.current = true;
     return () => { isMounted.current = false; };
   }, []);
-
-  const initializationRef = useRef(false);
 
   const repairName = (pId, currentName) => {
     if (!currentName || currentName === "Product Name Missing") {
@@ -257,13 +259,22 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
   // Handle Search Customers
   const searchCustomers = async (query) => {
     try {
+      if (searchCustomersController.current) {
+        searchCustomersController.current.abort();
+      }
+      searchCustomersController.current = new AbortController();
+
       setSearchingCustomers(true);
       const bid = currentBranch?._id || order.branchId?._id || order.branchId;
-      const res = await fetch(`${API_BASE}/customers?branchId=${bid}&search=${query || ""}`);
+      const res = await fetch(`${API_BASE}/customers?branchId=${bid}&search=${query || ""}`, {
+        signal: searchCustomersController.current.signal
+      });
       const data = await res.json();
       setFetchedCustomers(data.data || []);
     } catch (err) {
-      console.error("error fetching customers:", err);
+      if (err.name !== 'AbortError') {
+        console.error("error fetching customers:", err);
+      }
     } finally {
       setSearchingCustomers(false);
     }
@@ -272,14 +283,23 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
   // Handle Search Products
   const searchProducts = async (query) => {
     try {
+      if (searchProductsController.current) {
+        searchProductsController.current.abort();
+      }
+      searchProductsController.current = new AbortController();
+
       setSearchingProducts(true);
       const bid = currentBranch?._id || order.branchId?._id || order.branchId;
-      const res = await fetch(`${API_BASE}/products?branchId=${bid}&search=${query || ""}`);
+      const res = await fetch(`${API_BASE}/products?branchId=${bid}&search=${query || ""}`, {
+        signal: searchProductsController.current.signal
+      });
       const data = await res.json();
       setFetchedProducts(data.data || []);
       // If query is empty, it's an "initial load" - don't force show dropdown yet
     } catch (err) {
-      console.error("error fetching products:", err);
+      if (err.name !== 'AbortError') {
+        console.error("error fetching products:", err);
+      }
     } finally {
       setSearchingProducts(false);
     }
@@ -886,7 +906,6 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
           </thead>
           <tbody>
             ${previewData?.items?.filter(item => (item.confirmedQty || item.qty) > 0)
-              .sort((a, b) => a.name.localeCompare(b.name))
               .map(item => `
               <tr>
                 <td style="font-weight: 900; font-size: 18px; color: #000;">${item.name}</td>
@@ -1004,7 +1023,6 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
                 </thead>
                 <tbody>
                   ${previewData?.items?.filter(item => (item.confirmedQty || item.qty) > 0)
-                    .sort((a, b) => a.name.localeCompare(b.name))
                     .map((item, idx) => `
                     <tr>
                       <td style="text-align: center; color: #64748b; font-size: 11px; font-weight: bold;">${idx + 1}</td>
