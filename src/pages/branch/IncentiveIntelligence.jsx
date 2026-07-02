@@ -29,7 +29,7 @@ const IncentiveIntelligence = () => {
     try {
       setLoading(true);
       const res = await axios.get(
-        `${import.meta.env.VITE_BACKEND_URL}/api/incentive/report/${currentBranch._id}?fromDate=${fromDate}&toDate=${toDate}`
+        `${import.meta.env.VITE_API_BASE_URL}/api/incentive/report/${currentBranch._id}?fromDate=${fromDate}&toDate=${toDate}`
       );
       if (res.data.success) {
         setData(res.data.data);
@@ -108,7 +108,7 @@ const IncentiveIntelligence = () => {
   ];
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 w-full max-w-7xl mx-auto space-y-6">
+    <div className="p-4 sm:p-6 lg:p-8 w-full mx-auto space-y-6">
       
       {/* Header Section */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white/70 backdrop-blur-xl p-6 rounded-3xl shadow-sm border border-secondary/10">
