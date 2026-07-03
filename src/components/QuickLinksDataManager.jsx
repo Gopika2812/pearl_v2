@@ -878,7 +878,7 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit, renderInlineEdit }) => 
                             }
                           } else if (typeof value === "number") {
                             displayValue = Math.round(value * 100) / 100;
-                            if (field === "debit" || field === "credit" || field === "sellingPrice" || field === "purchasingPrice") {
+                            if (field === "debit" || field === "credit" || field === "sellingPrice" || field === "purchasingPrice" || field === "marketCapPrice") {
                               displayValue = `₹${displayValue.toFixed(2)}`;
                             }
                           } else if (
@@ -890,7 +890,7 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit, renderInlineEdit }) => 
                             // Handle numeric strings (Prices, amounts, etc.) but skip identifiers
                             const num = parseFloat(value);
                             displayValue = Math.round(num * 100) / 100;
-                            if (field === "debit" || field === "credit" || field === "sellingPrice" || field === "purchasingPrice") {
+                            if (field === "debit" || field === "credit" || field === "sellingPrice" || field === "purchasingPrice" || field === "marketCapPrice") {
                               displayValue = `₹${displayValue.toFixed(2)}`;
                             }
                           } else if (field === "totalQty") {

@@ -718,8 +718,12 @@ export default function InventorySalesOrderEntry({
   const updateSellingPrice = (product, cMargin) => {
     if (!product) return 0;
 
-    // 🛡️ NEW ADDITIVE LOGIC: Final Price = PurchasingPrice * (1 + (NormalMargin + AdminMargin/CustomerMargin) / 100)
+    // 🛡️ NEW ADDITIVE LOGIC: Final Price = BaseCost * (1 + (NormalMargin + AdminMargin/CustomerMargin) / 100)
+    // BaseCost is Market Cap Price (MCP) if available, otherwise Purchasing Price.
     const purchasingPrice = Number(product.purchasingPrice || 0);
+    const mcpPrice = Number(product.marketCapPrice || 0);
+    const baseCost = mcpPrice > 0 ? mcpPrice : purchasingPrice;
+    
     const normalMargin = Number(product.marginPercentage || 0);
 
     // Determine relative margin: Admin Margin overrides Customer Margin (only if non-zero)
@@ -734,10 +738,10 @@ export default function InventorySalesOrderEntry({
     const totalMargin = normalMargin + relativeMargin;
     let adjustedPrice = 0;
 
-    if (purchasingPrice > 0) {
-      adjustedPrice = purchasingPrice + (purchasingPrice * totalMargin / 100);
+    if (baseCost > 0) {
+      adjustedPrice = baseCost + (baseCost * totalMargin / 100);
     } else {
-      // Fallback if purchasing price is missing
+      // Fallback if base cost is missing
       const baseSellingPrice = Number(product.sellingPrice || 0);
       adjustedPrice = baseSellingPrice + (baseSellingPrice * relativeMargin / 100);
     }

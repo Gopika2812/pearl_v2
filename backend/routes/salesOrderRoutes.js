@@ -436,6 +436,23 @@ router.get("/", async (req, res) => {
       .populate('deliveryMan', 'name phone')
       .sort({ createdAt: -1 });
 
+    // Helper to attach E-Invoice status
+    const attachEInvoiceStatus = async (orders) => {
+      const invoiceNumbers = orders.map(so => so.salesInvoiceId).filter(Boolean);
+      if (invoiceNumbers.length > 0) {
+        const mongoose = await import('mongoose');
+        const Invoice = mongoose.default.model("Invoice");
+        const invoices = await Invoice.find({ invoiceNumber: { $in: invoiceNumbers } }).select("invoiceNumber eInvoiceDetails.irn").lean();
+        const irnMap = {};
+        invoices.forEach(inv => irnMap[inv.invoiceNumber] = !!inv.eInvoiceDetails?.irn);
+        orders.forEach(so => {
+          if (so.salesInvoiceId) {
+            so.hasEInvoice = irnMap[so.salesInvoiceId] || false;
+          }
+        });
+      }
+    };
+
     if (paginated === "true") {
       const pageNum = parseInt(page);
       const limitNum = parseInt(limit);
@@ -444,6 +461,8 @@ router.get("/", async (req, res) => {
         .skip((pageNum - 1) * limitNum)
         .limit(limitNum)
         .lean();
+      
+      await attachEInvoiceStatus(salesOrders);
       
       console.log(`✅ [DEBUG] Found ${salesOrders.length} sales orders for branch ${branchId} (Page ${pageNum}/${Math.ceil(totalCount/limitNum)})`);
       return res.json({
@@ -458,6 +477,8 @@ router.get("/", async (req, res) => {
       const salesOrders = await salesOrdersQuery
         .limit(limitNum)
         .lean();
+      
+      await attachEInvoiceStatus(salesOrders);
       
       console.log(`✅ [DEBUG] Found ${salesOrders.length} sales orders for branch ${branchId}`);
       return res.json(salesOrders);

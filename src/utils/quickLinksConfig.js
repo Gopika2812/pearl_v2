@@ -44,10 +44,10 @@ export const QUICK_LINKS_CONFIG = {
     label: "Product",
     desc: "Master record of all sellable and stock items",
     endpoint: "/products",
-    displayFields: ["name", "hsnCode", "totalQty", "purchasingPrice", "sellingPrice", "marginPercentage", "adminMargin", "productGroup", "productCategories", "warehouse"],
-    editableFields: ["name", "hsnCode", "purchasingPrice", "sellingPrice", "adminMargin", "productGroup", "productCategories", "warehouse"],
-    detailedFields: ["name", "hsnCode", "totalQty", "totalQtyUnit", "perQty", "units", "purchasingPrice", "sellingPrice", "marginPercentage", "adminMargin", "gst"],
-    permissionFields: ["name", "hsnCode", "totalQty", "purchasingPrice", "sellingPrice", "marginPercentage", "adminMargin", "productGroup", "productCategories", "warehouse", "action_edit", "action_delete"]
+    displayFields: ["name", "hsnCode", "totalQty", "purchasingPrice", "marketCapPrice", "sellingPrice", "marginPercentage", "adminMargin", "productGroup", "productCategories", "warehouse"],
+    editableFields: ["name", "hsnCode", "purchasingPrice", "marketCapPrice", "sellingPrice", "adminMargin", "productGroup", "productCategories", "warehouse"],
+    detailedFields: ["name", "hsnCode", "totalQty", "totalQtyUnit", "perQty", "units", "purchasingPrice", "marketCapPrice", "sellingPrice", "marginPercentage", "adminMargin", "gst"],
+    permissionFields: ["name", "hsnCode", "totalQty", "purchasingPrice", "marketCapPrice", "sellingPrice", "marginPercentage", "adminMargin", "productGroup", "productCategories", "warehouse", "action_edit", "action_delete"]
   },
   customer_category: {
     label: "Customer Category",

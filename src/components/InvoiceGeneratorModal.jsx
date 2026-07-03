@@ -26,7 +26,8 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
   const canEditPrice = isSuperAdmin || user?.fieldPermissions?.["sales-order-list_action_wb_price"] !== false;
   const canEditQty = isSuperAdmin || user?.fieldPermissions?.["sales-order-list_action_wb_qty"] !== false;
   const canEditDiscount = isSuperAdmin || user?.fieldPermissions?.["sales-order-list_action_wb_discount"] !== false;
-  const canEditGst = isSuperAdmin || user?.fieldPermissions?.["sales-order-list_action_wb_gst"] !== false;
+  // const canEditGst = isSuperAdmin || user?.fieldPermissions?.["sales-order-list_action_wb_gst"] !== false;
+  const canEditGst = false; // Disabled as per request
   const canDelete = isSuperAdmin || user?.fieldPermissions?.["sales-order-list_action_wb_delete"] !== false;
   const [activeTab, setActiveTab] = useState("edit");
   const [loading, setLoading] = useState(false);

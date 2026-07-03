@@ -1631,8 +1631,9 @@ const BranchInvoicedOrders = () => {
                                   {isFieldAllowed("action_gen_invoice") && (
                                     <button
                                       onClick={() => handleGenerateInvoice(order, true, false)}
-                                      className="flex items-center gap-2 justify-center px-3 py-2 rounded-lg transition text-xs font-semibold bg-[#319bab] text-white hover:bg-[#257f87] shadow-sm shadow-[#319bab]/20"
-                                      disabled={order.status === "CANCELLED"}
+                                      className={`flex items-center gap-2 justify-center px-3 py-2 rounded-lg transition text-xs font-semibold shadow-sm ${order.hasEInvoice ? "bg-gray-300 text-gray-500 cursor-not-allowed" : "bg-[#319bab] text-white hover:bg-[#257f87] shadow-[#319bab]/20"}`}
+                                      disabled={order.status === "CANCELLED" || order.hasEInvoice}
+                                      title={order.hasEInvoice ? "E-Invoice already generated. Cannot regenerate." : ""}
                                     >
                                       <FaFileInvoice />
                                       {order.invoiceGenerated ? "Re-generate Invoice" : "Generate Invoice"}
