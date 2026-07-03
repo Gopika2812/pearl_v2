@@ -177,7 +177,7 @@ router.get("/search", async (req, res) => {
 
     // ⚡ Super lightweight: only fetch fields needed for the dropdown + billing
     const products = await Product.find(filter)
-      .select("_id name totalQty openingQty sellingPrice purchasingPrice gst hsnCode marginPercentage adminMargin productGroup units unitConversion")
+      .select("_id name totalQty openingQty sellingPrice purchasingPrice marketCapPrice gst hsnCode marginPercentage adminMargin productGroup units unitConversion")
       .populate("productGroup", "_id name")
       .sort({ name: 1 })
       .limit(pageSize)

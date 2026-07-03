@@ -112,21 +112,25 @@ export default function InventorySalesOrderEntry({
     setItems((prevItems) => 
       prevItems.map((item) => {
         const product = productsWithStock.find(p => p._id === item.productId);
-        const pPrice = product ? (product.purchasingPrice || 0) : (item.purchasingPrice || item.sellingPrice);
+        const mcp = product ? Number(product.marketCapPrice || 0) : 0;
+        const pPrice = product ? (mcp > 0 ? mcp : (product.purchasingPrice || 0)) : (item.purchasingPrice || item.sellingPrice);
         
         let targetPrice = pPrice;
         if (!checked) {
           // Calculate default selling price
           if (product) {
             const purchasingPriceVal = Number(product.purchasingPrice || 0);
+            const mcpPrice = Number(product.marketCapPrice || 0);
+            const baseCost = mcpPrice > 0 ? mcpPrice : purchasingPriceVal;
+            
             const normalMargin = Number(product.marginPercentage || 0);
             let relativeMargin = Number(customerMargin || 0);
             if (product.adminMargin !== undefined && product.adminMargin !== null && product.adminMargin !== "" && Number(product.adminMargin) !== 0) {
               relativeMargin = Number(product.adminMargin);
             }
             const totalMargin = normalMargin + relativeMargin;
-            if (purchasingPriceVal > 0) {
-              targetPrice = purchasingPriceVal + (purchasingPriceVal * totalMargin / 100);
+            if (baseCost > 0) {
+              targetPrice = baseCost + (baseCost * totalMargin / 100);
             } else {
               const baseSellingPrice = Number(product.sellingPrice || 0);
               targetPrice = baseSellingPrice + (baseSellingPrice * relativeMargin / 100);
@@ -142,7 +146,9 @@ export default function InventorySalesOrderEntry({
     // Also update current active selection price
     if (selectedProductData) {
       if (checked) {
-        setSellingPrice(purchasingPrice);
+        const mcpPrice = Number(selectedProductData.marketCapPrice || 0);
+        const baseCost = mcpPrice > 0 ? mcpPrice : (selectedProductData.purchasingPrice || 0);
+        setSellingPrice(baseCost);
         setUsePurchaseAsSelling(true);
       } else {
         updateSellingPrice(selectedProductData, customerMargin);
@@ -781,7 +787,9 @@ export default function InventorySalesOrderEntry({
 
     // 🛡️ Calculate and set price
     if (billAtPurchasePrice) {
-      setSellingPrice(product.purchasingPrice || 0);
+      const mcpPrice = Number(product.marketCapPrice || 0);
+      const baseCost = mcpPrice > 0 ? mcpPrice : (product.purchasingPrice || 0);
+      setSellingPrice(baseCost);
       setUsePurchaseAsSelling(true);
     } else {
       updateSellingPrice(product, customerMargin);
