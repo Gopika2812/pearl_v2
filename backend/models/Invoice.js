@@ -107,6 +107,7 @@ const invoiceSchema = new mongoose.Schema(
         batch: { type: String, default: "1" },
         expiryDate: { type: Date, default: null },
         mrp: { type: Number, default: 0 },
+        isNeutralized: { type: Boolean, default: false },
       },
     ],
 

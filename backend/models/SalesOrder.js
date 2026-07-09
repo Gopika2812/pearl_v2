@@ -94,6 +94,7 @@ const salesOrderSchema = new mongoose.Schema(
           type: Boolean,
           default: true,
         },
+        isNeutralized: { type: Boolean, default: false },
       },
     ],
 
@@ -156,6 +157,7 @@ const salesOrderSchema = new mongoose.Schema(
           type: Boolean,
           default: true,
         },
+        isNeutralized: { type: Boolean, default: false },
       },
     ],
 

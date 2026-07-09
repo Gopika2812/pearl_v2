@@ -698,7 +698,7 @@ router.get("/group/:productGroupId", async (req, res) => {
   }
 });
 
-router.post("/bulk-upload", upload.single("file"), async (req, res) => {
+router.post("/bulk-upload", auth, upload.single("file"), async (req, res) => {
   console.log("🔥 BULK UPLOAD HIT (v2 with decimals)");
 
   try {
@@ -964,10 +964,15 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       }
 
       // 💰 STOCK AUDIT LOGIC (SIMPLE REPLACE MODE)
-      const hasStockColumn = 'totalqty' in normalizedRow || 'qty' in normalizedRow || 'openingquantity' in normalizedRow || 'openingstock' in normalizedRow || 'closingqty' in normalizedRow || 'openingqty' in normalizedRow;
+      const stockKey = Object.keys(normalizedRow).find(key => 
+        ['totalqty', 'qty', 'openingquantity', 'openingstock', 'closingqty', 'openingqty', 'stock'].includes(key) ||
+        key.startsWith('stock(31-mar-') ||
+        key.startsWith('openingqt')
+      );
+      const hasStockColumn = stockKey !== undefined;
 
       if (hasStockColumn) {
-        const rawQty = normalizedRow.totalqty || normalizedRow.qty || normalizedRow.openingquantity || normalizedRow.openingstock || normalizedRow.closingqty || normalizedRow.openingqty || "";
+        const rawQty = normalizedRow[stockKey] || "";
         const qty = parseFloat(String(rawQty).replace(/[^0-9.-]+/g, "")) || 0;
         productData.totalQty = Math.round(qty * 100) / 100;
         productData.openingQty = productData.totalQty;

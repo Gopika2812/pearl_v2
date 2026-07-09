@@ -15,6 +15,7 @@
   "dependencies": {
     "@emailjs/nodejs": "^5.0.2",
     "@google/generative-ai": "^0.24.1",
+    "aws-sdk": "^2.1693.0",
     "axios": "^1.14.0",
     "axios-cookiejar-support": "^6.0.5",
     "bcryptjs": "^2.4.3",
@@ -23,6 +24,7 @@
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "dotenv": "^17.2.3",
+    "dynamoose": "^4.2.0",
     "express": "^5.2.1",
     "fs": "^0.0.1-security",
     "jsonwebtoken": "^9.0.3",
@@ -37,6 +39,7 @@
     "pdf-lib": "^1.17.1",
     "pdfkit": "^0.17.2",
     "puppeteer": "^22.15.0",
+    "serverless-http": "^4.0.0",
     "tough-cookie": "^6.0.1",
     "twilio": "^5.12.0",
     "xlsx": "^0.18.5"
