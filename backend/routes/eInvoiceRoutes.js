@@ -299,8 +299,9 @@ router.post("/bulk-generate", async (req, res) => {
     const results = [];
     
     for (const invoiceId of invoiceIds) {
+      let invoice = null;
       try {
-        const invoice = await Invoice.findById(invoiceId)
+        invoice = await Invoice.findById(invoiceId)
           .populate("branchId")
           .populate("customer.customerId")
           .populate("items.productId");
@@ -344,11 +345,11 @@ router.post("/bulk-generate", async (req, res) => {
           results.push({ invoiceId, invoiceNumber: invoice.invoiceNumber, success: true });
         } else {
           let errorMessage = eInvoiceResult?.message || "Failed";
-          if (errorMessage.includes('HSN/SAC')) {
+          if (errorMessage && errorMessage.includes('HSN/SAC')) {
             const match = errorMessage.match(/'(\d+)'/);
             if (match && match[1]) {
               const hsnCode = match[1];
-              const item = invoice.items.find(i => i.hsn === hsnCode);
+              const item = invoice?.items?.find(i => i.hsn === hsnCode);
               if (item) {
                 errorMessage += ` (Product: ${item.name})`;
               }
@@ -382,13 +383,13 @@ router.post("/bulk-generate", async (req, res) => {
           console.error("Failed to update error status for invoice:", invoiceId, saveErr);
         }
         
-        let errorMessage = err.message;
+        let errorMessage = err.message || "Unknown error";
         // Try to find product name if it's an HSN error
-        if (errorMessage.includes('HSN/SAC')) {
+        if (errorMessage && errorMessage.includes('HSN/SAC')) {
           const match = errorMessage.match(/'(\d+)'/);
           if (match && match[1]) {
             const hsnCode = match[1];
-            const item = invoice.items.find(i => i.hsn === hsnCode);
+            const item = invoice?.items?.find(i => i.hsn === hsnCode);
             if (item) {
               errorMessage += ` (Product: ${item.name})`;
             }
