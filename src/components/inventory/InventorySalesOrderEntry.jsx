@@ -516,7 +516,7 @@ export default function InventorySalesOrderEntry({
     const fetchProductsByGroup = async () => {
       setLoadingProducts(true);
       try {
-        const res = await fetchWithAuth(`${API_BASE}/products/group/${productGroup}`);
+        const res = await fetchWithAuth(`${API_BASE}/products/group/${productGroup}${branchId ? `?branchId=${branchId}` : ""}`);
         const data = await res.json();
 
         if (data.success) {
@@ -599,7 +599,7 @@ export default function InventorySalesOrderEntry({
     const fetchSampleProductsByGroup = async () => {
       setLoadingSampleProducts(true);
       try {
-        const res = await fetchWithAuth(`${API_BASE}/products/group/${sampleProductGroup}`);
+        const res = await fetchWithAuth(`${API_BASE}/products/group/${sampleProductGroup}${branchId ? `?branchId=${branchId}` : ""}`);
         const data = await res.json();
 
         if (data.success) {

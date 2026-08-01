@@ -845,18 +845,141 @@ router.put("/:id", async (req, res) => {
   }
 });
 
-// DELETE credit note (cancel return)
-router.delete("/:id", async (req, res) => {
+// CANCEL credit note (Reverse stock & customer balance)
+router.put("/:id/cancel", async (req, res) => {
   try {
-    const deletedCreditNote = await CreditNote.findByIdAndDelete(req.params.id);
+    const { id } = req.params;
+    const { userId, username } = req.body || {};
 
-    if (!deletedCreditNote) {
+    const creditNote = await CreditNote.findById(id);
+    if (!creditNote) {
       return res.status(404).json({ success: false, message: "Credit note not found" });
     }
 
+    if (creditNote.status === "Cancelled" || creditNote.status === "CANCELLED") {
+      return res.status(400).json({ success: false, message: "Credit note is already cancelled" });
+    }
+
+    // 1️⃣ REVERSE STOCK (Deduct returned items from inventory)
+    for (const item of creditNote.items || []) {
+      if (item.productId && item.qty > 0) {
+        const product = await Product.findById(item.productId);
+        if (product) {
+          product.updateBatchStock(item.batch || "0", -item.qty);
+          await product.save();
+        }
+      }
+    }
+
+    // 2️⃣ REVERSE CUSTOMER / VENDOR BALANCE (Restore debit and closing balance)
+    const customerId = creditNote.customer?.customerId;
+    if (customerId) {
+      const Customer = mongoose.model("Customer");
+      const customer = await Customer.findById(customerId);
+      if (customer) {
+        let target = customer;
+        let isVendor = false;
+        if (customer.linkedVendorId) {
+          const Vendor = mongoose.model("Vendor");
+          const linkedVendor = await Vendor.findById(customer.linkedVendorId);
+          if (linkedVendor) {
+            target = linkedVendor;
+            isVendor = true;
+          }
+        }
+
+        const restoreAmount = Math.round(creditNote.grandTotal || 0);
+        let currentDebit = (target.debit || 0) + restoreAmount;
+        let currentCredit = target.credit || 0;
+
+        if (isVendor) {
+          const Vendor = mongoose.model("Vendor");
+          await Vendor.findByIdAndUpdate(target._id, {
+            debit: Math.round(currentDebit),
+            credit: Math.round(currentCredit),
+          });
+        } else {
+          const restoredBalance = Math.round((customer.closingBalance || 0) + restoreAmount);
+          await Customer.findByIdAndUpdate(customer._id, {
+            debit: Math.round(currentDebit),
+            credit: Math.round(currentCredit),
+            closingBalance: restoredBalance,
+            totalBalance: restoredBalance,
+          });
+        }
+      }
+    }
+
+    // 3️⃣ UPDATE CREDIT NOTE STATUS
+    creditNote.status = "Cancelled";
+    await creditNote.save();
+
+    // 4️⃣ AUDIT LOG
+    try {
+      await createAuditLog({
+        userId: userId || req.user?.id || "System",
+        username: username || req.user?.username || "System",
+        branchId: creditNote.branchId,
+        action: "CANCEL_CREDIT_NOTE",
+        description: `Cancelled credit note ${creditNote.creditNoteId} for ${creditNote.customer?.name} - ₹${creditNote.grandTotal} (Stock & Balance reversed)`,
+        targetId: creditNote._id,
+        targetModel: "CreditNote",
+      });
+    } catch (e) {}
+
     res.json({
       success: true,
-      message: "Credit note deleted and all changes reversed",
+      message: `Credit note ${creditNote.creditNoteId} cancelled successfully. Inventory stock and customer balance have been reversed.`,
+      data: creditNote,
+    });
+  } catch (error) {
+    console.error("Cancel CN error:", error);
+    res.status(500).json({ success: false, message: error.message || "Failed to cancel credit note" });
+  }
+});
+
+// DELETE credit note (cancel return)
+router.delete("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const creditNote = await CreditNote.findById(id);
+    if (!creditNote) {
+      return res.status(404).json({ success: false, message: "Credit note not found" });
+    }
+
+    if (creditNote.status !== "Cancelled" && creditNote.status !== "CANCELLED") {
+      // Reverse stock & balance before deletion if not already cancelled
+      for (const item of creditNote.items || []) {
+        if (item.productId && item.qty > 0) {
+          const product = await Product.findById(item.productId);
+          if (product) {
+            product.updateBatchStock(item.batch || "0", -item.qty);
+            await product.save();
+          }
+        }
+      }
+
+      const customerId = creditNote.customer?.customerId;
+      if (customerId) {
+        const Customer = mongoose.model("Customer");
+        const customer = await Customer.findById(customerId);
+        if (customer) {
+          const restoreAmount = Math.round(creditNote.grandTotal || 0);
+          const restoredBalance = Math.round((customer.closingBalance || 0) + restoreAmount);
+          await Customer.findByIdAndUpdate(customer._id, {
+            debit: Math.round((customer.debit || 0) + restoreAmount),
+            closingBalance: restoredBalance,
+            totalBalance: restoredBalance,
+          });
+        }
+      }
+    }
+
+    await CreditNote.findByIdAndDelete(id);
+
+    res.json({
+      success: true,
+      message: "Credit note deleted and all stock/balance changes reversed",
     });
   } catch (error) {
     console.error("Delete error:", error);

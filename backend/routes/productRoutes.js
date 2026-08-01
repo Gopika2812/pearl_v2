@@ -595,7 +595,7 @@ router.get("/", async (req, res) => {
 router.get("/group/:productGroupId", async (req, res) => {
   try {
     const { productGroupId } = req.params;
-    const { search = "" } = req.query;
+    const { search = "", branchId } = req.query;
 
     console.log(`🔍 Fetching products for group: ${productGroupId}`);
 
@@ -610,6 +610,9 @@ router.get("/group/:productGroupId", async (req, res) => {
 
     // Build filter
     const filter = { productGroup: productGroupId };
+    if (branchId && mongoose.Types.ObjectId.isValid(branchId)) {
+      filter.branchId = new mongoose.Types.ObjectId(branchId);
+    }
     if (search) {
       filter.name = { $regex: search, $options: "i" };
     }

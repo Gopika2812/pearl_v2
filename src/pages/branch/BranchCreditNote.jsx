@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { FaPlus, FaUndoAlt, FaSearch, FaFileInvoiceDollar, FaChevronDown, FaChevronUp, FaFileContract, FaPrint, FaTruck, FaSpinner, FaFilePdf } from "react-icons/fa";
+import { FaPlus, FaUndoAlt, FaSearch, FaFileInvoiceDollar, FaChevronDown, FaChevronUp, FaFileContract, FaPrint, FaTruck, FaSpinner, FaFilePdf, FaBan } from "react-icons/fa";
 import { toast } from "react-toastify";
 import CustomerCreditNoteModal from "../../components/inventory/CustomerCreditNoteModal";
 import { useBranch } from "../../context/BranchContext";
@@ -123,6 +123,42 @@ export default function BranchCreditNote() {
     } catch (err) {
       console.error("Error:", err);
       toast.error("Error generating E-Invoice: " + err.message);
+    } finally {
+      setRequestingAction(null);
+    }
+  };
+
+  const handleCancelCreditNote = async (cn) => {
+    if (cn.status === "Cancelled" || cn.status === "CANCELLED") {
+      toast.error("Credit note is already cancelled");
+      return;
+    }
+
+    const confirmMsg = `Are you sure you want to CANCEL Credit Note ${cn.creditNoteId} (₹${(cn.grandTotal || 0).toLocaleString()})?\n\nThis will:\n1. Deduct returned item stock from inventory (-Qty)\n2. Restore customer balance (+₹${(cn.grandTotal || 0).toLocaleString()})`;
+
+    if (!window.confirm(confirmMsg)) return;
+
+    setRequestingAction(cn._id);
+    try {
+      const res = await fetchWithAuth(`${API_BASE}/credit-notes/${cn._id}/cancel`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user?.id || user?._id,
+          username: user?.username || user?.fullName || "Staff",
+        })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        toast.success(`🚫 Credit Note ${cn.creditNoteId} Cancelled Successfully`);
+        fetchCreditNotes(1, searchQuery, fromDate, toDate);
+      } else {
+        toast.error(`❌ Error: ${data.message || "Failed to cancel credit note"}`);
+      }
+    } catch (err) {
+      console.error("Cancel CN error:", err);
+      toast.error("Error cancelling credit note: " + err.message);
     } finally {
       setRequestingAction(null);
     }
@@ -280,7 +316,11 @@ export default function BranchCreditNote() {
                         </td>
                         <td className="px-6 py-5 text-center">
                           <div className="flex flex-col gap-1 items-center scale-90">
-                            {cn.einvoiceStatus === "GENERATED" ? (
+                            {cn.status === "Cancelled" || cn.status === "CANCELLED" ? (
+                              <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border border-red-200">
+                                🚫 CANCELLED
+                              </span>
+                            ) : cn.einvoiceStatus === "GENERATED" ? (
                               <>
                                 <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border border-green-200">
                                   ✅ IRN READY
@@ -301,39 +341,56 @@ export default function BranchCreditNote() {
                         </td>
                         <td className="px-6 py-5 text-center">
                           <div className="flex items-center justify-center gap-2">
-                            <button
-                               onClick={() => handleGenerateEInvoice(cn)}
-                               disabled={requestingAction === cn._id}
-                               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all text-[10px] font-black border ${cn.einvoiceStatus === "GENERATED" || cn.ewayBillNo
-                                 ? "bg-green-50 text-green-700 border-green-200 hover:bg-green-600 hover:text-white"
-                                 : "bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700"
-                               }`}
-                            >
-                               {requestingAction === cn._id ? <FaSpinner className="animate-spin" /> : (
-                                 <>
-                                   <FaFileContract size={12} />
-                                   {cn.einvoiceStatus === "GENERATED" ? "RE-GENERATE" : "GENERATE E-INV"}
-                                 </>
-                               )}
-                            </button>
+                            {cn.status === "Cancelled" || cn.status === "CANCELLED" ? (
+                              <span className="px-3 py-1.5 rounded-lg bg-red-50 text-red-600 border border-red-100 text-[10px] font-black">
+                                CANCELLED
+                              </span>
+                            ) : (
+                              <>
+                                <button
+                                   onClick={() => handleGenerateEInvoice(cn)}
+                                   disabled={requestingAction === cn._id}
+                                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all text-[10px] font-black border ${cn.einvoiceStatus === "GENERATED" || cn.ewayBillNo
+                                     ? "bg-green-50 text-green-700 border-green-200 hover:bg-green-600 hover:text-white"
+                                     : "bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700"
+                                   }`}
+                                >
+                                   {requestingAction === cn._id ? <FaSpinner className="animate-spin" /> : (
+                                     <>
+                                       <FaFileContract size={12} />
+                                       {cn.einvoiceStatus === "GENERATED" ? "RE-GENERATE" : "GENERATE E-INV"}
+                                     </>
+                                   )}
+                                </button>
 
-                            {cn.einvoiceStatus === "GENERATED" && (
-                              <button 
-                                onClick={() => setShowEInvoiceModal(cn)}
-                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-[10px] font-black transition-all shadow-sm"
-                                title="View PDF"
-                              >
-                                <FaFilePdf size={12} /> PDF
-                              </button>
+                                {cn.einvoiceStatus === "GENERATED" && (
+                                  <button 
+                                    onClick={() => setShowEInvoiceModal(cn)}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-[10px] font-black transition-all shadow-sm"
+                                    title="View PDF"
+                                  >
+                                    <FaFilePdf size={12} /> PDF
+                                  </button>
+                                )}
+
+                                <button 
+                                  onClick={() => { setEditCN(cn); setShowModal(true); }}
+                                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[10px] font-black transition-all shadow-sm bg-blue-50 text-blue-700 border-blue-100 hover:bg-blue-600 hover:text-white`}
+                                  title="Edit Credit Note"
+                                >
+                                  EDIT
+                                </button>
+
+                                <button 
+                                  onClick={() => handleCancelCreditNote(cn)}
+                                  disabled={requestingAction === cn._id}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[10px] font-black transition-all shadow-sm bg-red-50 text-red-600 border-red-200 hover:bg-red-600 hover:text-white"
+                                  title="Cancel Credit Note"
+                                >
+                                  {requestingAction === cn._id ? <FaSpinner className="animate-spin" /> : <><FaBan size={11} /> CANCEL</>}
+                                </button>
+                              </>
                             )}
-
-                            <button 
-                              onClick={() => { setEditCN(cn); setShowModal(true); }}
-                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[10px] font-black transition-all shadow-sm bg-blue-50 text-blue-700 border-blue-100 hover:bg-blue-600 hover:text-white`}
-                              title="Edit Credit Note"
-                            >
-                              EDIT
-                            </button>
 
                             <button 
                               onClick={() => handlePrint(cn, 'STANDARD')}

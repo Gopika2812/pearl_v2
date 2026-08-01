@@ -186,7 +186,7 @@ const InventoryPurchaseOrderEntry = ({
 
     const fetchProductsByGroup = async () => {
       setLoadingProducts(true);
-      const url = `${API_BASE}/products/group/${productGroup}`;
+      const url = `${API_BASE}/products/group/${productGroup}${branchId ? `?branchId=${branchId}` : ""}`;
       console.log(`📡 Fetching from: ${url}`);
 
       try {
