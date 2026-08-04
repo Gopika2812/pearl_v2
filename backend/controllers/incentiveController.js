@@ -44,9 +44,13 @@ export const getIncentiveReport = async (req, res) => {
 
         attendances.forEach(att => {
           hasAnyAttendance = true;
-          if (att.status !== "Leave" && att.status !== "Absent") {
+          const hrs = att.workingHours > 0 
+            ? att.workingHours 
+            : (att.presentTime && att.leaveTime ? Math.max(0, (new Date(att.leaveTime) - new Date(att.presentTime)) / (1000 * 60 * 60)) : 0);
+          
+          if (hrs > 0 || att.presentTime || (att.status !== "Leave" && att.status !== "Absent")) {
             isLeaveOnly = false;
-            totalWorkingHours += (att.workingHours || 0);
+            totalWorkingHours += hrs;
           }
         });
 

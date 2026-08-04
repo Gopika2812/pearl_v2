@@ -244,17 +244,29 @@ const AttendanceRecordPage = () => {
                       )}
                     </td>
                     <td className="px-8 py-6">
-                      <div className="flex flex-col gap-1.5">
-                        <div className="flex items-center gap-2">
-                          <FaClock className="text-indigo-400 text-xs" />
-                          <span className="text-xs font-black text-slate-700">{log.workingHours?.toFixed(2) || "0.00"} Hrs</span>
-                        </div>
-                        {log.overtimeHours > 0 && (
-                          <span className="text-[9px] font-black bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full w-fit">
-                            +{log.overtimeHours.toFixed(2)} OT
-                          </span>
-                        )}
-                      </div>
+                      {(() => {
+                        const calculatedHours = (log.workingHours && log.workingHours > 0)
+                          ? log.workingHours
+                          : (log.presentTime && log.leaveTime
+                              ? Math.max(0, (new Date(log.leaveTime) - new Date(log.presentTime)) / (1000 * 60 * 60))
+                              : 0);
+                        const calculatedOT = (log.overtimeHours && log.overtimeHours > 0)
+                          ? log.overtimeHours
+                          : (calculatedHours > 9 ? calculatedHours - 9 : 0);
+                        return (
+                          <div className="flex flex-col gap-1.5">
+                            <div className="flex items-center gap-2">
+                              <FaClock className="text-indigo-400 text-xs" />
+                              <span className="text-xs font-black text-slate-700">{calculatedHours.toFixed(2)} Hrs</span>
+                            </div>
+                            {calculatedOT > 0 && (
+                              <span className="text-[9px] font-black bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full w-fit">
+                                +{calculatedOT.toFixed(2)} OT
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td className="px-8 py-6">
                       <div className="max-w-[200px]">

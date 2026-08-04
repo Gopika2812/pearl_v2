@@ -155,26 +155,32 @@ export const markAttendance = async (req, res) => {
 
       // Calculate working hours using the punch log
       let currentLog = attendance ? (attendance.punchLog || []) : [];
-      // Create a shallow copy to simulate the full log
       currentLog = [...currentLog, newPunch];
       
       let totalMs = 0;
       let lastIn = null;
       for (const p of currentLog) {
-         if (p.action === "Present") {
+         if (p.action === "Present" || p.action === "IN" || p.action === "In") {
             lastIn = new Date(p.time);
-         } else if (p.action === "Leave" && lastIn) {
+         } else if ((p.action === "Leave" || p.action === "Absent" || p.action === "OUT" || p.action === "Out") && lastIn) {
             totalMs += (new Date(p.time) - lastIn);
             lastIn = null;
          }
       }
       
+      // Fallback: If punchLog didn't match pairs, use presentTime and leaveTime (now)
+      const initialPresentTime = attendance?.presentTime || updateData.presentTime;
+      if (totalMs === 0 && initialPresentTime) {
+        totalMs = Math.max(0, new Date(now) - new Date(initialPresentTime));
+      }
+
       const diffHrs = Math.max(0, totalMs / (1000 * 60 * 60));
-      updateData.workingHours = isNaN(diffHrs) ? 0 : diffHrs;
+      updateData.workingHours = isNaN(diffHrs) ? 0 : Number(diffHrs.toFixed(2));
       
-      if (diffHrs > 9 && comment) {
-        updateData.comment = comment;
-        updateData.overtimeHours = Math.max(0, diffHrs - 9);
+      if (diffHrs > 9) {
+        updateData.overtimeHours = Number((diffHrs - 9).toFixed(2));
+      } else {
+        updateData.overtimeHours = 0;
       }
     }
 
@@ -431,12 +437,20 @@ export const getDetailedLogs = async (req, res) => {
         populate: { path: "branch", select: "name" }
       })
       .populate("branch", "name")
-      .populate("markedBy", "name fullName")
-      .sort({ date: -1, createdAt: -1 });
+    const processedLogs = logs.map(log => {
+      const doc = log.toObject();
+      if ((!doc.workingHours || doc.workingHours === 0) && doc.presentTime && doc.leaveTime) {
+        const ms = Math.max(0, new Date(doc.leaveTime) - new Date(doc.presentTime));
+        const hrs = Number((ms / (1000 * 60 * 60)).toFixed(2));
+        doc.workingHours = hrs;
+        if (hrs > 9 && (!doc.overtimeHours || doc.overtimeHours === 0)) {
+          doc.overtimeHours = Number((hrs - 9).toFixed(2));
+        }
+      }
+      return doc;
+    });
 
-    console.log(`📊 Found ${logs.length} logs. Sample branch: "${logs[0]?.branch?.name || logs[0]?.employeeId?.branch?.name || logs[0]?.employeeId?.branchName}"`);
-
-    res.status(200).json({ success: true, data: logs });
+    res.status(200).json({ success: true, data: processedLogs });
   } catch (error) {
     console.error("❌ [getDetailedLogs] ERROR:", error.message, "\n", error.stack);
     res.status(500).json({ success: false, message: error.message });
