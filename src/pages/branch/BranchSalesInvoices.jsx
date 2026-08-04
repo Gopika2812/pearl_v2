@@ -561,6 +561,7 @@ const BranchSalesInvoices = () => {
 
       let invoicesToExport = data.data || [];
       invoicesToExport = invoicesToExport.filter(inv => inv.status !== "CANCELLED");
+      invoicesToExport.sort((a, b) => new Date(a.invoiceDate || a.createdAt) - new Date(b.invoiceDate || b.createdAt) || (a.invoiceNumber || "").localeCompare(b.invoiceNumber || "", undefined, { numeric: true }));
 
       if (invoicesToExport.length === 0) {
         toast.warn("No invoices found in this range to export.");
@@ -576,7 +577,7 @@ const BranchSalesInvoices = () => {
       invoicesToExport.forEach((inv) => {
         const invNo = inv.invoiceNumber || "-";
         const customerName = inv.customer?.name || "-";
-        const invDate = inv.invoiceDate ? new Date(inv.invoiceDate).toLocaleDateString('en-IN') : "-";
+        const invDate = inv.invoiceDate ? new Date(inv.invoiceDate).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' }) : "-";
         
         // 🎫 Voucher Type Mapping (Extracting Series like Z-1, Z-2, CS)
         let voucherType = "Sales Invoice";
@@ -661,6 +662,8 @@ const BranchSalesInvoices = () => {
         return isNotGenerated && isRegistered;
       });
 
+      filtered.sort((a, b) => new Date(a.invoiceDate || a.createdAt) - new Date(b.invoiceDate || b.createdAt) || (a.invoiceNumber || "").localeCompare(b.invoiceNumber || "", undefined, { numeric: true }));
+
       if (filtered.length === 0) {
         toast.warn("No un-generated e-invoices found for registered customers in this range.");
         return;
@@ -672,7 +675,7 @@ const BranchSalesInvoices = () => {
 
       filtered.forEach(inv => {
         rows.push([
-          inv.invoiceDate ? new Date(inv.invoiceDate).toLocaleDateString('en-IN') : "-",
+          inv.invoiceDate ? new Date(inv.invoiceDate).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' }) : "-",
           inv.invoiceNumber || "-",
           inv.customer?.name || "CASH CUSTOMER",
           inv.customer?.whatsapp || "-",

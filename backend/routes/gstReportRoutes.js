@@ -150,13 +150,15 @@ router.get("/gstr1", auth, async (req, res) => {
     invoiceQuery.status = { $ne: "CANCELLED" };
     creditNoteQuery.status = { $nin: ["CANCELLED", "Cancelled"] };
 
-    // 1. Fetch Invoices and Credit Notes - Optimized with field selection
+    // 1. Fetch Invoices and Credit Notes - Optimized with field selection and sorted ascending by date
     const [invoices, creditNotes] = await Promise.all([
       Invoice.find(invoiceQuery)
       .select("invoiceNumber invoiceDate grandTotal subtotal totalTax items.hsn items.name items.sellingPrice items.qty items.discountAmount items.total items.gst items.igst items.cgst items.sgst items.unit customer.gstin customer.name customer.state customer.stateCode status")
+      .sort({ invoiceDate: 1, invoiceNumber: 1 })
       .lean(),
       CreditNote.find(creditNoteQuery)
       .select("creditNoteId date grandTotal subtotal totalTax items customer.gstin customer.name customer.state customer.stateCode status")
+      .sort({ date: 1, creditNoteId: 1 })
       .lean()
     ]);
 
@@ -260,7 +262,7 @@ router.get("/gstr1", auth, async (req, res) => {
             hsnSummaryB2B[hsnKey].igst += itemIgst;
             hsnSummaryB2B[hsnKey].cgst += itemCgst;
             hsnSummaryB2B[hsnKey].sgst += itemSgst;
-            const invDate = moment(inv.invoiceDate).format("DD-MMM");
+            const invDate = moment.tz(inv.invoiceDate, IST).format("DD-MMM");
             hsnSummaryB2B[hsnKey].invoiceNumbers.add(`${inv.invoiceNumber} (${invDate})`);
           });
 
@@ -270,7 +272,7 @@ router.get("/gstr1", auth, async (req, res) => {
             const rate = parseFloat(rateStr);
             b2b.push({
               gstin: gstin, customerName: inv.customer.name, invoiceNo: inv.invoiceNumber,
-              date: moment(inv.invoiceDate).format("DD-MMM-YYYY"), value: inv.grandTotal,
+              date: moment.tz(inv.invoiceDate, IST).format("DD-MMM-YYYY"), value: inv.grandTotal,
               placeOfSupply: pos,
               reverseCharge: "N", invoiceType: "Regular", 
               applicablePercent: "", ecommerceGstin: "",
@@ -282,7 +284,7 @@ router.get("/gstr1", auth, async (req, res) => {
         } else {
           b2b.push({
             gstin: gstin, customerName: inv.customer.name, invoiceNo: inv.invoiceNumber,
-            date: moment(inv.invoiceDate).format("DD-MMM-YYYY"), value: 0,
+            date: moment.tz(inv.invoiceDate, IST).format("DD-MMM-YYYY"), value: 0,
             placeOfSupply: pos,
             reverseCharge: "N", invoiceType: "Regular", 
             applicablePercent: "", ecommerceGstin: "",
@@ -296,7 +298,7 @@ router.get("/gstr1", auth, async (req, res) => {
         rawB2CCount++;
         b2cRaw.push({
           invoiceNo: inv.invoiceNumber,
-          date: moment(inv.invoiceDate).format("DD-MMM-YYYY"),
+          date: moment.tz(inv.invoiceDate, IST).format("DD-MMM-YYYY"),
           customerName: inv.customer?.name || "URP",
           placeOfSupply: pos,
           value: isCancelled ? 0 : inv.grandTotal,
@@ -327,7 +329,7 @@ router.get("/gstr1", auth, async (req, res) => {
               // B2C Large Logic: One row per rate per invoice
               b2cLarge.push({
                 invoiceNo: inv.invoiceNumber,
-                date: moment(inv.invoiceDate).format("DD-MMM-YYYY"),
+                date: moment.tz(inv.invoiceDate, IST).format("DD-MMM-YYYY"),
                 value: inv.grandTotal,
                 placeOfSupply: pos,
                 applicablePercent: "",
@@ -378,7 +380,7 @@ router.get("/gstr1", auth, async (req, res) => {
             hsnSummaryB2C[hsnKey].igst += itemIgst;
             hsnSummaryB2C[hsnKey].cgst += itemCgst;
             hsnSummaryB2C[hsnKey].sgst += itemSgst;
-            const invDate = moment(inv.invoiceDate).format("DD-MMM");
+            const invDate = moment.tz(inv.invoiceDate, IST).format("DD-MMM");
             hsnSummaryB2C[hsnKey].invoiceNumbers.add(`${inv.invoiceNumber} (${invDate})`);
           });
         }
@@ -460,7 +462,7 @@ router.get("/gstr1", auth, async (req, res) => {
           gstin: note.customer.gstin,
           customerName: note.customer.name,
           noteNo: note.creditNoteId,
-          noteDate: moment(note.date).format("DD-MMM-YYYY"),
+          noteDate: moment.tz(note.date, IST).format("DD-MMM-YYYY"),
           noteType: "C",
           placeOfSupply: pos,
           reverseCharge: "N",
@@ -523,10 +525,11 @@ router.get("/gstr1", auth, async (req, res) => {
 
     // Add Credit Notes to summary
     if (creditNotes.length > 0) {
+      const sortedCN = [...creditNotes].sort((a, b) => (a.creditNoteId || "").localeCompare(b.creditNoteId || "", undefined, { numeric: true }));
       docSummary.push({
         nature: "Credit Notes",
-        from: creditNotes[0]?.creditNoteId || "N/A",
-        to: creditNotes[creditNotes.length - 1]?.creditNoteId || "N/A",
+        from: sortedCN[0]?.creditNoteId || "N/A",
+        to: sortedCN[sortedCN.length - 1]?.creditNoteId || "N/A",
         total: creditNotes.length,
         cancelled: 0,
         net: creditNotes.length
@@ -590,8 +593,9 @@ router.get("/gstr3b", auth, async (req, res) => {
     }
 
     const IST = "Asia/Kolkata";
-    const startDate = moment.tz(`${year}-${month}-01`, "YYYY-MM-DD", IST).startOf("month").toDate();
-    const endDate = moment.tz(`${year}-${month}-01`, "YYYY-MM-DD", IST).endOf("month").toDate();
+    const paddedMonth = String(month).padStart(2, "0");
+    const startDate = moment.tz(`${year}-${paddedMonth}-01`, "YYYY-MM-DD", IST).startOf("month").toDate();
+    const endDate = moment.tz(`${year}-${paddedMonth}-01`, "YYYY-MM-DD", IST).endOf("month").toDate();
     const branchObjectId = new mongoose.Types.ObjectId(branchId);
 
     let explicitInvoiceNumbers = [];
@@ -680,11 +684,11 @@ router.get("/gstr3b", auth, async (req, res) => {
       }
     }
 
-    // Fetch Sales, Returns, and Purchases - Optimized
+    // Fetch Sales, Returns, and Purchases - Optimized with ascending sort
     const [sales, returns, purchases] = await Promise.all([
-      Invoice.find(salesQuery).select("subtotal totalTax").lean(),
-      CreditNote.find(creditNoteQuery).select("subtotal totalTax").lean(),
-      PurchaseInvoice.find(purchaseQuery).select("subtotal totalTax items extraExpenses").lean()
+      Invoice.find(salesQuery).select("subtotal totalTax").sort({ invoiceDate: 1, invoiceNumber: 1 }).lean(),
+      CreditNote.find(creditNoteQuery).select("subtotal totalTax").sort({ date: 1, creditNoteId: 1 }).lean(),
+      PurchaseInvoice.find(purchaseQuery).select("subtotal totalTax items extraExpenses").sort({ invoiceDate: 1, invoiceNumber: 1 }).lean()
     ]);
 
     const outwardSupplies = { taxable: 0, igst: 0, cgst: 0, sgst: 0, nilRated: 0 };

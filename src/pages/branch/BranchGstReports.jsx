@@ -173,7 +173,8 @@ const BranchGstReports = () => {
       };
     });
 
-    gstr1Data.b2b.forEach(row => {
+    const b2bRows = [...(gstr1Data.b2b || [])].sort((a, b) => (a.invoiceNo || "").localeCompare(b.invoiceNo || "", undefined, { numeric: true }));
+    b2bRows.forEach(row => {
       sheet.addRow([
         row.gstin, row.customerName, row.invoiceNo, row.date, row.value, row.placeOfSupply, row.reverseCharge, row.applicablePercent, row.invoiceType, row.ecommerceGstin, row.rate, row.taxableValue, row.cess
       ]);
@@ -221,7 +222,8 @@ const BranchGstReports = () => {
       };
     });
 
-    gstr1Data.b2cRaw.forEach(inv => {
+    const b2cRows = [...(gstr1Data.b2cRaw || [])].sort((a, b) => (a.invoiceNo || "").localeCompare(b.invoiceNo || "", undefined, { numeric: true }));
+    b2cRows.forEach(inv => {
       sheet.addRow([
         inv.invoiceNo, inv.date, inv.customerName, inv.taxableValue, inv.cgst, inv.sgst, inv.igst || 0, inv.value, inv.rates?.join(", ")
       ]);

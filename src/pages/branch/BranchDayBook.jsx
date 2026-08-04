@@ -101,25 +101,29 @@ const BranchDayBook = () => {
     const totalCredit = filteredEntries.reduce((sum, e) => sum + (e.credit || 0), 0);
 
     const handleExportExcel = () => {
-        const dataToExport = selectedIds.length > 0 
+        let dataToExport = selectedIds.length > 0 
             ? filteredEntries.filter(e => selectedIds.includes(e._id))
-            : filteredEntries;
+            : [...filteredEntries];
 
         if (dataToExport.length === 0) {
             toast.warn("No transactions to export");
             return;
         }
 
+        dataToExport.sort((a, b) => new Date(a.date) - new Date(b.date));
+
         const exportData = dataToExport.map((entry) => ({
             "Date": new Date(entry.date).toLocaleDateString("en-IN", {
                 day: "2-digit",
                 month: "2-digit",
-                year: "numeric"
+                year: "numeric",
+                timeZone: "Asia/Kolkata"
             }),
             "Time": new Date(entry.date).toLocaleTimeString("en-IN", {
                 hour: "2-digit",
                 minute: "2-digit",
-                hour12: true
+                hour12: true,
+                timeZone: "Asia/Kolkata"
             }),
             "Voucher Type": entry.voucherType || "-",
             "Invoice ID": entry.invoiceId || "-",
@@ -156,14 +160,16 @@ const BranchDayBook = () => {
     };
 
     const handleExportPDF = () => {
-        const dataToExport = selectedIds.length > 0 
+        let dataToExport = selectedIds.length > 0 
             ? filteredEntries.filter(e => selectedIds.includes(e._id))
-            : filteredEntries;
+            : [...filteredEntries];
 
         if (dataToExport.length === 0) {
             toast.warn("No transactions to export");
             return;
         }
+
+        dataToExport.sort((a, b) => new Date(a.date) - new Date(b.date));
 
         const doc = new jsPDF();
         
@@ -173,14 +179,14 @@ const BranchDayBook = () => {
         doc.setFontSize(10);
         doc.text(`Branch: ${currentBranch?.name || "Global"}`, 14, 25);
         doc.text(`Period: ${fromDate} to ${toDate}`, 14, 30);
-        doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 35);
+        doc.text(`Generated: ${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}`, 14, 35);
 
         const tableColumn = ["Date", "Voucher", "Invoice ID", "Account Name", "Debit", "Credit"];
         const tableRows = [];
 
         dataToExport.forEach(entry => {
             tableRows.push([
-                new Date(entry.date).toLocaleDateString("en-IN", { day: "2-digit", month: "2-digit", year: "numeric" }),
+                new Date(entry.date).toLocaleDateString("en-IN", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Asia/Kolkata" }),
                 entry.voucherType,
                 entry.invoiceId,
                 entry.name,

@@ -62,7 +62,7 @@ const StockSummaryExportModal = ({ isOpen, onClose, viewLevel, data, title }) =>
             else if (col.key === "closingValue") val = item.closing?.amount || 0;
             else val = item[col.key];
           } else if (viewLevel === "LEDGER") {
-            if (col.key === "dateStr") val = item.date instanceof Date ? item.date.toLocaleDateString() : item.date;
+            if (col.key === "dateStr") val = item.date instanceof Date ? item.date.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" }) : (item.date ? new Date(item.date).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" }) : "");
             else if (col.key === "inwardsQty") val = item.type === "INWARD" ? item.qty : "";
             else if (col.key === "outwardsQty") val = item.type === "OUTWARD" ? item.qty : "";
             else val = item[col.key];

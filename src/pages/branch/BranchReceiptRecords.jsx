@@ -125,6 +125,7 @@ export default function BranchReceiptRecords() {
       hour: "2-digit",
       minute: "2-digit",
       hour12: true,
+      timeZone: "Asia/Kolkata"
     });
   };
 
@@ -134,7 +135,9 @@ export default function BranchReceiptRecords() {
       return;
     }
 
-    const exportData = filteredReceipts.map(r => {
+    const sortedReceipts = [...filteredReceipts].sort((a, b) => new Date(a.createdAt || a.date) - new Date(b.createdAt || b.date) || (a.receiptId || "").localeCompare(b.receiptId || "", undefined, { numeric: true }));
+
+    const exportData = sortedReceipts.map(r => {
       const invoiceRef = r.relatedOrders && r.relatedOrders.length > 0 
         ? r.relatedOrders.map(ro => ro.salesOrderId?.salesInvoiceId || ro.salesOrderId?.invoiceId || ro.invoiceId).join(", ") 
         : (r.originalSalesOrderId?.salesInvoiceId || r.originalSalesOrderId?.invoiceId || r.originalInvoiceId || "STANDALONE");

@@ -90,6 +90,7 @@ const BranchPurchaseInvoices = () => {
 
       let invoicesToExport = data || [];
       invoicesToExport = invoicesToExport.filter(inv => inv.status !== "CANCELLED");
+      invoicesToExport.sort((a, b) => new Date(a.createdAt || a.invoiceDate) - new Date(b.createdAt || b.invoiceDate) || (a.purchaseInvoiceId || "").localeCompare(b.purchaseInvoiceId || "", undefined, { numeric: true }));
 
       if (invoicesToExport.length === 0) {
         toast.warn("No active purchase invoices found in this range to export.");
@@ -111,8 +112,8 @@ const BranchPurchaseInvoices = () => {
         const invNo = inv.purchaseInvoiceId || "-";
         const vendorName = inv.vendor || "-";
         const vendorBillNo = inv.vendorBillNo || "-";
-        const invDate = inv.createdAt ? new Date(inv.createdAt).toLocaleDateString('en-IN') : "-";
-        const billDate = inv.vendorDate ? new Date(inv.vendorDate).toLocaleDateString('en-IN') : "-";
+        const invDate = inv.createdAt ? new Date(inv.createdAt).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' }) : "-";
+        const billDate = inv.vendorDate ? new Date(inv.vendorDate).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' }) : "-";
         const status = inv.status || "INVOICED";
 
         const items = inv.items || [];
@@ -126,7 +127,7 @@ const BranchPurchaseInvoices = () => {
             billDate,
             item.name || "",
             item.batch || "",
-            item.expiryDate ? new Date(item.expiryDate).toLocaleDateString('en-IN') : "",
+            item.expiryDate ? new Date(item.expiryDate).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' }) : "",
             item.hsn || "",
             item.qty || 0,
             item.purchasePrice || 0,
