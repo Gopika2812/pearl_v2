@@ -79,22 +79,24 @@ router.get("/next-invoice/:voucherType", async (req, res) => {
     }
 
     // 🛡️ SELF-HEALING: Auto-sync counter with actual max invoiceId in DB
-    const latestOrders = await PurchaseOrder.find({
-      branchId,
-      financialYear: currentFY,
-      invoiceId: new RegExp(`^${voucher.prefix}/`, "i")
-    }).select("invoiceId").lean();
+    const latestOrders = await PurchaseOrder.find({ branchId }).select("invoiceId").lean();
 
-    if (latestOrders.length > 0) {
-      const sequenceNumbers = latestOrders.map(r => {
-        const match = r.invoiceId?.match(/\/(\d+)\//);
-        return match ? parseInt(match[1], 10) : 0;
-      });
-      const maxSeq = Math.max(0, ...sequenceNumbers);
-      if (counter <= maxSeq) {
-        counter = maxSeq + 1;
-        await VoucherType.findByIdAndUpdate(voucher._id, { counter });
+    let maxSeq = 0;
+    for (const r of latestOrders) {
+      if (r.invoiceId) {
+        const parts = String(r.invoiceId).split("/");
+        if (parts.length >= 2) {
+          const num = parseInt(parts[1], 10);
+          if (!isNaN(num) && num > maxSeq) {
+            maxSeq = num;
+          }
+        }
       }
+    }
+
+    if (counter <= maxSeq) {
+      counter = maxSeq + 1;
+      await VoucherType.findByIdAndUpdate(voucher._id, { counter });
     }
 
     const nextInvoiceId = `${voucher.prefix}/${String(counter).padStart(
@@ -446,6 +448,27 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
     if (voucher.financialYear !== currentFY) {
       voucher.counter = 1;
       voucher.financialYear = currentFY;
+    }
+
+    // 🛡️ SELF-HEALING: Auto-sync PI counter with max existing purchaseInvoiceId in DB
+    const latestPIs = await PurchaseInvoice.find({ branchId: order.branchId }).select("purchaseInvoiceId").lean();
+
+    let maxSeq = 0;
+    for (const p of latestPIs) {
+      if (p.purchaseInvoiceId) {
+        const parts = String(p.purchaseInvoiceId).split("/");
+        if (parts.length >= 2) {
+          const num = parseInt(parts[1], 10);
+          if (!isNaN(num) && num > maxSeq) {
+            maxSeq = num;
+          }
+        }
+      }
+    }
+
+    if (voucher.counter <= maxSeq) {
+      voucher.counter = maxSeq + 1;
+      await voucher.save();
     }
 
     const piNumber = `${voucher.prefix}/${String(voucher.counter).padStart(3, "0")}/${currentFY}`;
@@ -819,18 +842,21 @@ router.post("/", auth, async (req, res) => {
       const existingPo = await PurchaseOrder.findOne({ branchId, invoiceId: usedInvoiceId });
       if (existingPo) {
         console.warn(`🚨 Duplicate PO ID detected: ${usedInvoiceId}. Auto-healing counter...`);
-        const latestOrders = await PurchaseOrder.find({
-          branchId,
-          financialYear: currentFY,
-          invoiceId: new RegExp(`^${updatedVoucher.prefix}/`, "i")
-        }).select("invoiceId").lean();
+        const latestOrders = await PurchaseOrder.find({ branchId }).select("invoiceId").lean();
 
-        const sequenceNumbers = latestOrders.map(r => {
-          const match = r.invoiceId?.match(/\/(\d+)\//);
-          return match ? parseInt(match[1], 10) : 0;
-        });
+        let maxSeq = 0;
+        for (const r of latestOrders) {
+          if (r.invoiceId) {
+            const parts = String(r.invoiceId).split("/");
+            if (parts.length >= 2) {
+              const num = parseInt(parts[1], 10);
+              if (!isNaN(num) && num > maxSeq) {
+                maxSeq = num;
+              }
+            }
+          }
+        }
 
-        const maxSeq = Math.max(0, ...sequenceNumbers);
         const newCounter = maxSeq + 1;
 
         await VoucherType.findByIdAndUpdate(
