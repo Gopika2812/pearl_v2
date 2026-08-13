@@ -78,6 +78,25 @@ router.get("/next-invoice/:voucherType", async (req, res) => {
       counter = 1;
     }
 
+    // 🛡️ SELF-HEALING: Auto-sync counter with actual max invoiceId in DB
+    const latestOrders = await PurchaseOrder.find({
+      branchId,
+      financialYear: currentFY,
+      invoiceId: new RegExp(`^${voucher.prefix}/`, "i")
+    }).select("invoiceId").lean();
+
+    if (latestOrders.length > 0) {
+      const sequenceNumbers = latestOrders.map(r => {
+        const match = r.invoiceId?.match(/\/(\d+)\//);
+        return match ? parseInt(match[1], 10) : 0;
+      });
+      const maxSeq = Math.max(0, ...sequenceNumbers);
+      if (counter <= maxSeq) {
+        counter = maxSeq + 1;
+        await VoucherType.findByIdAndUpdate(voucher._id, { counter });
+      }
+    }
+
     const nextInvoiceId = `${voucher.prefix}/${String(counter).padStart(
       3,
       "0"
@@ -795,6 +814,32 @@ router.post("/", auth, async (req, res) => {
 
       const counterToUse = updatedVoucher.counter; // value BEFORE increment
       usedInvoiceId = `${updatedVoucher.prefix}/${String(counterToUse).padStart(3, "0")}/${currentFY}`;
+
+      // 🛡️ SELF-HEALING: Check if this invoiceId already exists in DB (prevents E11000 duplicate key error)
+      const existingPo = await PurchaseOrder.findOne({ branchId, invoiceId: usedInvoiceId });
+      if (existingPo) {
+        console.warn(`🚨 Duplicate PO ID detected: ${usedInvoiceId}. Auto-healing counter...`);
+        const latestOrders = await PurchaseOrder.find({
+          branchId,
+          financialYear: currentFY,
+          invoiceId: new RegExp(`^${updatedVoucher.prefix}/`, "i")
+        }).select("invoiceId").lean();
+
+        const sequenceNumbers = latestOrders.map(r => {
+          const match = r.invoiceId?.match(/\/(\d+)\//);
+          return match ? parseInt(match[1], 10) : 0;
+        });
+
+        const maxSeq = Math.max(0, ...sequenceNumbers);
+        const newCounter = maxSeq + 1;
+
+        await VoucherType.findByIdAndUpdate(
+          voucher._id,
+          { counter: newCounter + 1 }
+        );
+        usedInvoiceId = `${updatedVoucher.prefix}/${String(newCounter).padStart(3, "0")}/${currentFY}`;
+        console.log(`✅ Counter healed. New PO ID: ${usedInvoiceId}`);
+      }
 
       const order = new PurchaseOrder({
         ...rest,
