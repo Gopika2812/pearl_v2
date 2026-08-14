@@ -12,7 +12,7 @@ const BranchProductRecords = () => {
   const navigate = useNavigate();
   const { currentBranch, user } = useBranch();
   const { productGroups, products, customers, vendors } = useInventory();
-  const [analysisMode, setAnalysisMode] = useState("product"); // 'product', 'customer', 'purchase'
+  const [analysisMode, setAnalysisMode] = useState(() => sessionStorage.getItem("product_records_analysisMode") || "product"); // 'product', 'customer', 'purchase'
 
   // Permission helper
   const isFieldAllowed = (fieldId) => {
@@ -31,18 +31,54 @@ const BranchProductRecords = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [limit, setLimit] = useState(500);
 
-  // Filter states
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
-  const [selectedProductGroupId, setSelectedProductGroupId] = useState("");
-  const [selectedProductId, setSelectedProductId] = useState("");
-  const [selectedCustomerId, setSelectedCustomerId] = useState("");
-  const [selectedVendorName, setSelectedVendorName] = useState("");
+  // Filter states initialized from sessionStorage for date filter stability
+  const [fromDate, setFromDate] = useState(() => sessionStorage.getItem("product_records_fromDate") || "");
+  const [toDate, setToDate] = useState(() => sessionStorage.getItem("product_records_toDate") || "");
+  const [selectedProductGroupId, setSelectedProductGroupId] = useState(() => sessionStorage.getItem("product_records_selectedProductGroupId") || "");
+  const [selectedProductId, setSelectedProductId] = useState(() => sessionStorage.getItem("product_records_selectedProductId") || "");
+  const [selectedCustomerId, setSelectedCustomerId] = useState(() => sessionStorage.getItem("product_records_selectedCustomerId") || "");
+  const [selectedVendorName, setSelectedVendorName] = useState(() => sessionStorage.getItem("product_records_selectedVendorName") || "");
   const [productSearch, setProductSearch] = useState("");
   const [customerSearch, setCustomerSearch] = useState("");
   const [vendorSearch, setVendorSearch] = useState("");
   const [groupSearch, setGroupSearch] = useState("");
   const [sortConfig, setSortConfig] = useState({ key: 'date', direction: 'desc' });
+
+  // Sync filter states with sessionStorage
+  useEffect(() => {
+    if (fromDate) sessionStorage.setItem("product_records_fromDate", fromDate);
+    else sessionStorage.removeItem("product_records_fromDate");
+  }, [fromDate]);
+
+  useEffect(() => {
+    if (toDate) sessionStorage.setItem("product_records_toDate", toDate);
+    else sessionStorage.removeItem("product_records_toDate");
+  }, [toDate]);
+
+  useEffect(() => {
+    if (selectedProductGroupId) sessionStorage.setItem("product_records_selectedProductGroupId", selectedProductGroupId);
+    else sessionStorage.removeItem("product_records_selectedProductGroupId");
+  }, [selectedProductGroupId]);
+
+  useEffect(() => {
+    if (selectedProductId) sessionStorage.setItem("product_records_selectedProductId", selectedProductId);
+    else sessionStorage.removeItem("product_records_selectedProductId");
+  }, [selectedProductId]);
+
+  useEffect(() => {
+    if (selectedCustomerId) sessionStorage.setItem("product_records_selectedCustomerId", selectedCustomerId);
+    else sessionStorage.removeItem("product_records_selectedCustomerId");
+  }, [selectedCustomerId]);
+
+  useEffect(() => {
+    if (selectedVendorName) sessionStorage.setItem("product_records_selectedVendorName", selectedVendorName);
+    else sessionStorage.removeItem("product_records_selectedVendorName");
+  }, [selectedVendorName]);
+
+  useEffect(() => {
+    if (analysisMode) sessionStorage.setItem("product_records_analysisMode", analysisMode);
+    else sessionStorage.removeItem("product_records_analysisMode");
+  }, [analysisMode]);
 
   // Column Selection for Export
   const [showColumnSelector, setShowColumnSelector] = useState(false);
@@ -137,6 +173,12 @@ const BranchProductRecords = () => {
     setSelectedVendorName("");
     setVendorSearch("");
     setCurrentPage(1);
+    sessionStorage.removeItem("product_records_fromDate");
+    sessionStorage.removeItem("product_records_toDate");
+    sessionStorage.removeItem("product_records_selectedProductGroupId");
+    sessionStorage.removeItem("product_records_selectedProductId");
+    sessionStorage.removeItem("product_records_selectedCustomerId");
+    sessionStorage.removeItem("product_records_selectedVendorName");
   };
 
   const handleSort = (key) => {
@@ -766,13 +808,18 @@ const BranchProductRecords = () => {
                                     <div className="text-[9px] text-gray-500 font-bold">
                                       {r.createdAt ? new Date(r.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : new Date(r.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                     </div>
-                                    <div 
-                                      className="text-[9px] text-[#319bab] font-bold cursor-pointer hover:underline transition-colors"
-                                      onClick={() => navigate(analysisMode === 'purchase' ? '#' : `/branch/sales-orders?invoiceId=${encodeURIComponent(r.invoiceNumber || r.invoiceId)}`)}
-                                      title="Click to view full bill"
+                                    <a 
+                                      href={analysisMode === 'purchase'
+                                        ? `/branch/purchase-orders?search=${encodeURIComponent(r.invoiceNumber || r.invoiceId)}`
+                                        : `/branch/sales-orders?invoiceId=${encodeURIComponent(r.invoiceNumber || r.invoiceId)}`
+                                      }
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-[9px] text-[#319bab] font-bold hover:underline transition-colors block"
+                                      title="Click to view full bill in new tab"
                                     >
                                       {r.invoiceNumber || r.invoiceId} | {new Date(r.date).toLocaleDateString()}
-                                    </div>
+                                    </a>
                                   </td>
                                 )}
                                 {analysisMode !== "purchase" && (

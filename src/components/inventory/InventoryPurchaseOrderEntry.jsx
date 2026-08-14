@@ -231,18 +231,31 @@ const InventoryPurchaseOrderEntry = ({
     }
   }, [gst, igst]);
 
+  // Helper to extract string ID from product group (whether object or string)
+  const getGroupId = (grp) => {
+    if (!grp) return "";
+    if (typeof grp === "object") return String(grp._id || grp.id || "");
+    return String(grp);
+  };
+
   // Reset item when Product Group changes
   useEffect(() => {
     // Check if currently selected item belongs to the new product group
     if (selectedItem) {
-      const product = filteredProducts.find(p => p._id === selectedItem);
-      const pGroupId = product?.productGroup?._id || product?.productGroup || product?.groupId?._id || product?.groupId;
-      if (pGroupId && String(pGroupId) === String(productGroup)) {
-        return; // Don't reset if it matches the current group
+      const product = selectedProductData || fetchedProducts.find(p => p._id === selectedItem) || filteredProducts.find(p => p._id === selectedItem);
+      if (product) {
+        const itemGroup = getGroupId(product.productGroup || product.groupId);
+        const currentGroup = getGroupId(productGroup);
+
+        // If product group is not selected, or item's group matches current group, or item has no group: keep selection!
+        if (!currentGroup || !itemGroup || currentGroup === itemGroup) {
+          return;
+        }
       }
     }
     setSelectedItem("");
     setItemSearch("");
+    setSelectedProductData(null);
     setQty("");
     setPurchasePrice(0);
     setMarketCapPrice(0);
@@ -253,25 +266,25 @@ const InventoryPurchaseOrderEntry = ({
     setIgst(false);
     setCgst(0);
     setSgst(0);
-  }, [productGroup, selectedItem, filteredProducts]);
+  }, [productGroup, selectedItem, filteredProducts, fetchedProducts, selectedProductData]);
 
   // Auto-fetch Product Price / Tax / HSN
-  const handleItemSelection = (productId) => {
+  const handleItemSelection = (productId, productObj = null) => {
     setSelectedItem(productId);
     setShowItemDropdown(false);
 
-    // Search in filteredProducts (from API), not the products prop
-    const product = fetchedProducts.find((p) => p._id === productId);
+    // Search in productObj, fetchedProducts, or filteredProducts
+    const product = productObj || fetchedProducts.find((p) => p._id === productId) || filteredProducts.find((p) => p._id === productId);
     if (!product) {
-      console.warn("⚠️ Product not found in fetched products:", productId);
+      console.warn("⚠️ Product not found:", productId);
       return;
     }
 
     setItemSearch(product.name);
 
     // Auto-select Product Group if not already selected or if different
-    const pGroupId = product.productGroup?._id || product.productGroup || product.groupId?._id || product.groupId;
-    if (pGroupId && pGroupId !== productGroup) {
+    const pGroupId = getGroupId(product.productGroup || product.groupId);
+    if (pGroupId && pGroupId !== getGroupId(productGroup)) {
       setProductGroup(pGroupId);
     }
 
@@ -1045,7 +1058,7 @@ const InventoryPurchaseOrderEntry = ({
                           <div
                             key={p._id}
                             onClick={() => {
-                              handleItemSelection(p._id);
+                              handleItemSelection(p._id, p);
                               setShowItemDropdown(false);
                               setHoveredItem(null);
                             }}
@@ -1101,7 +1114,7 @@ const InventoryPurchaseOrderEntry = ({
                               <div
                                 key={alt._id}
                                 onClick={() => {
-                                  handleItemSelection(alt._id);
+                                  handleItemSelection(alt._id, alt);
                                   setShowItemDropdown(false);
                                   setHoveredItem(null);
                                 }}
@@ -1749,20 +1762,7 @@ const InventoryPurchaseOrderEntry = ({
           const product = newProduct.data || newProduct;
           setLocalProducts(prev => [...prev, product]);
           setFilteredProducts(prev => [...prev, product]);
-          setSelectedItem(product._id);
-          setItemSearch(product.name);
-
-          const pGroupId = product.productGroup?._id || product.productGroup || product.groupId?._id || product.groupId;
-          if (pGroupId && pGroupId !== productGroup) {
-            setProductGroup(pGroupId);
-          }
-
-          setSelectedProductData(product);
-          setQty("");
-          setPurchasePrice(product.purchasingPrice || product.rate || 0);
-          setSellingPrice(product.sellingPrice || product.rate || 0);
-          setHsn(product.hsnCode || product.hsncode || "");
-          setGst(product.gst || product.tax || 0);
+          handleItemSelection(product._id, product);
           setShowProductModal(false);
         }}
       />
