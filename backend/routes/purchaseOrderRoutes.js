@@ -10,14 +10,11 @@ import Customer from "../models/Customer.js";
 import VoucherType from "../models/VoucherType.js";
 import { getFinancialYear as getGlobalFinancialYear } from "../utils/financialYear.js";
 import { updateProductCostsFromInvoice } from "../utils/priceUtil.js";
-
-
 import auth from "../middleware/auth.js";
 import { createAuditLog } from "../utils/logUtil.js";
 
 const router = express.Router();
 
-// Financial Year Helper
 const getFinancialYear = () => {
   const now = new Date();
   const year = now.getFullYear();
@@ -114,14 +111,14 @@ router.get("/next-invoice/:voucherType", async (req, res) => {
 // GET ALL PURCHASE ORDERS (REFINED WITH PAGINATION)
 router.get("/", async (req, res) => {
   try {
-    const { 
-      branchId, 
+    const {
+      branchId,
       vendorId,
-      search, 
-      status, 
-      statuses, 
-      excludeStatus, 
-      fromDate, 
+      search,
+      status,
+      statuses,
+      excludeStatus,
+      fromDate,
       toDate,
       page = 1,
       limit = 50
@@ -143,7 +140,7 @@ router.get("/", async (req, res) => {
       const vOr = [];
       if (vendorId) vOr.push({ vendorId: vendorId });
       if (req.query.vendorName) vOr.push({ vendor: req.query.vendorName });
-      
+
       query.$and = query.$and || [];
       query.$and.push({ $or: vOr });
     }
@@ -312,7 +309,7 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
         : (order.totalDiscount !== undefined && order.totalDiscount !== null
           ? order.totalDiscount
           : newItems.reduce((acc, i) => acc + (Number(i.discountAmount) || (Number(i.purchasePrice) * Number(i.qty) * (Number(i.discountPercent || 0) / 100))), 0));
-      
+
       const discountRatio = subtotal > 0 ? (totalDiscount / subtotal) : 0;
       const sumRowDiscounts = newItems.reduce((acc, i) => acc + (Number(i.discountAmount) || (Number(i.purchasePrice) * Number(i.qty) * (Number(i.discountPercent || 0) / 100))), 0);
       const isCustomDiscount = Math.abs(totalDiscount - sumRowDiscounts) > 0.01;
@@ -324,7 +321,7 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
         const netTaxable = isCustomDiscount ? rowPrice * (1 - discountRatio) : (rowPrice - rowDiscount);
         return acc + (netTaxable * gst / 100);
       }, 0);
-      
+
       const finalGrandTotal = Math.round(subtotal - totalDiscount + totalTax);
       const vendorDelta = finalGrandTotal - oldGrandTotal;
 
@@ -484,7 +481,7 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
       : (order.totalDiscount !== undefined && order.totalDiscount !== null
         ? order.totalDiscount
         : invoiceItems.reduce((acc, i) => acc + (Number(i.discountAmount) || (Number(i.purchasePrice) * Number(i.qty) * (Number(i.discountPercent || 0) / 100))), 0));
-    
+
     const discountRatio = subtotal > 0 ? (totalDiscount / subtotal) : 0;
     const sumRowDiscounts = invoiceItems.reduce((acc, i) => acc + (Number(i.discountAmount) || (Number(i.purchasePrice) * Number(i.qty) * (Number(i.discountPercent || 0) / 100))), 0);
     const isCustomDiscount = Math.abs(totalDiscount - sumRowDiscounts) > 0.01;
@@ -496,7 +493,7 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
       const netTaxable = isCustomDiscount ? rowPrice * (1 - discountRatio) : (rowPrice - rowDiscount);
       return acc + (netTaxable * gst / 100);
     }, 0);
-    
+
     const calculatedGrandTotal = Math.round(subtotal - totalDiscount + totalTax);
     console.log(`[STABILITY CHECK] Recalculated GrandTotal: ${calculatedGrandTotal} (Sub: ${subtotal}, Tax: ${totalTax}, Disc: ${totalDiscount})`);
 
@@ -951,7 +948,7 @@ router.put("/:id", auth, async (req, res) => {
         return res.status(400).json({ message: "Purchase Order with this Invoice ID already exists" });
       }
       order.invoiceId = invoiceId;
-      
+
       if (isVoucherTypeChanged) {
         const v = await VoucherType.findOne({ branchId: order.branchId, name: voucherType.toLowerCase(), orderType: "PO" });
         if (v) {
@@ -1015,7 +1012,7 @@ router.put("/:id", auth, async (req, res) => {
       order.items = items;
     }
     if (warehouse) order.warehouse = warehouse;
-    
+
     // FORCED SERVER-SIDE RECALCULATION
     let calcSubtotal = 0;
     let calcDiscount = 0;
@@ -1036,7 +1033,7 @@ router.put("/:id", auth, async (req, res) => {
     });
 
     order.subtotal = Math.round(calcSubtotal);
-    
+
     let finalDiscount = calcDiscount;
     if (totalDiscount !== undefined && totalDiscount !== "") {
       finalDiscount = Number(totalDiscount);
@@ -1059,7 +1056,7 @@ router.put("/:id", auth, async (req, res) => {
     });
 
     order.totalTax = Math.round(calcTax);
-    
+
     if (transportCharge !== undefined) order.transportCharge = Math.round(Number(transportCharge));
     const extra = order.extraExpenseAmount || 0;
     const calculatedGrandTotal = Math.round(order.subtotal - order.totalDiscount + order.totalTax);
@@ -1116,10 +1113,10 @@ router.put("/:id", auth, async (req, res) => {
         if (item.productId && item.name) {
           try {
             // Check if another product already exists with this exact name in this branch
-            const existing = await Product.findOne({ 
-              branchId: order.branchId, 
-              name: { $regex: new RegExp(`^${item.name}$`, 'i') }, 
-              _id: { $ne: item.productId } 
+            const existing = await Product.findOne({
+              branchId: order.branchId,
+              name: { $regex: new RegExp(`^${item.name}$`, 'i') },
+              _id: { $ne: item.productId }
             });
             if (!existing) {
               await Product.updateOne(
@@ -1127,7 +1124,7 @@ router.put("/:id", auth, async (req, res) => {
                 { $set: { name: item.name } }
               );
             }
-          } catch(err) {
+          } catch (err) {
             console.error(`Failed to auto-rename product ${item.productId}:`, err);
           }
         }
